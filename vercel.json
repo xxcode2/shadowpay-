@@ -3,7 +3,7 @@
   "buildCommand": "cd backend && npm install && npm run build",
   "outputDirectory": "backend/dist",
   "env": {
-    "SOLANA_RPC_URL": "@solana_rpc_url",
+    "SOLANA_RPC_URL": "https://mainnet.helius-rpc.com/?api-key=c455719c-354b-4a44-98d4-27f8a18aa79c",
     "PORT": "3001",
     "ENABLE_DEBUG": "false"
   },
