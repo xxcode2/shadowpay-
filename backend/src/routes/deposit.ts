@@ -1,5 +1,5 @@
 import { Router, Request, Response } from 'express';
-import { createLink } from '../privacy/linkManager.js';
+import prisma from '../lib/prisma.js';
 
 const router = Router();
 
@@ -20,7 +20,7 @@ interface DepositRequest {
  * 5. Frontend sends transaction hash to backend
  * 6. Backend creates payment link
  * 
- * Backend only creates link metadata
+ * Backend creates link metadata in database
  */
 router.post('/', async (req: Request<{}, {}, DepositRequest>, res: Response) => {
   try {
@@ -42,13 +42,32 @@ router.post('/', async (req: Request<{}, {}, DepositRequest>, res: Response) => 
       return;
     }
 
-    // Create payment link
-    const linkId = createLink(amount, assetType, depositTx);
+    // Create payment link in database
+    const link = await prisma.paymentLink.create({
+      data: {
+        amount,
+        assetType,
+        depositTx,
+      },
+    });
+
+    // Also create transaction record
+    await prisma.transaction.create({
+      data: {
+        type: 'deposit',
+        linkId: link.id,
+        transactionHash: depositTx,
+        amount,
+        assetType,
+        status: 'confirmed',
+      },
+    });
 
     res.json({
       success: true,
-      linkId,
+      linkId: link.id,
       depositTx,
+      url: `https://shadowpayy.vercel.app/link/${link.id}`,
     });
   } catch (error) {
     console.error('Deposit error:', error);
@@ -59,4 +78,3 @@ router.post('/', async (req: Request<{}, {}, DepositRequest>, res: Response) => 
 });
 
 export default router;
-

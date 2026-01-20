@@ -1,0 +1,41 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model PaymentLink {
+  id                String    @id @default(cuid())
+  amount            Float
+  assetType         String    // "SOL", "USDC", "USDT"
+  claimed           Boolean   @default(false)
+  claimedBy         String?   // Wallet address that claimed the link
+  depositTx         String    // Transaction hash from deposit
+  withdrawTx        String?   // Transaction hash from withdrawal
+  createdAt         DateTime  @default(now())
+  updatedAt         DateTime  @updatedAt
+  
+  @@map("payment_links")
+}
+
+model Transaction {
+  id                String    @id @default(cuid())
+  type              String    // "deposit" or "withdraw"
+  linkId            String
+  transactionHash   String    @unique
+  status            String    @default("pending") // "pending", "confirmed", "failed"
+  amount            Float
+  assetType         String    // "SOL", "USDC", "USDT"
+  fromAddress       String?
+  toAddress         String?
+  createdAt         DateTime  @default(now())
+  updatedAt         DateTime  @updatedAt
+  
+  @@map("transactions")
+}

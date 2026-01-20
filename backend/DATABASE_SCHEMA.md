@@ -1,53 +1,170 @@
-/**
- * Database Schema untuk ShadowPay Backend
- * 
- * Untuk production, implementasikan dengan PostgreSQL/MongoDB
- * File ini menunjukkan struktur yang diperlukan
- */
+# 🗄️ ShadowPay Database Schema
 
-// Table: payment_links
-interface PaymentLink {
-  id: string;              // UUID atau random hash
-  amount: number;          // Dalam lamports (SOL) atau base units (SPL)
-  assetType: 'SOL' | 'USDC' | 'USDT';
-  createdAt: Date;
-  claimedAt?: Date;        // Null jika belum di-claim
-  claimedBy?: string;      // Wallet address yang claim link
-  depositTx: string;       // Transaction signature
-  expiresAt?: Date;        // Optional: expiry time
-  
-  // Index
-  // PRIMARY KEY: id
-  // INDEX: createdAt (untuk query recent links)
-  // INDEX: claimedAt (untuk query unclaimed links)
+**Database:** Supabase PostgreSQL  
+**ORM:** Prisma  
+**Status:** ✅ Integrated with Supabase
+
+---
+
+## Database Tables
+
+### 1. `payment_links`
+Stores all payment links created by users.
+
+| Column | Type | Description |
+|--------|------|-------------|
+| `id` | String (CUID) | Unique link identifier |
+| `amount` | Float | Amount of SOL/USDC/USDT |
+| `assetType` | String | Asset type: "SOL", "USDC", or "USDT" |
+| `claimed` | Boolean | Whether link has been claimed |
+| `claimedBy` | String (nullable) | Wallet address that claimed the link |
+| `depositTx` | String | Transaction hash from deposit |
+| `withdrawTx` | String (nullable) | Transaction hash from withdrawal |
+| `createdAt` | DateTime | When link was created |
+| `updatedAt` | DateTime | Last updated timestamp |
+
+**Example:**
+```json
+{
+  "id": "clh7x8y9z0a1b2c3d4e5f6g7",
+  "amount": 0.5,
+  "assetType": "SOL",
+  "claimed": false,
+  "claimedBy": null,
+  "depositTx": "5cJz...qWq",
+  "withdrawTx": null,
+  "createdAt": "2024-01-20T12:00:00Z",
+  "updatedAt": "2024-01-20T12:00:00Z"
 }
+```
 
-// Table: transactions (opsional, untuk audit trail)
-interface Transaction {
-  id: string;              // UUID
-  type: 'DEPOSIT' | 'WITHDRAW';
-  linkId?: string;         // Reference ke payment_link
-  walletAddress: string;
-  assetType: 'SOL' | 'USDC' | 'USDT';
-  amount: number;
-  txHash: string;          // Solana transaction signature
-  status: 'PENDING' | 'CONFIRMED' | 'FAILED';
-  createdAt: Date;
-  updatedAt: Date;
-  error?: string;
-  
-  // Index
-  // PRIMARY KEY: id
-  // INDEX: txHash (untuk quick lookup)
-  // INDEX: walletAddress (untuk user history)
-  // INDEX: createdAt (untuk time-based queries)
+---
+
+### 2. `transactions`
+Audit log of all deposit and withdraw transactions.
+
+| Column | Type | Description |
+|--------|------|-------------|
+| `id` | String (CUID) | Unique transaction identifier |
+| `type` | String | "deposit" or "withdraw" |
+| `linkId` | String | Reference to payment_links.id |
+| `transactionHash` | String (UNIQUE) | Solana transaction hash |
+| `status` | String | "pending", "confirmed", or "failed" |
+| `amount` | Float | Transaction amount |
+| `assetType` | String | Asset type |
+| `fromAddress` | String (nullable) | Sender wallet address |
+| `toAddress` | String (nullable) | Recipient wallet address |
+| `createdAt` | DateTime | When transaction was recorded |
+| `updatedAt` | DateTime | Last updated timestamp |
+
+---
+
+## API Endpoints
+
+### Deposit (Create Link)
+**POST** `/api/deposit`
+
+**Request:**
+```json
+{
+  "amount": 0.5,
+  "assetType": "SOL",
+  "depositTx": "5cJz...qWq"
 }
+```
 
-// Table: users (opsional, untuk analytics)
-interface User {
-  id: string;              // UUID
-  walletAddress: string;   // Primary identifier
-  createdAt: Date;
+**Response:**
+```json
+{
+  "success": true,
+  "linkId": "clh7x8y9z0a1b2c3d4e5f6g7",
+  "depositTx": "5cJz...qWq",
+  "url": "https://shadowpay.vercel.app/link/clh7x8y9z0a1b2c3d4e5f6g7"
+}
+```
+
+---
+
+### Get Link
+**GET** `/api/link/:id`
+
+**Response:**
+```json
+{
+  "id": "clh7x8y9z0a1b2c3d4e5f6g7",
+  "amount": 0.5,
+  "assetType": "SOL",
+  "claimed": false,
+  "claimedBy": null,
+  "createdAt": "2024-01-20T12:00:00Z",
+  "updatedAt": "2024-01-20T12:00:00Z"
+}
+```
+
+---
+
+### Withdraw (Claim Link)
+**POST** `/api/withdraw`
+
+**Request:**
+```json
+{
+  "linkId": "clh7x8y9z0a1b2c3d4e5f6g7",
+  "recipientAddress": "9B5X...gX3",
+  "withdrawTx": "3aBc...dEf"
+}
+```
+
+**Response:**
+```json
+{
+  "success": true,
+  "message": "Withdrawal recorded and link claimed",
+  "withdrawTx": "3aBc...dEf",
+  "link": {
+    "id": "clh7x8y9z0a1b2c3d4e5f6g7",
+    "amount": 0.5,
+    "assetType": "SOL",
+    "claimed": true,
+    "claimedBy": "9B5X...gX3",
+    "createdAt": "2024-01-20T12:00:00Z",
+    "updatedAt": "2024-01-20T12:00:00Z"
+  }
+}
+```
+
+---
+
+## Setup & Migration
+
+### Local Development
+```bash
+# Install dependencies
+npm install
+
+# Setup Prisma
+npx prisma migrate dev --name init
+
+# View database in Prisma Studio
+npm run db:studio
+```
+
+### Production (Vercel)
+Database URL is set via environment variable in vercel.json:
+```
+DATABASE_URL=postgres://postgres.cojxffgdjlhbuyokrpib:5enFwLqFBJBUq77w@...
+```
+
+---
+
+## Security Notes
+
+- ✅ No private keys stored
+- ✅ No sensitive SDK data persisted
+- ✅ Transaction hashes are immutable audit trail
+- ✅ All addresses are public (on-chain public keys)
+- ✅ Supabase provides encryption at rest
+- ✅ RLS policies can be enabled for additional security
   lastActive: Date;
   linksCreated: number;
   totalDeposited: number;  // Dalam SOL equivalent
