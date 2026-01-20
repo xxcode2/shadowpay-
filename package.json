@@ -4,6 +4,7 @@
   "description": "Private payment links on Solana",
   "scripts": {
     "build": "bash build.sh",
+    "postinstall": "prisma generate",
     "dev": "npm run dev --workspace=backend & npm run dev --workspace=frontend",
     "dev:backend": "npm run dev --workspace=backend",
     "dev:frontend": "npm run dev --workspace=frontend"
