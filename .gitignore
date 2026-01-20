@@ -33,3 +33,4 @@ yarn-debug.log*
 # Runtime data
 data/
 *.json~
+.vercel/

@@ -1,39 +1,10 @@
 {
   "version": 2,
-  "buildCommand": "npm run build",
+  "buildCommand": "cd backend && npm install && npm run build && cd ../frontend && npm install && npm run build && cd .. && rm -rf .vercel/output && mkdir -p .vercel/output/static && cp -r frontend/dist/* .vercel/output/static/",
+  "outputDirectory": ".vercel/output/static",
   "env": {
-    "SOLANA_RPC_URL": "https://mainnet.helius-rpc.com/?api-key=c455719c-354b-4a44-98d4-27f8a18aa79c",
-    "PORT": "3001",
-    "ENABLE_DEBUG": "false",
     "VITE_API_URL": "https://shadowpay.vercel.app/api",
     "VITE_SOLANA_RPC": "https://mainnet.helius-rpc.com/?api-key=c455719c-354b-4a44-98d4-27f8a18aa79c"
-  },
-  "builds": [
-    {
-      "src": "backend/dist/server.js",
-      "use": "@vercel/node",
-      "config": {
-        "runtime": "nodejs20.x"
-      }
-    },
-    {
-      "src": "public/**",
-      "use": "@vercel/static"
-    }
-  ],
-  "routes": [
-    {
-      "src": "^/api/(.*)",
-      "dest": "backend/dist/server.js"
-    },
-    {
-      "src": "^/health$",
-      "dest": "backend/dist/server.js"
-    },
-    {
-      "src": "/(.*)",
-      "dest": "public/$1"
-    }
-  ]
+  }
 }
 
