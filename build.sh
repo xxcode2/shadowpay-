@@ -12,10 +12,6 @@ cd backend
 # Install dependencies
 npm install
 
-# Generate Prisma Client (doesn't need database connection)
-echo "  ├─ Generating Prisma client..."
-npx prisma generate || echo "  └─ ⚠️  Prisma generation optional during build"
-
 # Compile TypeScript
 echo "  ├─ Compiling TypeScript..."
 npm run build
