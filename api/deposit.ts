@@ -1,13 +1,13 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node'
-import prisma from '../backend/dist/lib/prisma.js'
+import prisma from './lib/prisma'
 
 export default async function handler(
   req: VercelRequest,
   res: VercelResponse
 ): Promise<void> {
-  // Enable CORS
+  // CORS
   res.setHeader('Access-Control-Allow-Origin', '*')
-  res.setHeader('Access-Control-Allow-Methods', 'GET, POST, OPTIONS')
+  res.setHeader('Access-Control-Allow-Methods', 'POST, OPTIONS')
   res.setHeader('Access-Control-Allow-Headers', 'Content-Type')
 
   if (req.method === 'OPTIONS') {
@@ -23,14 +23,16 @@ export default async function handler(
   try {
     const { amount, assetType, depositTx } = req.body
 
-    // Validate input
-    if (!amount || amount <= 0) {
+    // ---- Validation ----
+    if (!amount || Number(amount) <= 0) {
       res.status(400).json({ error: 'Invalid amount' })
       return
     }
 
     if (!['SOL', 'USDC', 'USDT'].includes(assetType)) {
-      res.status(400).json({ error: 'Invalid asset type. Must be SOL, USDC, or USDT' })
+      res
+        .status(400)
+        .json({ error: 'Invalid asset type. Must be SOL, USDC, or USDT' })
       return
     }
 
@@ -39,49 +41,39 @@ export default async function handler(
       return
     }
 
-    // Test database connection
-    if (!prisma) {
-      throw new Error('Prisma client not initialized')
-    }
-
-    // Create payment link in database
+    // ---- Create payment link ----
     const link = await prisma.paymentLink.create({
       data: {
-        amount: parseFloat(String(amount)),
+        amount: Number(amount),
         assetType,
         depositTx,
       },
     })
 
-    // Also create transaction record
+    // ---- Record transaction ----
     await prisma.transaction.create({
       data: {
-        type: 'deposit' as const,
+        type: 'deposit',
         linkId: link.id,
         transactionHash: depositTx,
-        amount: parseFloat(String(amount)),
+        amount: Number(amount),
         assetType,
-        status: 'confirmed' as const,
+        status: 'confirmed',
       },
     })
 
+    // ---- Response ----
     res.status(200).json({
       success: true,
       linkId: link.id,
       depositTx,
-      url: `https://shadowpayy.vercel.app/link/${link.id}`,
+      url: `https://shadowpayy.vercel.app/claim/${link.id}`,
     })
   } catch (error) {
     console.error('Deposit error:', error)
-    const errorMessage = error instanceof Error ? error.message : 'Deposit failed'
-    console.error('Error details:', {
-      message: errorMessage,
-      stack: error instanceof Error ? error.stack : 'No stack',
-      type: typeof error,
-    })
+
     res.status(500).json({
-      error: errorMessage,
-      details: process.env.NODE_ENV === 'development' ? String(error) : undefined,
+      error: error instanceof Error ? error.message : 'Deposit failed',
     })
   }
 }
