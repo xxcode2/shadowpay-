@@ -11,5 +11,14 @@
   "workspaces": [
     "backend",
     "frontend"
-  ]
+  ],
+  "dependencies": {
+    "@prisma/client": "^7.2.0",
+    "@solana/web3.js": "^1.98.4",
+    "@vercel/node": "^5.5.24"
+  },
+  "devDependencies": {
+    "@types/node": "^25.0.9",
+    "typescript": "^5.9.3"
+  }
 }

@@ -1,5 +1,5 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node'
-import prisma from '../../backend/src/lib/prisma'
+import prisma from '../backend/dist/lib/prisma.js'
 
 export default async function handler(
   req: VercelRequest,
