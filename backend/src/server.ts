@@ -2,11 +2,16 @@ import express from 'express'
 import cors from 'cors'
 import dotenv from 'dotenv'
 
+dotenv.config()
+
+console.log('🚀 Starting ShadowPay Backend...')
+console.log('NODE_ENV:', process.env.NODE_ENV)
+console.log('DATABASE_URL:', process.env.DATABASE_URL ? '✓ Set' : '✗ Missing')
+
+// Import routes AFTER config is loaded
 import depositRouter from './routes/deposit.js'
 import withdrawRouter from './routes/withdraw.js'
 import linkRouter from './routes/link.js'
-
-dotenv.config()
 
 const app = express()
 
@@ -58,5 +63,15 @@ app.use(
 const PORT = Number(process.env.PORT) || 3001
 
 app.listen(PORT, '0.0.0.0', () => {
-  console.log(`🚀 ShadowPay Backend running on port ${PORT}`)
+  console.log(`✅ ShadowPay Backend running on port ${PORT}`)
+})
+
+process.on('unhandledRejection', (reason) => {
+  console.error('Unhandled Rejection:', reason)
+  process.exit(1)
+})
+
+process.on('uncaughtException', (error) => {
+  console.error('Uncaught Exception:', error)
+  process.exit(1)
 })
