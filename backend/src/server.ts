@@ -1,40 +1,45 @@
-import express from 'express';
-import cors from 'cors';
-import { config } from './config.js';
-import depositRouter from './routes/deposit.js';
-import withdrawRouter from './routes/withdraw.js';
-import linkRouter from './routes/link.js';
+import express from 'express'
+import cors from 'cors'
+import dotenv from 'dotenv'
 
-const app = express();
+import depositRouter from './routes/deposit.js'
+import withdrawRouter from './routes/withdraw.js'
+import linkRouter from './routes/link.js'
 
-// CORS Configuration
-const corsOptions = {
-  origin: [
-    'http://localhost:5173',
-    'http://localhost:3000',
-    'https://shadowpay.vercel.app',
-    'https://shadowpayy.vercel.app',
-  ],
-  credentials: true,
-  methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
-  allowedHeaders: ['Content-Type', 'Authorization'],
-};
+dotenv.config()
 
-// Middleware
-app.use(cors(corsOptions));
-app.use(express.json());
+const app = express()
 
-// Health check
-app.get('/health', (_req: express.Request, res: express.Response) => {
-  res.json({ status: 'ok', timestamp: new Date().toISOString() });
-});
+// --- CORS ---
+app.use(
+  cors({
+    origin: [
+      'http://localhost:5173',
+      'http://localhost:3000',
+      'https://shadowpay.vercel.app',
+      'https://shadowpayy.vercel.app',
+    ],
+    credentials: true,
+  })
+)
 
-// Routes
-app.use('/api/deposit', depositRouter);
-app.use('/api/withdraw', withdrawRouter);
-app.use('/api/link', linkRouter);
+app.use(express.json())
 
-// Error handler
+// --- Health Check ---
+app.get('/health', (_req, res) => {
+  res.json({
+    status: 'ok',
+    env: process.env.NODE_ENV || 'unknown',
+    timestamp: new Date().toISOString(),
+  })
+})
+
+// --- API Routes ---
+app.use('/api/deposit', depositRouter)
+app.use('/api/withdraw', withdrawRouter)
+app.use('/api/link', linkRouter)
+
+// --- Global Error Handler ---
 app.use(
   (
     err: any,
@@ -42,19 +47,16 @@ app.use(
     res: express.Response,
     _next: express.NextFunction
   ) => {
-    console.error('Error:', err);
+    console.error('Unhandled error:', err)
     res.status(500).json({
-      error: err.message || 'Internal server error',
-    });
+      error: 'Internal server error',
+    })
   }
-);
+)
 
-// Start server
-const PORT = config.PORT;
-app.listen(PORT, () => {
-  console.log(`🚀 ShadowPay Backend listening on port ${PORT}`);
-  console.log(`📍 Network: Solana Mainnet (Helius RPC)`);
-  console.log(`📝 Privacy Cash SDK: Frontend-only, running in user browsers`);
-});
+// --- START SERVER (RAILWAY SAFE) ---
+const PORT = Number(process.env.PORT) || 3001
 
-
+app.listen(PORT, '0.0.0.0', () => {
+  console.log(`🚀 ShadowPay Backend running on port ${PORT}`)
+})
