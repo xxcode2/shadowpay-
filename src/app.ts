@@ -1,6 +1,7 @@
 // src/app.ts
+
 import { PrivacyCash } from 'privacy-cash-sdk';
-import { Connection, PublicKey } from '@solana/web3.js';
+import { Connection, PublicKey, clusterApiUrl } from '@solana/web3.js';
 
 // --- Types ---
 interface Transaction {
@@ -62,20 +63,28 @@ const elements = {
 
 // --- Initialize SDK ---
 async function initPrivacyCash() {
-  const connection = new Connection('https://api.mainnet-beta.solana.com');
-  // Ganti dengan devnet jika testing
-  // const connection = new Connection('https://api.devnet.solana.com');
+  try {
+    const connection = new Connection(clusterApiUrl('mainnet-beta'), 'confirmed');
+    // Untuk testing, ganti ke devnet:
+    // const connection = new Connection(clusterApiUrl('devnet'), 'confirmed');
 
-  privacyCash = new PrivacyCash({
-    connection,
-    // opsional: relayerUrl: 'https://your-relayer.com'
-  });
+    privacyCash = new PrivacyCash({
+      connection,
+      // Jika ada relayer, tambahkan:
+      // relayerUrl: 'https://your-relayer.com/api'
+    });
+
+    console.log('✅ PrivacyCash SDK initialized');
+  } catch (err) {
+    console.error('❌ Failed to initialize PrivacyCash SDK:', err);
+    showErrorModal('SDK initialization failed. Please check console.');
+  }
 }
 
 // --- Wallet Connection (Phantom-like) ---
 async function connectWallet() {
   if (walletState.isProcessing || !window.solana) {
-    alert('Please install Phantom or compatible wallet');
+    alert('Please install Phantom or compatible Solana wallet');
     return;
   }
 
@@ -96,10 +105,10 @@ async function connectWallet() {
 
     hideLoadingModal();
     showNotification('Wallet connected successfully!');
-  } catch (err) {
+  } catch (err: any) {
     walletState.isProcessing = false;
     hideLoadingModal();
-    showErrorModal('Failed to connect wallet');
+    showErrorModal(`Failed to connect wallet: ${err.message || 'Unknown error'}`);
   }
 }
 
@@ -272,7 +281,7 @@ function formatExpiry(timestamp: number): string {
   return `${hours}h ${mins}m`;
 }
 
-// --- UI Helpers (tetap sama seperti sebelumnya) ---
+// --- UI Helpers ---
 function showSuccessModal() {
   document.getElementById('success-modal')!.classList.remove('hidden');
 }
@@ -305,9 +314,127 @@ function copyLink() {
   });
 }
 
+// --- Tab Switching Logic ---
+function switchMode(mode: 'create' | 'claim' | 'history') {
+  ['create', 'claim', 'history'].forEach(sec => {
+    document.getElementById(`section-${sec}`)!.classList.add('hidden');
+  });
+  ['mode-create', 'mode-claim', 'mode-history'].forEach(btn => {
+    const el = document.getElementById(btn)!;
+    el.classList.remove('bg-gradient-to-r', 'from-purple-600', 'to-blue-600', 'text-white');
+    el.classList.add('text-gray-400');
+  });
+  document.getElementById(`section-${mode}`)!.classList.remove('hidden');
+  const activeBtn = document.getElementById(`mode-${mode}`)!;
+  activeBtn.classList.add('bg-gradient-to-r', 'from-purple-600', 'to-blue-600', 'text-white');
+  activeBtn.classList.remove('text-gray-400');
+  if (mode === 'history') renderHistory();
+}
+
+function switchHistoryTab(tab: 'sent' | 'received') {
+  ['sent', 'received'].forEach(t => {
+    const tabBtn = document.getElementById(`history-${t}-tab`)!;
+    const content = document.getElementById(`history-${t}-content`)!;
+    if (t === tab) {
+      tabBtn.classList.add('bg-purple-500/20', 'text-purple-300');
+      tabBtn.classList.remove('bg-gray-800', 'text-gray-400');
+      content.classList.remove('hidden');
+    } else {
+      tabBtn.classList.remove('bg-purple-500/20', 'text-purple-300');
+      tabBtn.classList.add('bg-gray-800', 'text-gray-400');
+      content.classList.add('hidden');
+    }
+  });
+}
+
+function renderHistory() {
+  const sentList = document.getElementById('sent-list')!;
+  const receivedList = document.getElementById('received-list')!;
+  const sentEmpty = document.getElementById('sent-empty')!;
+  const receivedEmpty = document.getElementById('received-empty')!;
+  sentList.innerHTML = '';
+  receivedList.innerHTML = '';
+  if (transactionHistory.sent.length === 0) {
+    sentEmpty.classList.remove('hidden');
+  } else {
+    sentEmpty.classList.add('hidden');
+    transactionHistory.sent.forEach(tx => {
+      sentList.appendChild(createHistoryItem(tx, 'sent'));
+    });
+  }
+  if (transactionHistory.received.length === 0) {
+    receivedEmpty.classList.remove('hidden');
+  } else {
+    receivedEmpty.classList.add('hidden');
+    transactionHistory.received.forEach(tx => {
+      receivedList.appendChild(createHistoryItem(tx, 'received'));
+    });
+  }
+}
+
+function createHistoryItem(tx: Transaction, type: 'sent' | 'received') {
+  const div = document.createElement('div');
+  div.className = 'history-item gradient-border rounded-2xl p-6 glow-effect';
+
+  const statusBadge = type === 'sent'
+    ? (tx.status === 'claimed'
+        ? '<span class="px-3 py-1 rounded-full bg-emerald-500/20 text-emerald-400 text-xs font-medium">✓ Claimed</span>'
+        : '<span class="px-3 py-1 rounded-full bg-amber-500/20 text-amber-400 text-xs font-medium">⏳ Pending</span>')
+    : '<span class="px-3 py-1 rounded-full bg-cyan-500/20 text-cyan-400 text-xs font-medium">✓ Received</span>';
+
+  const timeAgo = getTimeAgo(tx.date);
+
+  div.innerHTML = `
+    <div class="flex items-center justify-between mb-4">
+      <div class="flex items-center gap-3">
+        <div class="w-10 h-10 rounded-full bg-gradient-to-br ${type === 'sent' ? 'from-purple-600 to-blue-600' : 'from-cyan-600 to-blue-600'} flex items-center justify-center">
+          <span class="text-lg">${type === 'sent' ? '📤' : '📥'}</span>
+        </div>
+        <div>
+          <p class="text-2xl font-display font-bold text-white">${tx.amount} SOL</p>
+          <p class="text-xs text-gray-500">${timeAgo}</p>
+        </div>
+      </div>
+      ${statusBadge}
+    </div>
+    <div class="space-y-2">
+      ${tx.memo ? `<p class="text-sm text-gray-400"><strong class="text-gray-300">Memo:</strong> ${tx.memo}</p>` : ''}
+      ${type === 'sent' && tx.linkId ? `
+        <div class="flex items-center gap-2">
+          <p class="text-xs text-gray-500 font-mono flex-1">${tx.linkId}</p>
+          <button onclick="copyLinkId('${tx.linkId}')" class="px-3 py-1 rounded-lg bg-purple-500/20 text-purple-400 text-xs hover:bg-purple-500/30 transition-colors">
+            Copy ID
+          </button>
+        </div>
+      ` : ''}
+    </div>
+  `;
+
+  return div;
+}
+
+function getTimeAgo(timestamp: number): string {
+  const seconds = Math.floor((Date.now() - timestamp) / 1000);
+  if (seconds < 60) return 'Just now';
+  if (seconds < 3600) return `${Math.floor(seconds / 60)}m ago`;
+  if (seconds < 86400) return `${Math.floor(seconds / 3600)}h ago`;
+  return `${Math.floor(seconds / 86400)}d ago`;
+}
+
+function copyLinkId(linkId: string) {
+  navigator.clipboard.writeText(linkId).then(() => {
+    showNotification('Link ID copied!');
+  });
+}
+
 // --- Event Listeners ---
-document.getElementById('connect-wallet-btn')!.addEventListener('click', connectWallet);
-document.getElementById('disconnect-wallet-btn')!.addEventListener('click', disconnectWallet);
+document.getElementById('mode-create')!.addEventListener('click', () => switchMode('create'));
+document.getElementById('mode-claim')!.addEventListener('click', () => switchMode('claim'));
+document.getElementById('mode-history')!.addEventListener('click', () => switchMode('history'));
+document.getElementById('history-sent-tab')!.addEventListener('click', () => switchHistoryTab('sent'));
+document.getElementById('history-received-tab')!.addEventListener('click', () => switchHistoryTab('received'));
+elements.connectWalletBtn.addEventListener('click', connectWallet);
+elements.disconnectWalletBtn.addEventListener('click', disconnectWallet);
 elements.createForm.addEventListener('submit', handleCreateLink);
 elements.claimForm.addEventListener('submit', handleCheckLink);
 document.getElementById('confirm-claim-btn')!.addEventListener('click', handleConfirmClaim);
