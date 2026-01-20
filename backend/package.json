@@ -8,9 +8,7 @@
     "dev": "node --import tsx src/index.ts",
     "build": "prisma generate && tsc",
     "start": "node dist/index.js",
-    "db:push": "prisma db push",
-    "db:migrate": "prisma migrate deploy",
-    "db:studio": "prisma studio"
+    "db:migrate": "prisma migrate deploy"
   },
   "dependencies": {
     "@prisma/client": "^5.13.0",
