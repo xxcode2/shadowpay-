@@ -6,6 +6,7 @@ package-lock.json
 # Build outputs
 dist/
 build/
+public/
 
 # Environment files (local development)
 .env
