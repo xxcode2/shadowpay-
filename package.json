@@ -1,25 +1,19 @@
 {
   "name": "shadowpay",
   "version": "1.0.0",
-  "description": "Private payment links on Solana",
-  "scripts": {
-    "build": "bash build.sh",
-    "postinstall": "prisma generate",
-    "dev": "npm run dev --workspace=backend & npm run dev --workspace=frontend",
-    "dev:backend": "npm run dev --workspace=backend",
-    "dev:frontend": "npm run dev --workspace=frontend"
-  },
+  "private": true,
+  "description": "ShadowPay monorepo (frontend + backend)",
   "workspaces": [
     "backend",
     "frontend"
   ],
-  "dependencies": {
-    "@prisma/client": "^7.2.0",
-    "@solana/web3.js": "^1.98.4",
-    "@vercel/node": "^5.5.24"
+  "scripts": {
+    "dev": "npm run dev:backend & npm run dev:frontend",
+    "dev:backend": "npm run dev --workspace=backend",
+    "dev:frontend": "npm run dev --workspace=frontend",
+    "postinstall": "prisma generate"
   },
   "devDependencies": {
-    "@types/node": "^25.0.9",
     "typescript": "^5.9.3"
   }
 }
