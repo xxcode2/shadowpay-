@@ -9,7 +9,7 @@
   },
   "functions": {
     "backend/dist/server.js": {
-      "runtime": "nodejs24.x"
+      "runtime": "node@20"
     }
   },
   "routes": [
