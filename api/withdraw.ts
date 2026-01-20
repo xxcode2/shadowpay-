@@ -1,12 +1,12 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node'
 import { PublicKey } from '@solana/web3.js'
-import prisma from '../backend/dist/lib/prisma.js'
+import prisma from './lib/prisma'
 
 export default async function handler(
   req: VercelRequest,
   res: VercelResponse
 ): Promise<void> {
-  // Enable CORS
+  // --- CORS ---
   res.setHeader('Access-Control-Allow-Origin', '*')
   res.setHeader('Access-Control-Allow-Methods', 'GET, POST, OPTIONS')
   res.setHeader('Access-Control-Allow-Headers', 'Content-Type')
@@ -22,9 +22,14 @@ export default async function handler(
   }
 
   try {
-    const { linkId, recipientAddress, withdrawTx } = req.body
+    const { linkId, recipientAddress, withdrawTx } = req.body as {
+      linkId?: string
+      recipientAddress?: string
+      withdrawTx?: string
+    }
 
-    if (!linkId || typeof linkId !== 'string') {
+    // --- Validation ---
+    if (!linkId) {
       res.status(400).json({ error: 'Link ID required' })
       return
     }
@@ -34,7 +39,7 @@ export default async function handler(
       return
     }
 
-    if (!withdrawTx || typeof withdrawTx !== 'string') {
+    if (!withdrawTx) {
       res.status(400).json({ error: 'Withdraw transaction hash required' })
       return
     }
@@ -47,7 +52,7 @@ export default async function handler(
       return
     }
 
-    // Validate link exists
+    // --- Fetch link ---
     const link = await prisma.paymentLink.findUnique({
       where: { id: linkId },
     })
@@ -57,40 +62,39 @@ export default async function handler(
       return
     }
 
-    // Prevent double-claim
     if (link.claimed) {
       res.status(400).json({ error: 'Link already claimed' })
       return
     }
 
-    // Mark link as claimed and save withdrawal transaction
-    const updatedLink = await prisma.paymentLink.update({
-      where: { id: linkId },
-      data: {
-        claimed: true,
-        claimedBy: recipientAddress,
-        withdrawTx,
-      },
-    })
+    // --- Atomic transaction ---
+    await prisma.$transaction([
+      prisma.paymentLink.update({
+        where: { id: linkId },
+        data: {
+          claimed: true,
+          claimedBy: recipientAddress,
+          withdrawTx,
+        },
+      }),
 
-    // Record transaction
-    await prisma.transaction.create({
-      data: {
-        type: 'withdraw',
-        linkId,
-        transactionHash: withdrawTx,
-        amount: link.amount,
-        assetType: link.assetType,
-        toAddress: recipientAddress,
-        status: 'confirmed',
-      },
-    })
+      prisma.transaction.create({
+        data: {
+          type: 'withdraw',
+          linkId,
+          transactionHash: withdrawTx,
+          amount: link.amount,
+          assetType: link.assetType,
+          toAddress: recipientAddress,
+          status: 'confirmed',
+        },
+      }),
+    ])
 
     res.status(200).json({
       success: true,
-      message: 'Withdrawal recorded and link claimed',
       withdrawTx,
-      link: updatedLink,
+      message: 'Withdrawal recorded successfully',
     })
   } catch (error) {
     console.error('Withdraw error:', error)
