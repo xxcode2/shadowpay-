@@ -1,4 +1,5 @@
 #!/bin/bash
+set -e
 
 # Build backend
 echo "🔨 Building backend..."
@@ -17,6 +18,8 @@ cd ..
 # Prepare public directory
 echo "📁 Preparing public directory..."
 rm -rf public
-cp -r frontend/dist public
+mkdir -p public
+cp -r frontend/dist/* public/
 
 echo "✅ Build complete!"
+

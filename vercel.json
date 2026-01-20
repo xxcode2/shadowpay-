@@ -1,7 +1,6 @@
 {
   "version": 2,
-  "buildCommand": "cd backend && npm install && npm run build && cd ../frontend && npm install && npm run build && cd .. && mkdir -p public && cp -r frontend/dist/* public/",
-  "outputDirectory": "public",
+  "buildCommand": "npm run build",
   "env": {
     "SOLANA_RPC_URL": "https://mainnet.helius-rpc.com/?api-key=c455719c-354b-4a44-98d4-27f8a18aa79c",
     "PORT": "3001",
@@ -16,6 +15,10 @@
       "config": {
         "runtime": "nodejs20.x"
       }
+    },
+    {
+      "src": "public/**",
+      "use": "@vercel/static"
     }
   ],
   "routes": [
@@ -28,11 +31,8 @@
       "dest": "backend/dist/server.js"
     },
     {
-      "handle": "filesystem"
-    },
-    {
       "src": "/(.*)",
-      "dest": "/index.html"
+      "dest": "public/$1"
     }
   ]
 }
