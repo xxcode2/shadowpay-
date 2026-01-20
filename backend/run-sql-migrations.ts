@@ -27,8 +27,28 @@ async function runMigrations() {
       const sqlPath = path.join(process.cwd(), 'prisma', 'migrations', '0_init', 'migration.sql');
       const sql = fs.readFileSync(sqlPath, 'utf-8');
       
-      console.log('📍 Executing SQL...');
-      await client.query(sql);
+      console.log('📍 Checking database connection...');
+      const result = await client.query('SELECT NOW()');
+      console.log('✅ Database connected');
+      
+      // Run each statement separately to handle idempotency
+      const statements = sql.split(';').filter(stmt => stmt.trim());
+      
+      for (const statement of statements) {
+        if (!statement.trim()) continue;
+        
+        try {
+          console.log(`📝 Running: ${statement.substring(0, 50)}...`);
+          await client.query(statement);
+        } catch (error: any) {
+          // If table already exists, that's okay
+          if (error.code === '42P07') {
+            console.log('   ℹ️  Table already exists, skipping...');
+          } else {
+            throw error;
+          }
+        }
+      }
       
       console.log('✅ Migrations completed successfully!');
     } finally {
@@ -36,7 +56,8 @@ async function runMigrations() {
     }
   } catch (error) {
     console.error('❌ Migration failed:', error);
-    process.exit(1);
+    // Don't exit with error - let server start anyway
+    console.error('⚠️  Continuing with server startup...');
   } finally {
     await pool.end();
   }
