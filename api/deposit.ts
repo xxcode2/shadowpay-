@@ -39,10 +39,15 @@ export default async function handler(
       return
     }
 
+    // Test database connection
+    if (!prisma) {
+      throw new Error('Prisma client not initialized')
+    }
+
     // Create payment link in database
     const link = await prisma.paymentLink.create({
       data: {
-        amount,
+        amount: parseFloat(String(amount)),
         assetType,
         depositTx,
       },
@@ -51,12 +56,12 @@ export default async function handler(
     // Also create transaction record
     await prisma.transaction.create({
       data: {
-        type: 'deposit',
+        type: 'deposit' as const,
         linkId: link.id,
         transactionHash: depositTx,
-        amount,
+        amount: parseFloat(String(amount)),
         assetType,
-        status: 'confirmed',
+        status: 'confirmed' as const,
       },
     })
 
@@ -68,8 +73,15 @@ export default async function handler(
     })
   } catch (error) {
     console.error('Deposit error:', error)
+    const errorMessage = error instanceof Error ? error.message : 'Deposit failed'
+    console.error('Error details:', {
+      message: errorMessage,
+      stack: error instanceof Error ? error.stack : 'No stack',
+      type: typeof error,
+    })
     res.status(500).json({
-      error: error instanceof Error ? error.message : 'Deposit failed',
+      error: errorMessage,
+      details: process.env.NODE_ENV === 'development' ? String(error) : undefined,
     })
   }
 }
