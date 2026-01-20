@@ -1,0 +1,26 @@
+{
+  "version": 2,
+  "buildCommand": "cd backend && npm install && npm run build",
+  "outputDirectory": "backend/dist",
+  "env": {
+    "SOLANA_RPC_URL": "@solana_rpc_url",
+    "PORT": "3001",
+    "ENABLE_DEBUG": "false"
+  },
+  "functions": {
+    "backend/dist/server.js": {
+      "runtime": "nodejs24.x"
+    }
+  },
+  "routes": [
+    {
+      "src": "^/api/(.*)",
+      "dest": "backend/dist/server.js"
+    },
+    {
+      "src": "^/health$",
+      "dest": "backend/dist/server.js"
+    }
+  ]
+}
+
