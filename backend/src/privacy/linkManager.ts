@@ -1,54 +1,68 @@
-import { randomBytes } from 'crypto';
+import prisma from '../lib/prisma.js'
+import { privacyCash } from './privacyCash.js'
 
-interface LinkData {
-  id: string;
-  amount: number;
-  assetType: 'SOL' | 'USDC' | 'USDT';
-  createdAt: number;
-  claimedAt?: number;
-  claimedBy?: string;
-  depositTx: string;
-}
+export async function claimPaymentLink(params: {
+  linkId: string
+  recipient: string
+}) {
+  const { linkId, recipient } = params
 
-// In-memory storage for links (for MVP)
-// In production, use a database
-const links = new Map<string, LinkData>();
+  return await prisma.$transaction(async (txDb) => {
+    // 1. Atomic lock: mark claimed ONLY if not claimed yet
+    const locked = await txDb.paymentLink.updateMany({
+      where: {
+        id: linkId,
+        claimed: false,
+      },
+      data: {
+        claimed: true,
+        claimedBy: recipient,
+      },
+    })
 
-export function createLink(
-  amount: number,
-  assetType: 'SOL' | 'USDC' | 'USDT',
-  depositTx: string
-): string {
-  const id = randomBytes(16).toString('hex');
-  
-  links.set(id, {
-    id,
-    amount,
-    assetType,
-    createdAt: Date.now(),
-    depositTx,
-  });
+    // If no row updated → already claimed or not found
+    if (locked.count !== 1) {
+      throw new Error('Link already claimed or invalid')
+    }
 
-  return id;
-}
+    // 2. Fetch locked link (now guaranteed single owner)
+    const link = await txDb.paymentLink.findUnique({
+      where: { id: linkId },
+    })
 
-export function getLink(id: string): LinkData | null {
-  return links.get(id) || null;
-}
+    if (!link) {
+      throw new Error('Link not found after lock')
+    }
 
-export function claimLink(id: string, claimedBy: string): boolean {
-  const link = links.get(id);
-  
-  if (!link) {
-    return false;
-  }
+    // 3. Execute Privacy Cash withdraw (ONE TIME)
+    let withdrawTx: string
+    try {
+      const result = await privacyCash.withdraw({
+        commitment: link.commitment,
+        recipient,
+      })
+      withdrawTx = typeof result === 'string' ? result : result.tx
+    } catch (err) {
+      // 4. Rollback lock if withdraw fails
+      await txDb.paymentLink.update({
+        where: { id: linkId },
+        data: {
+          claimed: false,
+          claimedBy: null,
+        },
+      })
 
-  if (link.claimedAt) {
-    return false; // Already claimed
-  }
+      throw new Error('Withdraw failed')
+    }
 
-  link.claimedAt = Date.now();
-  link.claimedBy = claimedBy;
-  
-  return true;
+    // 5. Persist withdraw tx
+    await txDb.paymentLink.update({
+      where: { id: linkId },
+      data: {
+        withdrawTx,
+      },
+    })
+
+    return { withdrawTx }
+  })
 }
