@@ -1,4 +1,5 @@
 import { defineConfig } from 'vite'
+import path from 'path'
 
 export default defineConfig({
   server: {
@@ -10,8 +11,22 @@ export default defineConfig({
       }
     }
   },
+  resolve: {
+    alias: {
+      'privacycash': path.resolve(__dirname, '../privacy-cash-sdk/src/index.ts')
+    }
+  },
   build: {
     target: 'ES2022',
-    outDir: 'dist'
+    outDir: 'dist',
+    rollupOptions: {
+      external: [],
+      output: {
+        globals: {}
+      }
+    }
+  },
+  ssr: {
+    noExternal: ['privacycash']
   }
 })
