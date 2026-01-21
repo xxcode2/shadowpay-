@@ -11,31 +11,51 @@ datasource db {
 }
 
 model PaymentLink {
-  id                String    @id @default(cuid())
-  amount            Float
-  assetType         String    // "SOL", "USDC", "USDT"
-  claimed           Boolean   @default(false)
-  claimedBy         String?   // Wallet address that claimed the link
-  depositTx         String    // Transaction hash from deposit
-  withdrawTx        String?   // Transaction hash from withdrawal
-  createdAt         DateTime  @default(now())
-  updatedAt         DateTime  @updatedAt
-  
+  id          String   @id @default(cuid())
+
+  amount      Float
+  assetType   String   // "SOL", "USDC", "USDT"
+
+  // 🔐 CORE SECURITY FIELD (WAJIB)
+  commitment  String   @unique
+
+  // Status
+  claimed     Boolean  @default(false)
+  claimedBy   String?
+
+  // Tx references
+  depositTx   String
+  withdrawTx  String?
+
+  // Relations
+  transactions Transaction[]
+
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
   @@map("payment_links")
 }
 
 model Transaction {
-  id                String    @id @default(cuid())
-  type              String    // "deposit" or "withdraw"
-  linkId            String
-  transactionHash   String    @unique
-  status            String    @default("pending") // "pending", "confirmed", "failed"
-  amount            Float
-  assetType         String    // "SOL", "USDC", "USDT"
-  fromAddress       String?
-  toAddress         String?
-  createdAt         DateTime  @default(now())
-  updatedAt         DateTime  @updatedAt
-  
+  id              String   @id @default(cuid())
+
+  type            String   // "deposit" | "withdraw"
+  status          String   @default("pending") // pending | confirmed | failed
+
+  amount          Float
+  assetType       String
+
+  transactionHash String
+  fromAddress     String?
+  toAddress       String?
+
+  // Relation (WAJIB)
+  linkId          String
+  link            PaymentLink @relation(fields: [linkId], references: [id], onDelete: Cascade)
+
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  @@index([linkId])
   @@map("transactions")
 }
