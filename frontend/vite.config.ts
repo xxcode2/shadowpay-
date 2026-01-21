@@ -13,20 +13,11 @@ export default defineConfig({
   },
   resolve: {
     alias: {
-      'privacycash': path.resolve(__dirname, '../privacy-cash-sdk/src/index.ts')
+      'privacycash': path.resolve(__dirname, '../privacy-cash-sdk/dist/index.js')
     }
   },
   build: {
     target: 'ES2022',
-    outDir: 'dist',
-    rollupOptions: {
-      external: [],
-      output: {
-        globals: {}
-      }
-    }
-  },
-  ssr: {
-    noExternal: ['privacycash']
+    outDir: 'dist'
   }
 })
