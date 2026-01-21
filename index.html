@@ -1,54 +1,37 @@
 <!doctype html>
 <html lang="en" class="h-full">
-<head>
-  <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+ <head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>ShadowPay - Private Payment Links</title>
-
-  <!-- Tailwind CSS -->
   <script src="https://cdn.tailwindcss.com"></script>
-
-  <!-- SDKs -->
   <script src="/_sdk/element_sdk.js"></script>
-  <script src="/_sdk/data_sdk.js" type="text/javascript"></script>
-
-  <!-- Fonts -->
-  <link rel="preconnect" href="https://fonts.googleapis.com" />
-  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-  <link
-    href="https://fonts.googleapis.com/css2?family=Orbitron:wght@400;500;600;700;800&family=Inter:wght@300;400;500;600&display=swap"
-    rel="stylesheet"
-  />
-
-  <!-- Custom Styles -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@400;500;600;700;800&amp;family=Inter:wght@300;400;500;600&amp;display=swap" rel="stylesheet">
   <style>
     body {
       box-sizing: border-box;
     }
-
-    .font-display {
-      font-family: 'Orbitron', sans-serif;
-    }
-
-    .font-body {
-      font-family: 'Inter', sans-serif;
-    }
-
+    
+    .font-display { font-family: 'Orbitron', sans-serif; }
+    .font-body { font-family: 'Inter', sans-serif; }
+    
     .glow-effect {
       box-shadow: 0 0 40px rgba(139, 92, 246, 0.3), 0 0 80px rgba(139, 92, 246, 0.15);
     }
-
+    
     .glass-card {
       background: rgba(17, 24, 39, 0.7);
       backdrop-filter: blur(20px);
       border: 1px solid rgba(139, 92, 246, 0.2);
     }
-
+    
     .gradient-border {
       position: relative;
       background: linear-gradient(145deg, rgba(17, 24, 39, 0.9), rgba(31, 41, 55, 0.9));
     }
-
+    
     .gradient-border::before {
       content: '';
       position: absolute;
@@ -57,48 +40,48 @@
       padding: 2px;
       background: linear-gradient(145deg, #8b5cf6, #3b82f6, #06b6d4);
       -webkit-mask: linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0);
+      mask: linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0);
       -webkit-mask-composite: xor;
       mask-composite: exclude;
       pointer-events: none;
     }
-
+    
     @keyframes pulse-glow {
       0%, 100% { opacity: 0.5; transform: scale(1); }
       50% { opacity: 0.8; transform: scale(1.1); }
     }
-    .animate-pulse-glow {
-      animation: pulse-glow 2s ease-in-out infinite;
-    }
-
+    
+    .animate-pulse-glow { animation: pulse-glow 2s ease-in-out infinite; }
+    
     @keyframes slideInRight {
       from { transform: translateX(100px); opacity: 0; }
       to { transform: translateX(0); opacity: 1; }
     }
-    .wallet-connected {
-      animation: slideInRight 0.4s ease-out;
-    }
-
+    
+    .wallet-connected { animation: slideInRight 0.4s ease-out; }
+    
     @keyframes fadeIn {
       from { opacity: 0; }
       to { opacity: 1; }
     }
+    
     .modal-backdrop {
       backdrop-filter: blur(10px);
       animation: fadeIn 0.2s ease;
     }
-
+    
     @keyframes scaleIn {
       from { transform: scale(0.9); opacity: 0; }
       to { transform: scale(1); opacity: 1; }
     }
-    .modal-content {
-      animation: scaleIn 0.3s ease;
-    }
-
+    
+    .modal-content { animation: scaleIn 0.3s ease; }
+    
     @keyframes spin {
       0% { transform: rotate(0deg); }
       100% { transform: rotate(360deg); }
     }
+    
     .loading-spinner {
       border: 3px solid rgba(139, 92, 246, 0.1);
       border-top: 3px solid #8b5cf6;
@@ -107,368 +90,581 @@
       height: 40px;
       animation: spin 1s linear infinite;
     }
-
+    
     @keyframes slideInUp {
       from { transform: translateY(20px); opacity: 0; }
       to { transform: translateY(0); opacity: 1; }
     }
-    .copy-notification {
-      animation: slideInUp 0.3s ease;
-    }
-
+    
+    .copy-notification { animation: slideInUp 0.3s ease; }
+    
     @keyframes slideIn {
       from { transform: translateX(-20px); opacity: 0; }
       to { transform: translateX(0); opacity: 1; }
     }
-    .history-item {
-      animation: slideIn 0.4s ease;
-    }
+    
+    .history-item { animation: slideIn 0.4s ease; }
   </style>
-
   <style>@view-transition { navigation: auto; }</style>
-</head>
-
-<body class="h-full bg-gray-950 text-gray-100 font-body overflow-auto">
-  <div class="min-h-full w-full relative">
-    <!-- Background -->
-    <div class="fixed inset-0 overflow-hidden pointer-events-none">
-      <div class="absolute top-20 left-20 w-96 h-96 bg-purple-600/20 rounded-full blur-3xl animate-pulse-glow"></div>
-      <div class="absolute bottom-20 right-20 w-96 h-96 bg-blue-600/20 rounded-full blur-3xl animate-pulse-glow" style="animation-delay: 1s;"></div>
-      <div class="absolute top-1/2 left-1/2 w-96 h-96 bg-cyan-600/10 rounded-full blur-3xl animate-pulse-glow" style="animation-delay: 2s;"></div>
+  <script src="/_sdk/data_sdk.js" type="text/javascript"></script>
+ </head>
+ <body class="h-full bg-gray-950 text-gray-100 font-body overflow-auto">
+  <div class="min-h-full w-full relative"><!-- Background -->
+   <div class="fixed inset-0 overflow-hidden pointer-events-none">
+    <div class="absolute top-20 left-20 w-96 h-96 bg-purple-600/20 rounded-full blur-3xl animate-pulse-glow"></div>
+    <div class="absolute bottom-20 right-20 w-96 h-96 bg-blue-600/20 rounded-full blur-3xl animate-pulse-glow" style="animation-delay: 1s;"></div>
+    <div class="absolute top-1/2 left-1/2 w-96 h-96 bg-cyan-600/10 rounded-full blur-3xl animate-pulse-glow" style="animation-delay: 2s;"></div>
+   </div><!-- Header -->
+   <header class="relative z-10 border-b border-purple-900/30 bg-gray-900/50 backdrop-blur-xl">
+    <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-4">
+     <div class="flex items-center justify-between">
+      <div class="flex items-center gap-3">
+       <div class="w-12 h-12 rounded-xl bg-gradient-to-br from-purple-600 to-blue-600 flex items-center justify-center glow-effect">
+        <svg class="w-7 h-7 text-white" fill="none" viewbox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 10V3L4 14h7v7l9-11h-7z" />
+        </svg>
+       </div>
+       <div>
+        <h1 id="app-title" class="text-2xl font-display font-bold text-transparent bg-clip-text bg-gradient-to-r from-purple-400 to-cyan-400">ShadowPay</h1>
+        <p id="app-tagline" class="text-xs text-gray-400">Send SOL Privately</p>
+       </div>
+      </div>
+      <div><button id="connect-wallet-btn" class="px-6 py-2.5 rounded-xl bg-gradient-to-r from-purple-600 to-blue-600 hover:from-purple-700 hover:to-blue-700 text-white font-medium transition-all duration-300 transform hover:scale-105 glow-effect"> Connect Wallet </button>
+       <div id="wallet-connected" class="hidden wallet-connected">
+        <div class="flex items-center gap-3 px-4 py-2 rounded-xl glass-card">
+         <div class="w-2 h-2 bg-green-400 rounded-full animate-pulse"></div><span id="wallet-address" class="text-sm font-mono text-gray-300"></span> <button id="disconnect-wallet-btn" class="ml-2 text-gray-400 hover:text-red-400 transition-colors">
+          <svg class="w-4 h-4" fill="none" viewbox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
+          </svg></button>
+        </div>
+       </div>
+      </div>
+     </div>
     </div>
+   </header><!-- Main -->
+   <main class="relative z-10 max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-12"><!-- Tabs -->
+    <div class="flex justify-center mb-12">
+     <div class="inline-flex gap-2 p-1.5 rounded-2xl glass-card"><button id="mode-create" class="mode-btn px-6 py-3 rounded-xl font-display font-medium transition-all duration-300 bg-gradient-to-r from-purple-600 to-blue-600 text-white text-sm"> Create Link </button> <button id="mode-claim" class="mode-btn px-6 py-3 rounded-xl font-display font-medium transition-all duration-300 text-gray-400 hover:text-white text-sm"> Claim Link </button> <button id="mode-history" class="mode-btn px-6 py-3 rounded-xl font-display font-medium transition-all duration-300 text-gray-400 hover:text-white text-sm"> History </button>
+     </div>
+    </div><!-- Create Section -->
+    <div id="section-create" class="section-content">
+     <div class="max-w-2xl mx-auto">
+      <div class="text-center mb-10">
+       <div class="inline-flex items-center gap-2 px-4 py-2 rounded-full glass-card mb-4"><span class="w-2 h-2 bg-purple-400 rounded-full animate-pulse"></span> <span class="text-sm text-gray-400 font-medium">You will deposit SOL</span>
+       </div>
+       <h2 class="text-4xl font-display font-bold text-white mb-3">Create Private Payment Link</h2>
+       <p class="text-gray-400">Deposit SOL and generate a link for recipient to claim</p>
+      </div>
+      <div class="gradient-border rounded-3xl p-8 glow-effect">
+       <form id="create-form" class="space-y-6">
+        <div><label for="amount-input" class="block text-sm font-medium text-gray-300 mb-2">Amount to Deposit (SOL)</label>
+         <div class="relative"><input type="number" id="amount-input" step="0.001" min="0.001" placeholder="0.00" class="w-full px-5 py-4 bg-gray-900/50 border border-purple-500/30 rounded-xl text-white text-2xl font-bold focus:outline-none focus:border-purple-500 transition-colors" required> <span class="absolute right-5 top-1/2 -translate-y-1/2 text-gray-500 font-display">SOL</span>
+         </div>
+        </div>
+        <div><label for="memo-input" class="block text-sm font-medium text-gray-300 mb-2">Memo (Optional)</label> <input type="text" id="memo-input" placeholder="e.g., Payment for services" maxlength="100" class="w-full px-5 py-3 bg-gray-900/50 border border-purple-500/30 rounded-xl text-white focus:outline-none focus:border-purple-500 transition-colors">
+        </div>
+        <div><label for="expiry-select" class="block text-sm font-medium text-gray-300 mb-2">Link Expiry</label> <select id="expiry-select" class="w-full px-5 py-3 bg-gray-900/50 border border-purple-500/30 rounded-xl text-white focus:outline-none focus:border-purple-500 transition-colors appearance-none cursor-pointer"> <option value="3600">1 Hour</option> <option value="21600">6 Hours</option> <option value="86400" selected>24 Hours</option> <option value="604800">7 Days</option> </select>
+        </div>
+        <div class="p-4 rounded-xl bg-purple-500/10 border border-purple-500/20">
+         <div class="flex gap-3">
+          <svg class="w-5 h-5 text-purple-400 flex-shrink-0 mt-0.5" fill="none" viewbox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+          </svg>
+          <div class="text-sm text-gray-300"><strong class="text-purple-400">How it works:</strong> You will deposit SOL into Privacy Cash pool (shielded). Recipient can claim using the link without revealing the connection between you two.
+          </div>
+         </div>
+        </div><button type="submit" id="create-submit-btn" class="w-full py-4 rounded-xl bg-gradient-to-r from-purple-600 to-blue-600 hover:from-purple-700 hover:to-blue-700 text-white font-display font-bold text-lg transition-all duration-300 transform hover:scale-[1.02] glow-effect disabled:opacity-50 disabled:cursor-not-allowed"> <span id="create-button-text">Deposit &amp; Create Link</span> </button>
+       </form>
+      </div>
+     </div>
+    </div><!-- Claim Section -->
+    <div id="section-claim" class="section-content hidden">
+     <div class="max-w-2xl mx-auto">
+      <div class="text-center mb-10">
+       <div class="inline-flex items-center gap-2 px-4 py-2 rounded-full glass-card mb-4"><span class="w-2 h-2 bg-cyan-400 rounded-full animate-pulse"></span> <span class="text-sm text-gray-400 font-medium">You will receive SOL</span>
+       </div>
+       <h2 class="text-4xl font-display font-bold text-white mb-3">Claim Private Payment</h2>
+       <p class="text-gray-400">Enter link ID to preview and claim your payment</p>
+      </div><!-- Preview Card -->
+      <div id="preview-card" class="hidden gradient-border rounded-3xl p-8 glow-effect mb-6">
+       <div class="text-center mb-6">
+        <div class="inline-flex items-center gap-2 px-4 py-2 rounded-full bg-emerald-500/20 mb-4">
+         <svg class="w-4 h-4 text-emerald-400" fill="none" viewbox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7" />
+         </svg><span class="text-sm text-emerald-400 font-medium">Link Valid</span>
+        </div>
+        <h3 class="text-3xl font-display font-bold text-white mb-2">You will receive</h3>
+        <p class="text-5xl font-display font-bold text-transparent bg-clip-text bg-gradient-to-r from-cyan-400 to-blue-400 mb-4"><span id="preview-amount">0.000</span> SOL</p>
+        <div class="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-gray-800/50">
+         <svg class="w-4 h-4 text-gray-400" fill="none" viewbox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
+         </svg><span class="text-xs text-gray-400">Expires in <span id="preview-expiry" class="text-white font-medium">23h 45m</span></span>
+        </div>
+       </div>
+       <div class="p-4 rounded-xl bg-cyan-500/10 border border-cyan-500/20 mb-6">
+        <p class="text-sm text-gray-300"><strong class="text-cyan-400">Memo:</strong> <span id="preview-memo">No memo</span></p>
+       </div><button id="confirm-claim-btn" class="w-full py-4 rounded-xl bg-gradient-to-r from-cyan-600 to-blue-600 hover:from-cyan-700 hover:to-blue-700 text-white font-display font-bold text-lg transition-all duration-300 transform hover:scale-[1.02] glow-effect"> Confirm &amp; Claim Payment </button>
+      </div><!-- Claim Form -->
+      <div class="gradient-border rounded-3xl p-8 glow-effect">
+       <form id="claim-form" class="space-y-6">
+        <div><label for="link-id-input" class="block text-sm font-medium text-gray-300 mb-2">Payment Link ID</label> <input type="text" id="link-id-input" placeholder="e.g., a1b2c3d4-e5f6-7890-abcd-ef1234567890" class="w-full px-5 py-4 bg-gray-900/50 border border-cyan-500/30 rounded-xl text-white font-mono focus:outline-none focus:border-cyan-500 transition-colors" required>
+        </div><button type="submit" id="check-link-btn" class="w-full py-4 rounded-xl bg-gradient-to-r from-cyan-600 to-blue-600 hover:from-cyan-700 hover:to-blue-700 text-white font-display font-bold text-lg transition-all duration-300 transform hover:scale-[1.02] glow-effect disabled:opacity-50 disabled:cursor-not-allowed"> Check Link </button>
+       </form>
+       <div class="mt-6 p-4 rounded-xl bg-cyan-500/10 border border-cyan-500/20">
+        <div class="flex gap-3">
+         <svg class="w-5 h-5 text-cyan-400 flex-shrink-0 mt-0.5" fill="none" viewbox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+         </svg>
+         <div class="text-sm text-gray-300">
+          Enter the Link ID to preview the amount. You'll need to connect your wallet to claim.
+         </div>
+        </div>
+       </div>
+      </div>
+     </div>
+    </div><!-- History Section -->
+    <div id="section-history" class="section-content hidden">
+     <div class="max-w-4xl mx-auto">
+      <div class="text-center mb-10">
+       <h2 class="text-4xl font-display font-bold text-white mb-3">Transaction History</h2>
+       <p class="text-gray-400">View your sent and received private payments</p>
+      </div>
+      <div class="flex gap-2 mb-6 justify-center"><button id="history-sent-tab" class="history-tab px-6 py-2 rounded-xl bg-purple-500/20 text-purple-300 font-medium text-sm transition-all"> 📤 Sent Links </button> <button id="history-received-tab" class="history-tab px-6 py-2 rounded-xl bg-gray-800 text-gray-400 font-medium text-sm transition-all"> 📥 Received </button>
+      </div>
+      <div id="history-sent-content" class="history-content">
+       <div id="sent-list" class="space-y-4"></div>
+       <div id="sent-empty" class="hidden text-center py-12">
+        <svg class="w-16 h-16 mx-auto text-gray-600 mb-4" fill="none" viewbox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M20 13V6a2 2 0 00-2-2H6a2 2 0 00-2 2v7m16 0v5a2 2 0 01-2 2H6a2 2 0 01-2-2v-5m16 0h-2.586a1 1 0 00-.707.293l-2.414 2.414a1 1 0 01-.707.293h-3.172a1 1 0 01-.707-.293l-2.414-2.414A1 1 0 006.586 13H4" />
+        </svg>
+        <p class="text-gray-500">No sent links yet</p>
+        <p class="text-gray-600 text-sm">Create a payment link to get started</p>
+       </div>
+      </div>
+      <div id="history-received-content" class="history-content hidden">
+       <div id="received-list" class="space-y-4"></div>
+       <div id="received-empty" class="hidden text-center py-12">
+        <svg class="w-16 h-16 mx-auto text-gray-600 mb-4" fill="none" viewbox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+        </svg>
+        <p class="text-gray-500">No claimed payments yet</p>
+        <p class="text-gray-600 text-sm">Claim a payment link to see it here</p>
+       </div>
+      </div>
+     </div>
+    </div>
+   </main><!-- Success Modal -->
+   <div id="success-modal" class="hidden fixed inset-0 z-50 flex items-center justify-center p-4 modal-backdrop bg-black/60">
+    <div class="modal-content gradient-border rounded-3xl p-8 max-w-md w-full glow-effect">
+     <div class="text-center">
+      <div class="w-20 h-20 mx-auto mb-6 rounded-full bg-gradient-to-br from-green-400 to-emerald-600 flex items-center justify-center glow-effect">
+       <svg class="w-10 h-10 text-white" fill="none" viewbox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7" />
+       </svg>
+      </div>
+      <h3 class="text-2xl font-display font-bold text-white mb-3">Success!</h3>
+      <p id="success-message" class="text-gray-400 mb-6"></p>
+      <div id="link-result" class="hidden mb-6"><label class="block text-sm font-medium text-gray-300 mb-2">Your Private Payment Link</label>
+       <div class="flex gap-2"><input type="text" id="generated-link" readonly class="flex-1 px-4 py-3 bg-gray-900/50 border border-purple-500/30 rounded-xl text-white font-mono text-sm"> <button id="copy-link-btn" class="px-4 py-3 rounded-xl bg-purple-600 hover:bg-purple-700 text-white transition-colors" title="Copy link">
+         <svg class="w-5 h-5" fill="none" viewbox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z" />
+         </svg></button>
+       </div>
+      </div><button id="close-success-modal" class="w-full py-3 rounded-xl bg-gradient-to-r from-purple-600 to-blue-600 hover:from-purple-700 hover:to-blue-700 text-white font-medium transition-all"> Close </button>
+     </div>
+    </div>
+   </div><!-- Loading Modal -->
+   <div id="loading-modal" class="hidden fixed inset-0 z-50 flex items-center justify-center p-4 modal-backdrop bg-black/60">
+    <div class="modal-content gradient-border rounded-3xl p-8 max-w-sm w-full text-center glow-effect">
+     <div class="loading-spinner mx-auto mb-6"></div>
+     <h3 class="text-xl font-display font-bold text-white mb-2">Processing...</h3>
+     <p id="loading-message" class="text-gray-400 text-sm"></p>
+    </div>
+   </div><!-- Notification -->
+   <div id="copy-notification" class="hidden fixed bottom-8 right-8 z-50 copy-notification">
+    <div class="px-6 py-4 rounded-xl glass-card border border-green-500/30 flex items-center gap-3 glow-effect">
+     <svg class="w-5 h-5 text-green-400" fill="none" viewbox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7" />
+     </svg><span class="text-white font-medium">Link copied to clipboard!</span>
+    </div>
+   </div>
+  </div>
+  <script>
+    const defaultConfig = {
+      app_title: 'ShadowPay',
+      tagline: 'Send SOL Privately',
+      create_button_text: 'Deposit & Create Link',
+      claim_button_text: 'Claim Payment'
+    };
 
-    <!-- Header -->
-    <header class="relative z-10 border-b border-purple-900/30 bg-gray-900/50 backdrop-blur-xl">
-      <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-4">
-        <div class="flex items-center justify-between">
+    let walletState = { connected: false, address: null, isProcessing: false };
+    
+    let transactionHistory = {
+      sent: [
+        { id: 'abc123', amount: 2.5, memo: 'Freelance payment', status: 'claimed', date: Date.now() - 86400000, linkId: 'abc123def456' },
+        { id: 'def456', amount: 1.2, memo: 'Tip for great service', status: 'pending', date: Date.now() - 3600000, linkId: 'def456ghi789' }
+      ],
+      received: [
+        { id: 'ghi789', amount: 3.0, memo: 'Payment received', date: Date.now() - 172800000 }
+      ]
+    };
+
+    function switchMode(mode) {
+      ['create', 'claim', 'history'].forEach(sec => {
+        document.getElementById(`section-${sec}`).classList.add('hidden');
+      });
+      
+      ['mode-create', 'mode-claim', 'mode-history'].forEach(btn => {
+        const el = document.getElementById(btn);
+        el.classList.remove('bg-gradient-to-r', 'from-purple-600', 'to-blue-600', 'text-white');
+        el.classList.add('text-gray-400');
+      });
+      
+      document.getElementById(`section-${mode}`).classList.remove('hidden');
+      const activeBtn = document.getElementById(`mode-${mode}`);
+      activeBtn.classList.add('bg-gradient-to-r', 'from-purple-600', 'to-blue-600', 'text-white');
+      activeBtn.classList.remove('text-gray-400');
+
+      if (mode === 'history') renderHistory();
+    }
+
+    function switchHistoryTab(tab) {
+      ['sent', 'received'].forEach(t => {
+        const tabBtn = document.getElementById(`history-${t}-tab`);
+        const content = document.getElementById(`history-${t}-content`);
+        
+        if (t === tab) {
+          tabBtn.classList.add('bg-purple-500/20', 'text-purple-300');
+          tabBtn.classList.remove('bg-gray-800', 'text-gray-400');
+          content.classList.remove('hidden');
+        } else {
+          tabBtn.classList.remove('bg-purple-500/20', 'text-purple-300');
+          tabBtn.classList.add('bg-gray-800', 'text-gray-400');
+          content.classList.add('hidden');
+        }
+      });
+    }
+
+    function renderHistory() {
+      const sentList = document.getElementById('sent-list');
+      const receivedList = document.getElementById('received-list');
+      const sentEmpty = document.getElementById('sent-empty');
+      const receivedEmpty = document.getElementById('received-empty');
+
+      sentList.innerHTML = '';
+      receivedList.innerHTML = '';
+
+      if (transactionHistory.sent.length === 0) {
+        sentEmpty.classList.remove('hidden');
+      } else {
+        sentEmpty.classList.add('hidden');
+        transactionHistory.sent.forEach(tx => {
+          sentList.appendChild(createHistoryItem(tx, 'sent'));
+        });
+      }
+
+      if (transactionHistory.received.length === 0) {
+        receivedEmpty.classList.remove('hidden');
+      } else {
+        receivedEmpty.classList.add('hidden');
+        transactionHistory.received.forEach(tx => {
+          receivedList.appendChild(createHistoryItem(tx, 'received'));
+        });
+      }
+    }
+
+    function createHistoryItem(tx, type) {
+      const div = document.createElement('div');
+      div.className = 'history-item gradient-border rounded-2xl p-6 glow-effect';
+      
+      const statusBadge = type === 'sent' 
+        ? (tx.status === 'claimed' 
+          ? '<span class="px-3 py-1 rounded-full bg-emerald-500/20 text-emerald-400 text-xs font-medium">✓ Claimed</span>'
+          : '<span class="px-3 py-1 rounded-full bg-amber-500/20 text-amber-400 text-xs font-medium">⏳ Pending</span>')
+        : '<span class="px-3 py-1 rounded-full bg-cyan-500/20 text-cyan-400 text-xs font-medium">✓ Received</span>';
+      
+      const timeAgo = getTimeAgo(tx.date);
+      
+      div.innerHTML = `
+        <div class="flex items-center justify-between mb-4">
           <div class="flex items-center gap-3">
-            <div class="w-12 h-12 rounded-xl bg-gradient-to-br from-purple-600 to-blue-600 flex items-center justify-center glow-effect">
-              <svg class="w-7 h-7 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 10V3L4 14h7v7l9-11h-7z" />
-              </svg>
+            <div class="w-10 h-10 rounded-full bg-gradient-to-br ${type === 'sent' ? 'from-purple-600 to-blue-600' : 'from-cyan-600 to-blue-600'} flex items-center justify-center">
+              <span class="text-lg">${type === 'sent' ? '📤' : '📥'}</span>
             </div>
             <div>
-              <h1 id="app-title" class="text-2xl font-display font-bold text-transparent bg-clip-text bg-gradient-to-r from-purple-400 to-cyan-400">ShadowPay</h1>
-              <p id="app-tagline" class="text-xs text-gray-400">Send SOL Privately</p>
+              <p class="text-2xl font-display font-bold text-white">${tx.amount} SOL</p>
+              <p class="text-xs text-gray-500">${timeAgo}</p>
             </div>
           </div>
-          <div>
-            <button id="connect-wallet-btn" class="px-6 py-2.5 rounded-xl bg-gradient-to-r from-purple-600 to-blue-600 hover:from-purple-700 hover:to-blue-700 text-white font-medium transition-all duration-300 transform hover:scale-105 glow-effect">
-              Connect Wallet
-            </button>
-            <div id="wallet-connected" class="hidden wallet-connected">
-              <div class="flex items-center gap-3 px-4 py-2 rounded-xl glass-card">
-                <div class="w-2 h-2 bg-green-400 rounded-full animate-pulse"></div>
-                <span id="wallet-address" class="text-sm font-mono text-gray-300"></span>
-                <button id="disconnect-wallet-btn" class="ml-2 text-gray-400 hover:text-red-400 transition-colors">
-                  <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
-                  </svg>
-                </button>
-              </div>
-            </div>
-          </div>
+          ${statusBadge}
         </div>
-      </div>
-    </header>
-
-    <!-- Main Content -->
-    <main class="relative z-10 max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-12">
-      <!-- Tabs -->
-      <div class="flex justify-center mb-12">
-        <div class="inline-flex gap-2 p-1.5 rounded-2xl glass-card">
-          <button id="mode-create" class="mode-btn px-6 py-3 rounded-xl font-display font-medium transition-all duration-300 bg-gradient-to-r from-purple-600 to-blue-600 text-white text-sm">Create Link</button>
-          <button id="mode-claim" class="mode-btn px-6 py-3 rounded-xl font-display font-medium transition-all duration-300 text-gray-400 hover:text-white text-sm">Claim Link</button>
-          <button id="mode-history" class="mode-btn px-6 py-3 rounded-xl font-display font-medium transition-all duration-300 text-gray-400 hover:text-white text-sm">History</button>
-        </div>
-      </div>
-
-      <!-- Create Section -->
-      <div id="section-create" class="section-content">
-        <div class="max-w-2xl mx-auto">
-          <div class="text-center mb-10">
-            <div class="inline-flex items-center gap-2 px-4 py-2 rounded-full glass-card mb-4">
-              <span class="w-2 h-2 bg-purple-400 rounded-full animate-pulse"></span>
-              <span class="text-sm text-gray-400 font-medium">You will deposit SOL</span>
-            </div>
-            <h2 class="text-4xl font-display font-bold text-white mb-3">Create Private Payment Link</h2>
-            <p class="text-gray-400">Deposit SOL and generate a link for recipient to claim</p>
-          </div>
-          <div class="gradient-border rounded-3xl p-8 glow-effect">
-            <form id="create-form" class="space-y-6">
-              <div>
-                <label for="amount-input" class="block text-sm font-medium text-gray-300 mb-2">Amount to Deposit (SOL)</label>
-                <div class="relative">
-                  <input
-                    type="number"
-                    id="amount-input"
-                    step="0.001"
-                    min="0.001"
-                    placeholder="0.00"
-                    class="w-full px-5 py-4 bg-gray-900/50 border border-purple-500/30 rounded-xl text-white text-2xl font-bold focus:outline-none focus:border-purple-500 transition-colors"
-                    required
-                  />
-                  <span class="absolute right-5 top-1/2 -translate-y-1/2 text-gray-500 font-display">SOL</span>
-                </div>
-              </div>
-              <div>
-                <label for="memo-input" class="block text-sm font-medium text-gray-300 mb-2">Memo (Optional)</label>
-                <input
-                  type="text"
-                  id="memo-input"
-                  placeholder="e.g., Payment for services"
-                  maxlength="100"
-                  class="w-full px-5 py-3 bg-gray-900/50 border border-purple-500/30 rounded-xl text-white focus:outline-none focus:border-purple-500 transition-colors"
-                />
-              </div>
-              <div>
-                <label for="expiry-select" class="block text-sm font-medium text-gray-300 mb-2">Link Expiry</label>
-                <select
-                  id="expiry-select"
-                  class="w-full px-5 py-3 bg-gray-900/50 border border-purple-500/30 rounded-xl text-white focus:outline-none focus:border-purple-500 transition-colors appearance-none cursor-pointer"
-                >
-                  <option value="3600">1 Hour</option>
-                  <option value="21600">6 Hours</option>
-                  <option value="86400" selected>24 Hours</option>
-                  <option value="604800">7 Days</option>
-                </select>
-              </div>
-              <div class="p-4 rounded-xl bg-purple-500/10 border border-purple-500/20">
-                <div class="flex gap-3">
-                  <svg class="w-5 h-5 text-purple-400 flex-shrink-0 mt-0.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
-                  </svg>
-                  <div class="text-sm text-gray-300">
-                    <strong class="text-purple-400">How it works:</strong> You will deposit SOL into Privacy Cash pool (shielded). Recipient can claim using the link without revealing the connection between you two.
-                  </div>
-                </div>
-              </div>
-              <button
-                type="submit"
-                id="create-submit-btn"
-                class="w-full py-4 rounded-xl bg-gradient-to-r from-purple-600 to-blue-600 hover:from-purple-700 hover:to-blue-700 text-white font-display font-bold text-lg transition-all duration-300 transform hover:scale-[1.02] glow-effect disabled:opacity-50 disabled:cursor-not-allowed"
-              >
-                <span id="create-button-text">Deposit & Create Link</span>
-              </button>
-            </form>
-          </div>
-        </div>
-      </div>
-
-      <!-- Claim Section -->
-      <div id="section-claim" class="section-content hidden">
-        <div class="max-w-2xl mx-auto">
-          <div class="text-center mb-10">
-            <div class="inline-flex items-center gap-2 px-4 py-2 rounded-full glass-card mb-4">
-              <span class="w-2 h-2 bg-cyan-400 rounded-full animate-pulse"></span>
-              <span class="text-sm text-gray-400 font-medium">You will receive SOL</span>
-            </div>
-            <h2 class="text-4xl font-display font-bold text-white mb-3">Claim Private Payment</h2>
-            <p class="text-gray-400">Enter link ID to preview and claim your payment</p>
-          </div>
-
-          <!-- Preview Card -->
-          <div id="preview-card" class="hidden gradient-border rounded-3xl p-8 glow-effect mb-6">
-            <div class="text-center mb-6">
-              <div class="inline-flex items-center gap-2 px-4 py-2 rounded-full bg-emerald-500/20 mb-4">
-                <svg class="w-4 h-4 text-emerald-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7" />
-                </svg>
-                <span class="text-sm text-emerald-400 font-medium">Link Valid</span>
-              </div>
-              <h3 class="text-3xl font-display font-bold text-white mb-2">You will receive</h3>
-              <p class="text-5xl font-display font-bold text-transparent bg-clip-text bg-gradient-to-r from-cyan-400 to-blue-400 mb-4">
-                <span id="preview-amount">0.000</span> SOL
-              </p>
-              <div class="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-gray-800/50">
-                <svg class="w-4 h-4 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
-                </svg>
-                <span class="text-xs text-gray-400">Expires in <span id="preview-expiry" class="text-white font-medium">23h 45m</span></span>
-              </div>
-            </div>
-            <div class="p-4 rounded-xl bg-cyan-500/10 border border-cyan-500/20 mb-6">
-              <p class="text-sm text-gray-300"><strong class="text-cyan-400">Memo:</strong> <span id="preview-memo">No memo</span></p>
-            </div>
-            <button
-              id="confirm-claim-btn"
-              class="w-full py-4 rounded-xl bg-gradient-to-r from-cyan-600 to-blue-600 hover:from-cyan-700 hover:to-blue-700 text-white font-display font-bold text-lg transition-all duration-300 transform hover:scale-[1.02] glow-effect"
-            >
-              Confirm & Claim Payment
-            </button>
-          </div>
-
-          <!-- Claim Form -->
-          <div class="gradient-border rounded-3xl p-8 glow-effect">
-            <form id="claim-form" class="space-y-6">
-              <div>
-                <label for="link-id-input" class="block text-sm font-medium text-gray-300 mb-2">Payment Link ID</label>
-                <input
-                  type="text"
-                  id="link-id-input"
-                  placeholder="e.g., a1b2c3d4-e5f6-7890-abcd-ef1234567890"
-                  class="w-full px-5 py-4 bg-gray-900/50 border border-cyan-500/30 rounded-xl text-white font-mono focus:outline-none focus:border-cyan-500 transition-colors"
-                  required
-                />
-              </div>
-              <button
-                type="submit"
-                id="check-link-btn"
-                class="w-full py-4 rounded-xl bg-gradient-to-r from-cyan-600 to-blue-600 hover:from-cyan-700 hover:to-blue-700 text-white font-display font-bold text-lg transition-all duration-300 transform hover:scale-[1.02] glow-effect disabled:opacity-50 disabled:cursor-not-allowed"
-              >
-                Check Link
-              </button>
-            </form>
-            <div class="mt-6 p-4 rounded-xl bg-cyan-500/10 border border-cyan-500/20">
-              <div class="flex gap-3">
-                <svg class="w-5 h-5 text-cyan-400 flex-shrink-0 mt-0.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
-                </svg>
-                <div class="text-sm text-gray-300">
-                  Enter the Link ID to preview the amount. You'll need to connect your wallet to claim.
-                </div>
-              </div>
-            </div>
-          </div>
-        </div>
-      </div>
-
-      <!-- History Section -->
-      <div id="section-history" class="section-content hidden">
-        <div class="max-w-4xl mx-auto">
-          <div class="text-center mb-10">
-            <h2 class="text-4xl font-display font-bold text-white mb-3">Transaction History</h2>
-            <p class="text-gray-400">View your sent and received private payments</p>
-          </div>
-          <div class="flex gap-2 mb-6 justify-center">
-            <button id="history-sent-tab" class="history-tab px-6 py-2 rounded-xl bg-purple-500/20 text-purple-300 font-medium text-sm transition-all">📤 Sent Links</button>
-            <button id="history-received-tab" class="history-tab px-6 py-2 rounded-xl bg-gray-800 text-gray-400 font-medium text-sm transition-all">📥 Received</button>
-          </div>
-          <div id="history-sent-content" class="history-content">
-            <div id="sent-list" class="space-y-4"></div>
-            <div id="sent-empty" class="hidden text-center py-12">
-              <svg class="w-16 h-16 mx-auto text-gray-600 mb-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M20 13V6a2 2 0 00-2-2H6a2 2 0 00-2 2v7m16 0v5a2 2 0 01-2 2H6a2 2 0 01-2-2v-5m16 0h-2.586a1 1 0 00-.707.293l-2.414 2.414a1 1 0 01-.707.293h-3.172a1 1 0 01-.707-.293l-2.414-2.414A1 1 0 006.586 13H4" />
-              </svg>
-              <p class="text-gray-500">No sent links yet</p>
-              <p class="text-gray-600 text-sm">Create a payment link to get started</p>
-            </div>
-          </div>
-          <div id="history-received-content" class="history-content hidden">
-            <div id="received-list" class="space-y-4"></div>
-            <div id="received-empty" class="hidden text-center py-12">
-              <svg class="w-16 h-16 mx-auto text-gray-600 mb-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
-              </svg>
-              <p class="text-gray-500">No claimed payments yet</p>
-              <p class="text-gray-600 text-sm">Claim a payment link to see it here</p>
-            </div>
-          </div>
-        </div>
-      </div>
-    </main>
-
-    <!-- Success Modal -->
-    <div id="success-modal" class="hidden fixed inset-0 z-50 flex items-center justify-center p-4 modal-backdrop bg-black/60">
-      <div class="modal-content gradient-border rounded-3xl p-8 max-w-md w-full glow-effect">
-        <div class="text-center">
-          <div class="w-20 h-20 mx-auto mb-6 rounded-full bg-gradient-to-br from-green-400 to-emerald-600 flex items-center justify-center glow-effect">
-            <svg class="w-10 h-10 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7" />
-            </svg>
-          </div>
-          <h3 class="text-2xl font-display font-bold text-white mb-3">Success!</h3>
-          <p id="success-message" class="text-gray-400 mb-6"></p>
-          <div id="link-result" class="hidden mb-6">
-            <label class="block text-sm font-medium text-gray-300 mb-2">Your Private Payment Link</label>
-            <div class="flex gap-2">
-              <input
-                type="text"
-                id="generated-link"
-                readonly
-                class="flex-1 px-4 py-3 bg-gray-900/50 border border-purple-500/30 rounded-xl text-white font-mono text-sm"
-              />
-              <button
-                id="copy-link-btn"
-                class="px-4 py-3 rounded-xl bg-purple-600 hover:bg-purple-700 text-white transition-colors"
-                title="Copy link"
-              >
-                <svg class="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z" />
-                </svg>
+        <div class="space-y-2">
+          ${tx.memo ? `<p class="text-sm text-gray-400"><strong class="text-gray-300">Memo:</strong> ${tx.memo}</p>` : ''}
+          ${type === 'sent' && tx.linkId ? `
+            <div class="flex items-center gap-2">
+              <p class="text-xs text-gray-500 font-mono flex-1">${tx.linkId}</p>
+              <button onclick="copyLinkId('${tx.linkId}')" class="px-3 py-1 rounded-lg bg-purple-500/20 text-purple-400 text-xs hover:bg-purple-500/30 transition-colors">
+                Copy ID
               </button>
             </div>
-          </div>
-          <button
-            id="close-success-modal"
-            class="w-full py-3 rounded-xl bg-gradient-to-r from-purple-600 to-blue-600 hover:from-purple-700 hover:to-blue-700 text-white font-medium transition-all"
-          >
-            Close
-          </button>
+          ` : ''}
         </div>
-      </div>
-    </div>
+      `;
+      
+      return div;
+    }
 
-    <!-- Loading Modal -->
-    <div id="loading-modal" class="hidden fixed inset-0 z-50 flex items-center justify-center p-4 modal-backdrop bg-black/60">
-      <div class="modal-content gradient-border rounded-3xl p-8 max-w-sm w-full text-center glow-effect">
-        <div class="loading-spinner mx-auto mb-6"></div>
-        <h3 class="text-xl font-display font-bold text-white mb-2">Processing...</h3>
-        <p id="loading-message" class="text-gray-400 text-sm"></p>
-      </div>
-    </div>
+    function getTimeAgo(timestamp) {
+      const seconds = Math.floor((Date.now() - timestamp) / 1000);
+      if (seconds < 60) return 'Just now';
+      if (seconds < 3600) return `${Math.floor(seconds / 60)}m ago`;
+      if (seconds < 86400) return `${Math.floor(seconds / 3600)}h ago`;
+      return `${Math.floor(seconds / 86400)}d ago`;
+    }
 
-    <!-- Notification -->
-    <div id="copy-notification" class="hidden fixed bottom-8 right-8 z-50 copy-notification">
-      <div class="px-6 py-4 rounded-xl glass-card border border-green-500/30 flex items-center gap-3 glow-effect">
-        <svg class="w-5 h-5 text-green-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7" />
-        </svg>
-        <span class="text-white font-medium">Link copied to clipboard!</span>
-      </div>
-    </div>
-  </div>
+    function copyLinkId(linkId) {
+      navigator.clipboard.writeText(linkId).then(() => {
+        showNotification('Link ID copied!');
+      });
+    }
 
-  <!-- Main Logic Script -->
-  <script>
-    // ... (isi script tetap sama seperti sebelumnya)
-  </script>
+    function connectWallet() {
+      if (walletState.isProcessing) return;
+      
+      walletState.isProcessing = true;
+      showLoadingModal('Connecting to wallet...');
 
-  <!-- Cloudflare Challenge (tidak perlu diubah) -->
-  <script>
-    (function () {
-      function c() {
-        var b = a.contentDocument || a.contentWindow.document;
-        if (b) {
-          var d = b.createElement('script');
-          d.innerHTML =
-            "window.__CF$cv$params={r:'9c0c851eb1c8f938',t:'MTc2ODg5MDU5My4wMDAwMDA='};var a=document.createElement('script');a.nonce='';a.src='/cdn-cgi/challenge-platform/scripts/jsd/main.js';document.getElementsByTagName('head')[0].appendChild(a);";
-          b.getElementsByTagName('head')[0].appendChild(d);
-        }
+      setTimeout(() => {
+        const mockAddress = generateMockAddress();
+        walletState.connected = true;
+        walletState.address = mockAddress;
+        walletState.isProcessing = false;
+
+        document.getElementById('connect-wallet-btn').classList.add('hidden');
+        document.getElementById('wallet-connected').classList.remove('hidden');
+        document.getElementById('wallet-address').textContent = formatAddress(mockAddress);
+
+        hideLoadingModal();
+        showNotification('Wallet connected successfully!');
+      }, 1500);
+    }
+
+    function disconnectWallet() {
+      walletState.connected = false;
+      walletState.address = null;
+
+      document.getElementById('connect-wallet-btn').classList.remove('hidden');
+      document.getElementById('wallet-connected').classList.add('hidden');
+    }
+
+    function handleCreateLink(event) {
+      event.preventDefault();
+
+      if (!walletState.connected) {
+        showErrorModal('Please connect your wallet first');
+        return;
       }
-      if (document.body) {
-        var a = document.createElement('iframe');
-        a.height = 1;
-        a.width = 1;
-        a.style.position = 'absolute';
-        a.style.top = 0;
-        a.style.left = 0;
-        a.style.border = 'none';
-        a.style.visibility = 'hidden';
-        document.body.appendChild(a);
-        if ('loading' !== document.readyState) c();
-        else if (window.addEventListener)
-          document.addEventListener('DOMContentLoaded', c);
-        else {
-          var e = document.onreadystatechange || function () {};
-          document.onreadystatechange = function (b) {
-            e(b);
-            'loading' !== document.readyState &&
-              ((document.onreadystatechange = e), c());
-          };
-        }
+
+      if (walletState.isProcessing) return;
+
+      const amount = document.getElementById('amount-input').value;
+      const memo = document.getElementById('memo-input').value;
+
+      if (!amount || parseFloat(amount) <= 0) {
+        showErrorModal('Please enter a valid amount');
+        return;
       }
-    })();
+
+      walletState.isProcessing = true;
+      showLoadingModal('Depositing SOL to Privacy Cash pool...<br><small class="text-gray-500">Backend processing with shielded transaction</small>');
+
+      setTimeout(() => {
+        const linkId = generateLinkId();
+        const linkUrl = `https://shadowpay.app/claim/${linkId}`;
+
+        transactionHistory.sent.unshift({
+          id: Date.now().toString(),
+          amount: parseFloat(amount),
+          memo: memo || 'No memo',
+          status: 'pending',
+          date: Date.now(),
+          linkId: linkId
+        });
+
+        walletState.isProcessing = false;
+        hideLoadingModal();
+
+        document.getElementById('generated-link').value = linkUrl;
+        document.getElementById('link-result').classList.remove('hidden');
+        document.getElementById('success-message').textContent = `Successfully deposited ${amount} SOL! Share this link with the recipient.`;
+        showSuccessModal();
+
+        document.getElementById('create-form').reset();
+      }, 2500);
+    }
+
+    function handleCheckLink(event) {
+      event.preventDefault();
+
+      const linkId = document.getElementById('link-id-input').value.trim();
+
+      if (!linkId) {
+        showErrorModal('Please enter a payment link ID');
+        return;
+      }
+
+      showLoadingModal('Checking link validity...');
+
+      setTimeout(() => {
+        hideLoadingModal();
+
+        const success = Math.random() > 0.2;
+
+        if (success) {
+          const amount = (Math.random() * 5 + 0.5).toFixed(3);
+          const memo = ['Payment for services', 'Tip for great work', 'Freelance payment', 'Gift'][Math.floor(Math.random() * 4)];
+          
+          document.getElementById('preview-amount').textContent = amount;
+          document.getElementById('preview-memo').textContent = memo;
+          document.getElementById('preview-expiry').textContent = '23h 45m';
+          document.getElementById('preview-card').classList.remove('hidden');
+          
+          document.getElementById('preview-card').dataset.amount = amount;
+          document.getElementById('preview-card').dataset.memo = memo;
+        } else {
+          showErrorModal('Invalid link ID or link has expired');
+        }
+      }, 1500);
+    }
+
+    function handleConfirmClaim() {
+      if (!walletState.connected) {
+        showErrorModal('Please connect your wallet first');
+        return;
+      }
+
+      const amount = document.getElementById('preview-card').dataset.amount;
+      const memo = document.getElementById('preview-card').dataset.memo;
+
+      showLoadingModal('Processing claim...<br><small class="text-gray-500">Backend executing private withdrawal</small>');
+
+      setTimeout(() => {
+        transactionHistory.received.unshift({
+          id: Date.now().toString(),
+          amount: parseFloat(amount),
+          memo: memo,
+          date: Date.now()
+        });
+
+        hideLoadingModal();
+        document.getElementById('preview-card').classList.add('hidden');
+        document.getElementById('link-result').classList.add('hidden');
+        document.getElementById('success-message').textContent = `Successfully claimed ${amount} SOL! Funds sent to your wallet privately.`;
+        showSuccessModal();
+        document.getElementById('claim-form').reset();
+      }, 2500);
+    }
+
+    function showSuccessModal() {
+      document.getElementById('success-modal').classList.remove('hidden');
+    }
+
+    function hideSuccessModal() {
+      document.getElementById('success-modal').classList.add('hidden');
+      document.getElementById('link-result').classList.add('hidden');
+    }
+
+    function showLoadingModal(message) {
+      document.getElementById('loading-message').innerHTML = message;
+      document.getElementById('loading-modal').classList.remove('hidden');
+    }
+
+    function hideLoadingModal() {
+      document.getElementById('loading-modal').classList.add('hidden');
+    }
+
+    function showErrorModal(message) {
+      document.getElementById('success-message').textContent = message;
+      document.getElementById('link-result').classList.add('hidden');
+      showSuccessModal();
+    }
+
+    function showNotification(message) {
+      const notification = document.getElementById('copy-notification');
+      notification.querySelector('span').textContent = message;
+      notification.classList.remove('hidden');
+      setTimeout(() => {
+        notification.classList.add('hidden');
+      }, 3000);
+    }
+
+    function copyLink() {
+      const linkInput = document.getElementById('generated-link');
+      linkInput.select();
+      linkInput.setSelectionRange(0, 99999);
+      
+      navigator.clipboard.writeText(linkInput.value).then(() => {
+        showNotification('Link copied to clipboard!');
+      }).catch(() => {
+        showNotification('Failed to copy link');
+      });
+    }
+
+    function generateMockAddress() {
+      const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz123456789';
+      let address = '';
+      for (let i = 0; i < 44; i++) {
+        address += chars.charAt(Math.floor(Math.random() * chars.length));
+      }
+      return address;
+    }
+
+    function formatAddress(address) {
+      return `${address.substring(0, 4)}...${address.substring(address.length - 4)}`;
+    }
+
+    function generateLinkId() {
+      return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, function(c) {
+        const r = Math.random() * 16 | 0;
+        const v = c === 'x' ? r : (r & 0x3 | 0x8);
+        return v.toString(16);
+      });
+    }
+
+    document.getElementById('mode-create').addEventListener('click', () => switchMode('create'));
+    document.getElementById('mode-claim').addEventListener('click', () => switchMode('claim'));
+    document.getElementById('mode-history').addEventListener('click', () => switchMode('history'));
+    document.getElementById('history-sent-tab').addEventListener('click', () => switchHistoryTab('sent'));
+    document.getElementById('history-received-tab').addEventListener('click', () => switchHistoryTab('received'));
+    document.getElementById('connect-wallet-btn').addEventListener('click', connectWallet);
+    document.getElementById('disconnect-wallet-btn').addEventListener('click', disconnectWallet);
+    document.getElementById('create-form').addEventListener('submit', handleCreateLink);
+    document.getElementById('claim-form').addEventListener('submit', handleCheckLink);
+    document.getElementById('confirm-claim-btn').addEventListener('click', handleConfirmClaim);
+    document.getElementById('close-success-modal').addEventListener('click', hideSuccessModal);
+    document.getElementById('copy-link-btn').addEventListener('click', copyLink);
+
+    async function onConfigChange(config) {
+      document.getElementById('app-title').textContent = config.app_title || defaultConfig.app_title;
+      document.getElementById('app-tagline').textContent = config.tagline || defaultConfig.tagline;
+      document.getElementById('create-button-text').textContent = config.create_button_text || defaultConfig.create_button_text;
+    }
+
+    function mapToCapabilities(config) {
+      return {
+        recolorables: [],
+        borderables: [],
+        fontEditable: undefined,
+        fontSizeable: undefined
+      };
+    }
+
+    function mapToEditPanelValues(config) {
+      return new Map([
+        ['app_title', config.app_title || defaultConfig.app_title],
+        ['tagline', config.tagline || defaultConfig.tagline],
+        ['create_button_text', config.create_button_text || defaultConfig.create_button_text],
+        ['claim_button_text', config.claim_button_text || defaultConfig.claim_button_text]
+      ]);
+    }
+
+    if (window.elementSdk) {
+      window.elementSdk.init({
+        defaultConfig,
+        onConfigChange,
+        mapToCapabilities,
+        mapToEditPanelValues
+      });
+    }
   </script>
-</body>
+ <script>(function(){function c(){var b=a.contentDocument||a.contentWindow.document;if(b){var d=b.createElement('script');d.innerHTML="window.__CF$cv$params={r:'9c145fbec260600f',t:'MTc2ODk3Mjk0OC4wMDAwMDA='};var a=document.createElement('script');a.nonce='';a.src='/cdn-cgi/challenge-platform/scripts/jsd/main.js';document.getElementsByTagName('head')[0].appendChild(a);";b.getElementsByTagName('head')[0].appendChild(d)}}if(document.body){var a=document.createElement('iframe');a.height=1;a.width=1;a.style.position='absolute';a.style.top=0;a.style.left=0;a.style.border='none';a.style.visibility='hidden';document.body.appendChild(a);if('loading'!==document.readyState)c();else if(window.addEventListener)document.addEventListener('DOMContentLoaded',c);else{var e=document.onreadystatechange||function(){};document.onreadystatechange=function(b){e(b);'loading'!==document.readyState&&(document.onreadystatechange=e,c())}}}})();</script></body>
 </html>
