@@ -18,33 +18,20 @@ const app = express()
 // --- CORS ---
 app.use(
   cors({
-    origin: function(origin, callback) {
-      // Allow requests with no origin (like mobile apps or curl requests)
-      if (!origin) return callback(null, true)
-      
-      const allowedOrigins = [
-        'http://localhost:5173',
-        'http://localhost:3000',
-        'https://shadowpay.vercel.app',
-        'https://shadowpayy.vercel.app',
-      ]
-      
-      if (allowedOrigins.includes(origin)) {
-        callback(null, true)
-      } else if (process.env.NODE_ENV !== 'production') {
-        // Allow all in development
-        callback(null, true)
-      } else {
-        // Log rejected origins in production for debugging
-        console.warn(`CORS rejected origin: ${origin}`)
-        callback(new Error('Not allowed by CORS'))
-      }
-    },
-    credentials: true,
-    methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
+    origin: [
+      'https://shadowpayy.vercel.app',
+      'https://shadowpay.vercel.app',
+      'http://localhost:5173',
+      'http://localhost:3000',
+    ],
+    methods: ['GET', 'POST', 'OPTIONS'],
     allowedHeaders: ['Content-Type', 'Authorization'],
+    credentials: false,
   })
 )
+
+// Handle preflight explicitly (THIS IS KEY)
+app.options('*', cors())
 
 app.use(express.json())
 
