@@ -6,7 +6,7 @@
   "scripts": {
     "dev": "node --import tsx src/server.ts",
     "build": "prisma generate && tsc",
-    "migrate": "node --import tsx run-sql-migrations.ts",
+    "migrate": "prisma migrate deploy || true",
     "start": "npm run migrate && node dist/server.js"
   },
   "dependencies": {
