@@ -7,7 +7,7 @@ const router = Router()
 interface CreateLinkRequest {
   amount: number
   assetType: 'SOL'
-  sender: string
+  senderAddress: string
   memo?: string
   expiresInHours?: number
 }
@@ -21,7 +21,7 @@ interface CreateLinkRequest {
  */
 router.post('/', async (req: Request<{}, {}, CreateLinkRequest>, res: Response) => {
   try {
-    const { amount, assetType, sender, memo, expiresInHours } = req.body
+    const { amount, assetType, senderAddress, memo, expiresInHours } = req.body
 
     if (!amount || amount <= 0) {
       return res.status(400).json({ error: 'Invalid amount' })
@@ -31,7 +31,7 @@ router.post('/', async (req: Request<{}, {}, CreateLinkRequest>, res: Response) 
       return res.status(400).json({ error: 'Only SOL supported' })
     }
 
-    if (!sender) {
+    if (!senderAddress) {
       return res.status(400).json({ error: 'Sender required' })
     }
 
