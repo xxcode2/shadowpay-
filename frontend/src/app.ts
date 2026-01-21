@@ -1,6 +1,6 @@
 /// <reference types="vite/client" />
 
-import { PrivacyCash } from 'privacy-cash-sdk'
+import { PrivacyCash } from 'privacycash'
 
 // ================= CONFIG =================
 const API_URL =
@@ -9,13 +9,12 @@ const API_URL =
 
 const SOLANA_RPC =
   import.meta.env.VITE_SOLANA_RPC ||
-  'https://mainnet.helius-rpc.com/?api-key=c455719c-354b-4a44-98d4-27f8a18aa79c'
+  'https://mainnet.helius-rpc.com/?api-key=YOUR_KEY'
 
-// ================= GLOBAL TYPES =================
+// ================= GLOBAL =================
 declare global {
   interface Window {
     solana?: any
-    privacyCash?: PrivacyCash
     currentLinkId?: string
   }
 }
@@ -24,6 +23,7 @@ declare global {
 export class App {
   private walletAddress: string | null = null
   private privacyCash: PrivacyCash | null = null
+  private pendingLamports: number | null = null
 
   init() {
     this.bindEvents()
@@ -70,8 +70,6 @@ export class App {
         owner: window.solana.publicKey,
       })
 
-      window.privacyCash = this.privacyCash
-
       document.getElementById('connect-wallet-btn')?.classList.add('hidden')
       document.getElementById('wallet-connected')?.classList.remove('hidden')
       document.getElementById('wallet-address')!.textContent =
@@ -87,6 +85,7 @@ export class App {
   private disconnectWallet() {
     this.walletAddress = null
     this.privacyCash = null
+    this.pendingLamports = null
 
     document.getElementById('connect-wallet-btn')?.classList.remove('hidden')
     document.getElementById('wallet-connected')?.classList.add('hidden')
@@ -113,18 +112,21 @@ export class App {
         return
       }
 
+      const lamports = Math.round(amount * 1e9)
+
       this.showLoadingModal('Depositing SOL privately…')
       this.setStatus('⏳ Depositing to Privacy Cash pool…')
 
-      // 🔐 REAL PRIVACY CASH DEPOSIT (NO ESCROW)
-      const lamports = Math.round(amount * 1e9)
-      const depositTx = await this.privacyCash.deposit({
+      // 🔐 REAL PRIVACY CASH DEPOSIT
+      const depositResult = await this.privacyCash.deposit({
         lamports,
       })
 
+      const depositTx = depositResult.tx
+
       this.setStatus('⏳ Registering payment link…')
 
-      // BACKEND: store metadata ONLY
+      // BACKEND: metadata only
       const res = await fetch(`${API_URL}/deposit`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -180,7 +182,9 @@ export class App {
       }
 
       const data = await res.json()
+
       window.currentLinkId = linkId
+      this.pendingLamports = Math.round(data.amount * 1e9)
 
       document.getElementById('preview-amount')!.textContent =
         data.amount.toFixed(3)
@@ -199,7 +203,12 @@ export class App {
 
   // ================= CLAIM =================
   private async claim() {
-    if (!window.currentLinkId || !this.walletAddress || !this.privacyCash) {
+    if (
+      !window.currentLinkId ||
+      !this.walletAddress ||
+      !this.privacyCash ||
+      !this.pendingLamports
+    ) {
       this.setStatus('❌ Missing wallet or link')
       return
     }
@@ -209,12 +218,14 @@ export class App {
       this.setStatus('⏳ Processing withdrawal…')
 
       // 🔐 REAL PRIVACY CASH WITHDRAW
-      const withdrawTx = await this.privacyCash.withdraw({
-        lamports: 1000,
+      const withdrawResult = await this.privacyCash.withdraw({
+        lamports: this.pendingLamports,
         recipientAddress: this.walletAddress,
       })
 
-      // BACKEND: record claim ONLY
+      const withdrawTx = withdrawResult.tx
+
+      // BACKEND: record claim only
       const res = await fetch(`${API_URL}/withdraw`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
