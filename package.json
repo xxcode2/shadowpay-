@@ -2,7 +2,8 @@
   "name": "shadowpay",
   "private": true,
   "scripts": {
-    "build": "pnpm --filter privacycash build && pnpm --filter shadowpay-backend build && pnpm --filter shadowpay-frontend build"
+    "build": "pnpm --filter privacycash build && pnpm --filter shadowpay-backend build && pnpm --filter shadowpay-frontend build",
+    "start": "cd backend && npm start"
   },
   "devDependencies": {
     "@types/node": "^24.3.0",
