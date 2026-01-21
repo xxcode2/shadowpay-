@@ -13,11 +13,26 @@ import linkRoute from './routes/link.js'
 // --- App ---
 const app = express()
 
-// --- Middleware ---
-app.use(cors())
+// --- CORS (HARUS DI PALING ATAS) ---
+app.use(
+  cors({
+    origin: [
+      'https://shadowpayy.vercel.app',
+      'http://localhost:5173',
+    ],
+    methods: ['GET', 'POST', 'OPTIONS'],
+    allowedHeaders: ['Content-Type', 'Authorization'],
+    credentials: false,
+  })
+)
+
+// Handle preflight explicitly (INI KUNCI)
+app.options('*', cors())
+
+// --- Body parser ---
 app.use(express.json())
 
-// --- Health check (Railway needs this) ---
+// --- Health check ---
 app.get('/health', (_req, res) => {
   res.json({
     status: 'ok',
@@ -32,12 +47,19 @@ app.use('/api/withdraw', withdrawRoute)
 app.use('/api/link', linkRoute)
 
 // --- Error fallback ---
-app.use((err: any, _req: express.Request, res: express.Response, _next: express.NextFunction) => {
-  console.error('❌ Unhandled error:', err)
-  res.status(500).json({
-    error: 'Internal server error',
-  })
-})
+app.use(
+  (
+    err: any,
+    _req: express.Request,
+    res: express.Response,
+    _next: express.NextFunction
+  ) => {
+    console.error('❌ Unhandled error:', err)
+    res.status(500).json({
+      error: 'Internal server error',
+    })
+  }
+)
 
 // --- Start server ---
 const PORT = Number(process.env.PORT) || 3001
