@@ -10,7 +10,7 @@ const router = Router();
 interface DepositRequest {
   amount: number;
   assetType: 'SOL'; // lock to SOL for now
-  sender: string;   // wallet public key
+  senderAddress: string;   // wallet public key
 }
 
 /**
@@ -27,7 +27,7 @@ router.post('/', async (req: Request<{}, {}, DepositRequest>, res: Response) => 
     // ================= DEBUG LOG =================
     console.log('DEPOSIT BODY:', req.body);
 
-    const { amount, assetType, sender } = req.body;
+    const { amount, assetType, senderAddress } = req.body;
 
     // ================= VALIDATION =================
     if (!amount || amount <= 0) {
@@ -38,7 +38,7 @@ router.post('/', async (req: Request<{}, {}, DepositRequest>, res: Response) => 
       return res.status(400).json({ error: 'Only SOL is supported' });
     }
 
-    if (!sender || typeof sender !== 'string') {
+    if (!senderAddress || typeof senderAddress !== 'string') {
       return res.status(400).json({ error: 'Sender wallet address required' });
     }
 
@@ -69,7 +69,7 @@ router.post('/', async (req: Request<{}, {}, DepositRequest>, res: Response) => 
         transactionHash: mockDepositTx,
         amount,
         assetType,
-        fromAddress: sender,
+        fromAddress: senderAddress,
         status: 'confirmed',
       },
     });
