@@ -3,75 +3,81 @@ import prisma from '../lib/prisma.js';
 
 const router = Router();
 
+/**
+ * Request body from frontend
+ * Frontend ONLY sends intent, not transaction hash
+ */
 interface DepositRequest {
   amount: number;
-  assetType: 'SOL' | 'USDC' | 'USDT';
-  depositTx: string; // Transaction hash from frontend SDK
+  assetType: 'SOL'; // lock to SOL for now
+  sender: string;   // wallet public key
 }
 
 /**
  * POST /api/deposit
- * 
- * Frontend flow:
- * 1. User connects wallet
- * 2. Frontend calls SDK: privacyCash.deposit(amount)
- * 3. SDK handles: ZK proof, Merkle tree, transaction signing
- * 4. SDK relays to Privacy Cash relayer
- * 5. Frontend sends transaction hash to backend
- * 6. Backend creates payment link
- * 
- * Backend creates link metadata in database
+ *
+ * Correct flow:
+ * 1. Frontend sends { amount, assetType, sender }
+ * 2. Backend performs Privacy Cash deposit (or mock for now)
+ * 3. Backend stores depositTx + link metadata
+ * 4. Backend returns linkId
  */
 router.post('/', async (req: Request<{}, {}, DepositRequest>, res: Response) => {
   try {
-    const { amount, assetType, depositTx } = req.body;
+    const { amount, assetType, sender } = req.body;
 
-    // Validate input
+    // ================= VALIDATION =================
     if (!amount || amount <= 0) {
-      res.status(400).json({ error: 'Invalid amount' });
-      return;
+      return res.status(400).json({ error: 'Invalid amount' });
     }
 
-    if (!['SOL', 'USDC', 'USDT'].includes(assetType)) {
-      res.status(400).json({ error: 'Invalid asset type. Must be SOL, USDC, or USDT' });
-      return;
+    if (assetType !== 'SOL') {
+      return res.status(400).json({ error: 'Only SOL is supported' });
     }
 
-    if (!depositTx || typeof depositTx !== 'string') {
-      res.status(400).json({ error: 'Deposit transaction hash required' });
-      return;
+    if (!sender || typeof sender !== 'string') {
+      return res.status(400).json({ error: 'Sender wallet address required' });
     }
 
-    // Create payment link in database
+    /**
+     * TODO:
+     * Replace this with REAL Privacy Cash SDK call:
+     *
+     * const { tx, commitment } = await privacyCash.deposit(...)
+     */
+    const mockDepositTx = `mock_deposit_${Date.now()}`;
+    const mockCommitment = `mock_commitment_${Date.now()}`;
+
+    // ================= CREATE LINK =================
     const link = await prisma.paymentLink.create({
       data: {
         amount,
         assetType,
-        depositTx,
+        depositTx: mockDepositTx,
+        commitment: mockCommitment,
       },
     });
 
-    // Also create transaction record
+    // ================= TRANSACTION LOG =================
     await prisma.transaction.create({
       data: {
         type: 'deposit',
         linkId: link.id,
-        transactionHash: depositTx,
+        transactionHash: mockDepositTx,
         amount,
         assetType,
+        fromAddress: sender,
         status: 'confirmed',
       },
     });
 
-    res.json({
+    return res.json({
       success: true,
       linkId: link.id,
-      depositTx,
-      url: `https://shadowpayy.vercel.app/link/${link.id}`,
     });
   } catch (error) {
     console.error('Deposit error:', error);
-    res.status(500).json({
+    return res.status(500).json({
       error: error instanceof Error ? error.message : 'Deposit failed',
     });
   }
