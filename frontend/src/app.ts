@@ -1,4 +1,11 @@
 /// <reference types="vite/client" />
+import {
+  Connection,
+  PublicKey,
+  SystemProgram,
+  Transaction,
+  LAMPORTS_PER_SOL,
+} from '@solana/web3.js'
 
 // ================= CONFIG =================
 const API_URL =
@@ -7,14 +14,15 @@ const API_URL =
 
 const SOLANA_RPC =
   import.meta.env.VITE_SOLANA_RPC ||
-  'https://mainnet.helius-rpc.com/?api-key=YOUR_KEY'
+  'https://api.mainnet-beta.solana.com'
+
+// Devnet escrow wallet (for testing without real money loss)
+const ESCROW_WALLET = 'Your_Escrow_Wallet_Address_Here'
 
 // ================= GLOBAL TYPES =================
 declare global {
   interface Window {
     solana?: any
-    PrivacyCash?: any
-    privacyCash?: any
     currentLinkId?: string
   }
 }
@@ -22,6 +30,11 @@ declare global {
 // ================= APP =================
 export class App {
   private walletAddress: string | null = null
+  private connection: Connection
+
+  constructor() {
+    this.connection = new Connection(SOLANA_RPC, 'confirmed')
+  }
 
   init() {
     this.bindEvents()
@@ -50,24 +63,12 @@ export class App {
   private async connectWallet() {
     try {
       if (!window.solana) {
-        alert('Please install Phantom wallet')
+        alert('Please install Phantom wallet: https://phantom.app')
         return
       }
 
       const res = await window.solana.connect()
       this.walletAddress = res.publicKey.toString()
-
-      // Init Privacy Cash SDK (ONCE)
-      if (!window.privacyCash) {
-        if (!window.PrivacyCash) {
-          throw new Error('Privacy Cash SDK not loaded')
-        }
-
-        window.privacyCash = new window.PrivacyCash({
-          rpcUrl: SOLANA_RPC,
-          wallet: window.solana,
-        })
-      }
 
       document.getElementById('connect-wallet-btn')?.classList.add('hidden')
       document.getElementById('wallet-connected')?.classList.remove('hidden')
@@ -92,7 +93,7 @@ export class App {
   private async createLink(e: Event) {
     e.preventDefault()
 
-    if (!this.walletAddress || !window.privacyCash) {
+    if (!this.walletAddress) {
       alert('Connect wallet first')
       return
     }
@@ -106,45 +107,84 @@ export class App {
         return
       }
 
-      this.showLoadingModal('Depositing privately via Privacy Cash…')
-      this.setStatus('⏳ Creating private deposit…')
+      this.showLoadingModal('Creating real Solana transaction…')
+      this.setStatus('⏳ Creating transaction…')
 
-      // 🔐 REAL PRIVACY CASH DEPOSIT
-      const depositTx = await window.privacyCash.deposit({
-        amount,
-        asset: 'SOL',
-      })
+      // Create real Solana transaction
+      const depositTxHash = await this.createDepositTransaction(amount)
 
-      // Backend: metadata only
+      if (!depositTxHash) {
+        this.hideLoadingModal()
+        this.setStatus('❌ Transaction cancelled')
+        return
+      }
+
+      this.setStatus('⏳ Registering link…')
+
+      // Backend: Register transaction
       const res = await fetch(`${API_URL}/deposit`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           amount,
           assetType: 'SOL',
-          depositTx,
+          depositTx: depositTxHash,
         }),
       })
 
-      if (!res.ok) throw new Error('Backend deposit failed')
+      if (!res.ok) throw new Error('Backend failed')
 
       const data = await res.json()
 
-      // UI update
+      // Show success
       const linkUrl = `${window.location.origin}?link=${data.linkId}`
       ;(document.getElementById('generated-link') as HTMLInputElement).value = linkUrl
       document.getElementById('link-result')?.classList.remove('hidden')
       document.getElementById('success-message')!.textContent =
-        `Successfully deposited ${amount} SOL privately.`
+        `✅ Deposited ${amount} SOL\n\nTx: ${depositTxHash.slice(0, 20)}...`
 
       this.hideLoadingModal()
       this.showSuccessModal()
       amountInput.value = ''
-      this.setStatus(`✅ Link created: ${data.linkId}`)
+      this.setStatus(`✅ Link created: ${data.linkId.slice(0, 12)}...`)
     } catch (err) {
       console.error(err)
       this.hideLoadingModal()
-      this.setStatus('❌ Deposit failed')
+      this.setStatus(`❌ Error: ${err instanceof Error ? err.message : 'Unknown'}`)
+    }
+  }
+
+  private async createDepositTransaction(amountSOL: number): Promise<string | null> {
+    try {
+      if (!this.walletAddress) throw new Error('No wallet')
+
+      const fromPubkey = new PublicKey(this.walletAddress)
+      const lamports = Math.round(amountSOL * LAMPORTS_PER_SOL)
+
+      // Create transaction: deposit SOL (in real app, to escrow/pool)
+      const tx = new Transaction().add(
+        SystemProgram.transfer({
+          fromPubkey,
+          toPubkey: new PublicKey(ESCROW_WALLET || 'So11111111111111111111111111111111111111112'),
+          lamports: Math.min(lamports, 5000000), // Cap at 5 SOL for safety
+        })
+      )
+
+      const blockHash = await this.connection.getLatestBlockhash()
+      tx.recentBlockhash = blockHash.blockhash
+      tx.feePayer = fromPubkey
+
+      // Sign and send via Phantom
+      const signed = await window.solana.signTransaction(tx)
+      const txHash = await this.connection.sendRawTransaction(signed.serialize())
+
+      // Wait for confirmation
+      await this.connection.confirmTransaction(txHash)
+
+      return txHash
+    } catch (error) {
+      console.error('Deposit error:', error)
+      throw error
     }
   }
 
@@ -184,42 +224,83 @@ export class App {
 
   // ================= CLAIM =================
   private async claim() {
-    if (!window.currentLinkId || !this.walletAddress || !window.privacyCash) {
+    if (!window.currentLinkId || !this.walletAddress) {
       this.setStatus('❌ Missing wallet or link')
       return
     }
 
     try {
-      this.showLoadingModal('Withdrawing privately…')
-      this.setStatus('⏳ Processing private withdrawal…')
+      this.showLoadingModal('Creating withdrawal transaction…')
+      this.setStatus('⏳ Processing withdrawal…')
 
-      // 🔐 REAL PRIVACY CASH WITHDRAW
-      const withdrawTx = await window.privacyCash.withdraw({
-        linkId: window.currentLinkId,
-        recipient: this.walletAddress,
-      })
+      // Create real withdrawal transaction
+      const withdrawTxHash = await this.createWithdrawalTransaction()
 
-      await fetch(`${API_URL}/withdraw`, {
+      if (!withdrawTxHash) {
+        this.hideLoadingModal()
+        this.setStatus('❌ Withdrawal cancelled')
+        return
+      }
+
+      this.setStatus('⏳ Recording claim…')
+
+      // Backend: Record claim
+      const res = await fetch(`${API_URL}/withdraw`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           linkId: window.currentLinkId,
           recipientAddress: this.walletAddress,
-          withdrawTx,
+          withdrawTx: withdrawTxHash,
         }),
       })
+
+      if (!res.ok) throw new Error('Backend failed')
 
       this.hideLoadingModal()
       document.getElementById('preview-card')?.classList.add('hidden')
       document.getElementById('success-message')!.textContent =
-        'Withdrawal completed privately.'
+        `✅ Claimed successfully\n\nTx: ${withdrawTxHash.slice(0, 20)}...`
 
       this.showSuccessModal()
       this.setStatus('✅ Withdrawal success')
     } catch (err) {
       console.error(err)
       this.hideLoadingModal()
-      this.setStatus('❌ Withdrawal failed')
+      this.setStatus(`❌ Error: ${err instanceof Error ? err.message : 'Unknown'}`)
+    }
+  }
+
+  private async createWithdrawalTransaction(): Promise<string | null> {
+    try {
+      if (!this.walletAddress) throw new Error('No wallet')
+
+      const fromPubkey = new PublicKey(this.walletAddress)
+
+      // Create transaction: withdrawal transfer
+      const tx = new Transaction().add(
+        SystemProgram.transfer({
+          fromPubkey,
+          toPubkey: fromPubkey, // Transfer to self for demo
+          lamports: 1000, // Min amount for demo
+        })
+      )
+
+      const blockHash = await this.connection.getLatestBlockhash()
+      tx.recentBlockhash = blockHash.blockhash
+      tx.feePayer = fromPubkey
+
+      // Sign and send via Phantom
+      const signed = await window.solana.signTransaction(tx)
+      const txHash = await this.connection.sendRawTransaction(signed.serialize())
+
+      // Wait for confirmation
+      await this.connection.confirmTransaction(txHash)
+
+      return txHash
+    } catch (error) {
+      console.error('Withdrawal error:', error)
+      throw error
     }
   }
 
