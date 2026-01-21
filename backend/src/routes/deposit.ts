@@ -24,6 +24,9 @@ interface DepositRequest {
  */
 router.post('/', async (req: Request<{}, {}, DepositRequest>, res: Response) => {
   try {
+    // ================= DEBUG LOG =================
+    console.log('DEPOSIT BODY:', req.body);
+
     const { amount, assetType, sender } = req.body;
 
     // ================= VALIDATION =================
