@@ -1,10 +1,9 @@
 {
   "name": "shadowpay",
   "private": true,
-  "workspaces": [
-    "backend",
-    "frontend"
-  ],
+  "scripts": {
+    "build": "pnpm --filter privacycash build && pnpm --filter shadowpay-backend build && pnpm --filter shadowpay-frontend build"
+  },
   "devDependencies": {
     "@types/node": "^24.3.0",
     "@vercel/node": "^5.5.24",
