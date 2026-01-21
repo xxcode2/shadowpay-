@@ -7,7 +7,6 @@ const router = Router();
 interface WithdrawRequest {
   linkId: string;
   recipientAddress: string;
-  withdrawTx: string;
 }
 
 /**
@@ -18,7 +17,7 @@ interface WithdrawRequest {
  */
 router.post('/', async (req: Request<{}, {}, WithdrawRequest>, res: Response) => {
   try {
-    const { linkId, recipientAddress, withdrawTx } = req.body;
+    const { linkId, recipientAddress } = req.body;
 
     if (!linkId || typeof linkId !== 'string') {
       return res.status(400).json({ error: 'Link ID required' });
@@ -26,10 +25,6 @@ router.post('/', async (req: Request<{}, {}, WithdrawRequest>, res: Response) =>
 
     if (!recipientAddress) {
       return res.status(400).json({ error: 'Recipient address required' });
-    }
-
-    if (!withdrawTx || typeof withdrawTx !== 'string') {
-      return res.status(400).json({ error: 'Withdraw transaction hash required' });
     }
 
     // Validate Solana address
@@ -53,13 +48,16 @@ router.post('/', async (req: Request<{}, {}, WithdrawRequest>, res: Response) =>
       return res.status(400).json({ error: 'Link already claimed' });
     }
 
+    // Generate mock withdrawal tx
+    const mockWithdrawTx = `mock_withdraw_${Date.now()}`;
+
     // ✅ Mark link as claimed and save withdrawal transaction
     const updatedLink = await prisma.paymentLink.update({
       where: { id: linkId },
       data: {
         claimed: true,
         claimedBy: recipientAddress,
-        withdrawTx,
+        withdrawTx: mockWithdrawTx,
       },
     });
 
@@ -68,7 +66,7 @@ router.post('/', async (req: Request<{}, {}, WithdrawRequest>, res: Response) =>
       data: {
         type: 'withdraw',
         linkId,
-        transactionHash: withdrawTx,
+        transactionHash: mockWithdrawTx,
         amount: link.amount,
         assetType: link.assetType,
         toAddress: recipientAddress,
@@ -76,11 +74,13 @@ router.post('/', async (req: Request<{}, {}, WithdrawRequest>, res: Response) =>
       },
     });
 
+    console.log(`Claimed link ${linkId} to ${recipientAddress}`);
+
     return res.json({
       success: true,
       message: 'Withdrawal recorded and link claimed',
-      withdrawTx,
-      link: updatedLink,
+      withdrawTx: mockWithdrawTx,
+      linkId,
     });
   } catch (error) {
     console.error('Withdraw error:', error);

@@ -52,15 +52,17 @@ router.post('/', async (req: Request<{}, {}, CreateLinkRequest>, res: Response) 
         commitment,
         claimed: false,
         claimedBy: null,
-        depositTx: 'PENDING', // will be updated after real deposit
+        depositTx: 'PENDING',
         withdrawTx: null,
       },
     })
 
+    console.log(`Created link ${linkId} for ${amount} SOL`)
+
     return res.json({
       success: true,
       linkId,
-      url: `https://shadowpayy.vercel.app/link/${linkId}`,
+      url: `https://shadowpayy.vercel.app?link=${linkId}`,
     })
   } catch (err) {
     console.error('Create link error:', err)

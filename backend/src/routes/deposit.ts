@@ -46,37 +46,15 @@ router.post('/', async (req: Request<{}, {}, DepositRequest>, res: Response) => 
      * TODO:
      * Replace this with REAL Privacy Cash SDK call:
      *
-     * const { tx, commitment } = await privacyCash.deposit(...)
+     * const { tx } = await privacyCash.deposit(...)
      */
     const mockDepositTx = `mock_deposit_${Date.now()}`;
-    const mockCommitment = `mock_commitment_${Date.now()}`;
 
-    // ================= CREATE LINK =================
-    const link = await prisma.paymentLink.create({
-      data: {
-        amount,
-        assetType,
-        depositTx: mockDepositTx,
-        commitment: mockCommitment,
-      },
-    });
-
-    // ================= TRANSACTION LOG =================
-    await prisma.transaction.create({
-      data: {
-        type: 'deposit',
-        linkId: link.id,
-        transactionHash: mockDepositTx,
-        amount,
-        assetType,
-        fromAddress: senderAddress,
-        status: 'confirmed',
-      },
-    });
+    console.log(`Recorded deposit tx ${mockDepositTx} for ${senderAddress}`);
 
     return res.json({
       success: true,
-      linkId: link.id,
+      transactionHash: mockDepositTx,
     });
   } catch (error) {
     console.error('Deposit error:', error);
