@@ -1,6 +1,6 @@
 {
   "version": 2,
-  "buildCommand": "pnpm install && cd privacy-cash-sdk && pnpm build && cd ../backend && pnpm build && cd ../frontend && pnpm build && cd .. && rm -rf .vercel/output && mkdir -p .vercel/output/static && cp -r frontend/dist/* .vercel/output/static/",
+  "buildCommand": "pnpm install && pnpm --filter privacycash build && pnpm --filter shadowpay-backend build && pnpm --filter shadowpay-frontend build && rm -rf .vercel/output && mkdir -p .vercel/output/static && cp -r frontend/dist/* .vercel/output/static/",
   "outputDirectory": ".vercel/output/static",
   "env": {
     "DATABASE_URL": "postgres://postgres.cojxffgdjlhbuyokrpib:5enFwLqFBJBUq77w@aws-1-us-east-1.pooler.supabase.com:6543/postgres?sslmode=require&pgbouncer=true",
