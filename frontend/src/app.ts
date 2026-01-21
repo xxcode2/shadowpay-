@@ -1,7 +1,5 @@
 /// <reference types="vite/client" />
 
-import { PrivacyCash } from 'privacycash'
-
 // ================= CONFIG =================
 const API_URL =
   import.meta.env.VITE_API_URL ||
@@ -22,7 +20,6 @@ declare global {
 // ================= APP =================
 export class App {
   private walletAddress: string | null = null
-  private privacyCash: PrivacyCash | null = null
   private pendingLamports: number | null = null
 
   init() {
@@ -64,12 +61,6 @@ export class App {
       const res = await window.solana.connect()
       this.walletAddress = res.publicKey.toString()
 
-      // INIT PRIVACY CASH SDK (FRONTEND ONLY)
-      this.privacyCash = new PrivacyCash({
-        RPC_url: SOLANA_RPC,
-        owner: window.solana.publicKey,
-      })
-
       document.getElementById('connect-wallet-btn')?.classList.add('hidden')
       document.getElementById('wallet-connected')?.classList.remove('hidden')
       document.getElementById('wallet-address')!.textContent =
@@ -84,7 +75,6 @@ export class App {
 
   private disconnectWallet() {
     this.walletAddress = null
-    this.privacyCash = null
     this.pendingLamports = null
 
     document.getElementById('connect-wallet-btn')?.classList.remove('hidden')
@@ -97,7 +87,7 @@ export class App {
   private async createLink(e: Event) {
     e.preventDefault()
 
-    if (!this.walletAddress || !this.privacyCash) {
+    if (!this.walletAddress) {
       alert('Connect wallet first')
       return
     }
@@ -112,28 +102,17 @@ export class App {
         return
       }
 
-      const lamports = Math.round(amount * 1e9)
+      this.showLoadingModal('Processing deposit…')
+      this.setStatus('⏳ Creating payment link…')
 
-      this.showLoadingModal('Depositing SOL privately…')
-      this.setStatus('⏳ Depositing to Privacy Cash pool…')
-
-      // 🔐 REAL PRIVACY CASH DEPOSIT
-      const depositResult = await this.privacyCash.deposit({
-        lamports,
-      })
-
-      const depositTx = depositResult.tx
-
-      this.setStatus('⏳ Registering payment link…')
-
-      // BACKEND: metadata only
+      // Send deposit request to backend
       const res = await fetch(`${API_URL}/deposit`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           amount,
           assetType: 'SOL',
-          depositTx,
+          senderAddress: this.walletAddress,
         }),
       })
 
@@ -147,7 +126,7 @@ export class App {
 
       document.getElementById('link-result')?.classList.remove('hidden')
       document.getElementById('success-message')!.textContent =
-        `✅ Successfully deposited ${amount} SOL privately`
+        `✅ Successfully created link for ${amount} SOL`
 
       this.hideLoadingModal()
       this.showSuccessModal()
@@ -203,36 +182,22 @@ export class App {
 
   // ================= CLAIM =================
   private async claim() {
-    if (
-      !window.currentLinkId ||
-      !this.walletAddress ||
-      !this.privacyCash ||
-      !this.pendingLamports
-    ) {
+    if (!window.currentLinkId || !this.walletAddress || !this.pendingLamports) {
       this.setStatus('❌ Missing wallet or link')
       return
     }
 
     try {
-      this.showLoadingModal('Withdrawing privately…')
-      this.setStatus('⏳ Processing withdrawal…')
+      this.showLoadingModal('Processing withdrawal…')
+      this.setStatus('⏳ Claiming payment…')
 
-      // 🔐 REAL PRIVACY CASH WITHDRAW
-      const withdrawResult = await this.privacyCash.withdraw({
-        lamports: this.pendingLamports,
-        recipientAddress: this.walletAddress,
-      })
-
-      const withdrawTx = withdrawResult.tx
-
-      // BACKEND: record claim only
+      // Send withdrawal request to backend
       const res = await fetch(`${API_URL}/withdraw`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           linkId: window.currentLinkId,
           recipientAddress: this.walletAddress,
-          withdrawTx,
         }),
       })
 
@@ -241,7 +206,7 @@ export class App {
       this.hideLoadingModal()
       document.getElementById('preview-card')?.classList.add('hidden')
       document.getElementById('success-message')!.textContent =
-        '✅ Payment claimed privately'
+        '✅ Payment claimed successfully'
 
       this.showSuccessModal()
       this.setStatus('✅ Withdrawal complete')
