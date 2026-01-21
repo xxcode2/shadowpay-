@@ -1,6 +1,7 @@
 import express from 'express'
 import cors from 'cors'
 import dotenv from 'dotenv'
+import createLinkRouter from './routes/createLink.js'
 
 dotenv.config()
 
@@ -35,6 +36,12 @@ app.options('*', cors())
 
 app.use(express.json())
 
+// --- API Routes ---
+app.use('/api/create-link', createLinkRouter)
+app.use('/api/deposit', depositRouter)
+app.use('/api/withdraw', withdrawRouter)
+app.use('/api/link', linkRouter)
+
 // --- Health Check ---
 app.get('/health', (_req, res) => {
   res.json({
@@ -43,11 +50,6 @@ app.get('/health', (_req, res) => {
     timestamp: new Date().toISOString(),
   })
 })
-
-// --- API Routes ---
-app.use('/api/deposit', depositRouter)
-app.use('/api/withdraw', withdrawRouter)
-app.use('/api/link', linkRouter)
 
 // --- Global Error Handler ---
 app.use(

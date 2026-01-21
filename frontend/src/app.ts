@@ -106,7 +106,7 @@ export class App {
       this.setStatus('⏳ Creating payment link…')
 
       // Send deposit request to backend
-      const res = await fetch(`${API_URL}/deposit`, {
+      const res = await fetch(`${API_URL}/create-link`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
