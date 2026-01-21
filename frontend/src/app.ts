@@ -1,11 +1,6 @@
 /// <reference types="vite/client" />
-import {
-  Connection,
-  PublicKey,
-  SystemProgram,
-  Transaction,
-  LAMPORTS_PER_SOL,
-} from '@solana/web3.js'
+
+import { PrivacyCash } from 'privacy-cash-sdk'
 
 // ================= CONFIG =================
 const API_URL =
@@ -14,15 +9,13 @@ const API_URL =
 
 const SOLANA_RPC =
   import.meta.env.VITE_SOLANA_RPC ||
-  'https://api.mainnet-beta.solana.com'
-
-// Devnet escrow wallet (for testing without real money loss)
-const ESCROW_WALLET = 'Your_Escrow_Wallet_Address_Here'
+  'https://mainnet.helius-rpc.com/?api-key=c455719c-354b-4a44-98d4-27f8a18aa79c'
 
 // ================= GLOBAL TYPES =================
 declare global {
   interface Window {
     solana?: any
+    privacyCash?: PrivacyCash
     currentLinkId?: string
   }
 }
@@ -30,11 +23,7 @@ declare global {
 // ================= APP =================
 export class App {
   private walletAddress: string | null = null
-  private connection: Connection
-
-  constructor() {
-    this.connection = new Connection(SOLANA_RPC, 'confirmed')
-  }
+  private privacyCash: PrivacyCash | null = null
 
   init() {
     this.bindEvents()
@@ -43,19 +32,24 @@ export class App {
 
   // ================= EVENTS =================
   private bindEvents() {
-    document.getElementById('connect-wallet-btn')
+    document
+      .getElementById('connect-wallet-btn')
       ?.addEventListener('click', () => this.connectWallet())
 
-    document.getElementById('disconnect-wallet-btn')
+    document
+      .getElementById('disconnect-wallet-btn')
       ?.addEventListener('click', () => this.disconnectWallet())
 
-    document.getElementById('create-form')
+    document
+      .getElementById('create-form')
       ?.addEventListener('submit', e => this.createLink(e))
 
-    document.getElementById('claim-form')
+    document
+      .getElementById('claim-form')
       ?.addEventListener('submit', e => this.verifyLink(e))
 
-    document.getElementById('confirm-claim-btn')
+    document
+      .getElementById('confirm-claim-btn')
       ?.addEventListener('click', () => this.claim())
   }
 
@@ -63,12 +57,20 @@ export class App {
   private async connectWallet() {
     try {
       if (!window.solana) {
-        alert('Please install Phantom wallet: https://phantom.app')
+        alert('Please install Phantom wallet')
         return
       }
 
       const res = await window.solana.connect()
       this.walletAddress = res.publicKey.toString()
+
+      // INIT PRIVACY CASH SDK (FRONTEND ONLY)
+      this.privacyCash = new PrivacyCash({
+        RPC_url: SOLANA_RPC,
+        owner: window.solana.publicKey,
+      })
+
+      window.privacyCash = this.privacyCash
 
       document.getElementById('connect-wallet-btn')?.classList.add('hidden')
       document.getElementById('wallet-connected')?.classList.remove('hidden')
@@ -84,8 +86,11 @@ export class App {
 
   private disconnectWallet() {
     this.walletAddress = null
+    this.privacyCash = null
+
     document.getElementById('connect-wallet-btn')?.classList.remove('hidden')
     document.getElementById('wallet-connected')?.classList.add('hidden')
+
     this.setStatus('Disconnected')
   }
 
@@ -93,13 +98,14 @@ export class App {
   private async createLink(e: Event) {
     e.preventDefault()
 
-    if (!this.walletAddress) {
+    if (!this.walletAddress || !this.privacyCash) {
       alert('Connect wallet first')
       return
     }
 
     try {
-      const amountInput = document.getElementById('amount-input') as HTMLInputElement
+      const amountInput =
+        document.getElementById('amount-input') as HTMLInputElement
       const amount = parseFloat(amountInput.value)
 
       if (!amount || amount <= 0) {
@@ -107,28 +113,25 @@ export class App {
         return
       }
 
-      this.showLoadingModal('Creating real Solana transaction…')
-      this.setStatus('⏳ Creating transaction…')
+      this.showLoadingModal('Depositing SOL privately…')
+      this.setStatus('⏳ Depositing to Privacy Cash pool…')
 
-      // Create real Solana transaction
-      const depositTxHash = await this.createDepositTransaction(amount)
+      // 🔐 REAL PRIVACY CASH DEPOSIT (NO ESCROW)
+      const lamports = Math.round(amount * 1e9)
+      const depositTx = await this.privacyCash.deposit({
+        lamports,
+      })
 
-      if (!depositTxHash) {
-        this.hideLoadingModal()
-        this.setStatus('❌ Transaction cancelled')
-        return
-      }
+      this.setStatus('⏳ Registering payment link…')
 
-      this.setStatus('⏳ Registering link…')
-
-      // Backend: Register transaction
+      // BACKEND: store metadata ONLY
       const res = await fetch(`${API_URL}/deposit`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           amount,
           assetType: 'SOL',
-          depositTx: depositTxHash,
+          depositTx,
         }),
       })
 
@@ -136,55 +139,24 @@ export class App {
 
       const data = await res.json()
 
-      // Show success
       const linkUrl = `${window.location.origin}?link=${data.linkId}`
-      ;(document.getElementById('generated-link') as HTMLInputElement).value = linkUrl
+      ;(document.getElementById('generated-link') as HTMLInputElement).value =
+        linkUrl
+
       document.getElementById('link-result')?.classList.remove('hidden')
       document.getElementById('success-message')!.textContent =
-        `✅ Deposited ${amount} SOL\n\nTx: ${depositTxHash.slice(0, 20)}...`
+        `✅ Successfully deposited ${amount} SOL privately`
 
       this.hideLoadingModal()
       this.showSuccessModal()
       amountInput.value = ''
-      this.setStatus(`✅ Link created: ${data.linkId.slice(0, 12)}...`)
+      this.setStatus(`✅ Link created: ${data.linkId}`)
     } catch (err) {
       console.error(err)
       this.hideLoadingModal()
-      this.setStatus(`❌ Error: ${err instanceof Error ? err.message : 'Unknown'}`)
-    }
-  }
-
-  private async createDepositTransaction(amountSOL: number): Promise<string | null> {
-    try {
-      if (!this.walletAddress) throw new Error('No wallet')
-
-      const fromPubkey = new PublicKey(this.walletAddress)
-      const lamports = Math.round(amountSOL * LAMPORTS_PER_SOL)
-
-      // Create transaction: deposit SOL (in real app, to escrow/pool)
-      const tx = new Transaction().add(
-        SystemProgram.transfer({
-          fromPubkey,
-          toPubkey: new PublicKey(ESCROW_WALLET || 'So11111111111111111111111111111111111111112'),
-          lamports: Math.min(lamports, 5000000), // Cap at 5 SOL for safety
-        })
+      this.setStatus(
+        `❌ Error: ${err instanceof Error ? err.message : 'Unknown'}`
       )
-
-      const blockHash = await this.connection.getLatestBlockhash()
-      tx.recentBlockhash = blockHash.blockhash
-      tx.feePayer = fromPubkey
-
-      // Sign and send via Phantom
-      const signed = await window.solana.signTransaction(tx)
-      const txHash = await this.connection.sendRawTransaction(signed.serialize())
-
-      // Wait for confirmation
-      await this.connection.confirmTransaction(txHash)
-
-      return txHash
-    } catch (error) {
-      console.error('Deposit error:', error)
-      throw error
     }
   }
 
@@ -193,13 +165,14 @@ export class App {
     e.preventDefault()
 
     try {
-      const input = document.getElementById('link-id-input') as HTMLInputElement
+      const input =
+        document.getElementById('link-id-input') as HTMLInputElement
       const linkId = input.value.trim()
       if (!linkId) return
 
       this.showLoadingModal('Verifying link…')
-      const res = await fetch(`${API_URL}/link/${linkId}`)
 
+      const res = await fetch(`${API_URL}/link/${linkId}`)
       if (!res.ok) {
         this.hideLoadingModal()
         this.setStatus('❌ Invalid or claimed link')
@@ -211,6 +184,8 @@ export class App {
 
       document.getElementById('preview-amount')!.textContent =
         data.amount.toFixed(3)
+      document.getElementById('preview-memo')!.textContent =
+        data.memo || 'No memo'
       document.getElementById('preview-card')?.classList.remove('hidden')
 
       this.hideLoadingModal()
@@ -224,34 +199,29 @@ export class App {
 
   // ================= CLAIM =================
   private async claim() {
-    if (!window.currentLinkId || !this.walletAddress) {
+    if (!window.currentLinkId || !this.walletAddress || !this.privacyCash) {
       this.setStatus('❌ Missing wallet or link')
       return
     }
 
     try {
-      this.showLoadingModal('Creating withdrawal transaction…')
+      this.showLoadingModal('Withdrawing privately…')
       this.setStatus('⏳ Processing withdrawal…')
 
-      // Create real withdrawal transaction
-      const withdrawTxHash = await this.createWithdrawalTransaction()
+      // 🔐 REAL PRIVACY CASH WITHDRAW
+      const withdrawTx = await this.privacyCash.withdraw({
+        lamports: 1000,
+        recipientAddress: this.walletAddress,
+      })
 
-      if (!withdrawTxHash) {
-        this.hideLoadingModal()
-        this.setStatus('❌ Withdrawal cancelled')
-        return
-      }
-
-      this.setStatus('⏳ Recording claim…')
-
-      // Backend: Record claim
+      // BACKEND: record claim ONLY
       const res = await fetch(`${API_URL}/withdraw`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           linkId: window.currentLinkId,
           recipientAddress: this.walletAddress,
-          withdrawTx: withdrawTxHash,
+          withdrawTx,
         }),
       })
 
@@ -260,54 +230,27 @@ export class App {
       this.hideLoadingModal()
       document.getElementById('preview-card')?.classList.add('hidden')
       document.getElementById('success-message')!.textContent =
-        `✅ Claimed successfully\n\nTx: ${withdrawTxHash.slice(0, 20)}...`
+        '✅ Payment claimed privately'
 
       this.showSuccessModal()
-      this.setStatus('✅ Withdrawal success')
+      this.setStatus('✅ Withdrawal complete')
     } catch (err) {
       console.error(err)
       this.hideLoadingModal()
-      this.setStatus(`❌ Error: ${err instanceof Error ? err.message : 'Unknown'}`)
-    }
-  }
-
-  private async createWithdrawalTransaction(): Promise<string | null> {
-    try {
-      if (!this.walletAddress) throw new Error('No wallet')
-
-      const fromPubkey = new PublicKey(this.walletAddress)
-
-      // Create transaction: withdrawal transfer
-      const tx = new Transaction().add(
-        SystemProgram.transfer({
-          fromPubkey,
-          toPubkey: fromPubkey, // Transfer to self for demo
-          lamports: 1000, // Min amount for demo
-        })
+      this.setStatus(
+        `❌ Error: ${err instanceof Error ? err.message : 'Unknown'}`
       )
-
-      const blockHash = await this.connection.getLatestBlockhash()
-      tx.recentBlockhash = blockHash.blockhash
-      tx.feePayer = fromPubkey
-
-      // Sign and send via Phantom
-      const signed = await window.solana.signTransaction(tx)
-      const txHash = await this.connection.sendRawTransaction(signed.serialize())
-
-      // Wait for confirmation
-      await this.connection.confirmTransaction(txHash)
-
-      return txHash
-    } catch (error) {
-      console.error('Withdrawal error:', error)
-      throw error
     }
   }
 
   // ================= UI HELPERS =================
   private showLoadingModal(msg: string) {
-    document.getElementById('loading-message')!.innerHTML = msg
-    document.getElementById('loading-modal')?.classList.remove('hidden')
+    const modal = document.getElementById('loading-modal')
+    if (modal) {
+      const msgEl = document.getElementById('loading-message')
+      if (msgEl) msgEl.innerHTML = msg
+      modal.classList.remove('hidden')
+    }
   }
 
   private hideLoadingModal() {
