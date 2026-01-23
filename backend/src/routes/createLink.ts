@@ -33,6 +33,7 @@ router.post('/', async (req: Request<{}, {}, any>, res: Response) => {
 
     // ✅ Generate secure linkId
     const linkId = crypto.randomBytes(16).toString('hex')
+    console.log('DEBUG: About to create link:', { linkId, amount, assetType })
 
     // ✅ Create link record (depositTx will be set later)
     const link = await prisma.paymentLink.create({
@@ -48,6 +49,7 @@ router.post('/', async (req: Request<{}, {}, any>, res: Response) => {
     })
 
     console.log(`✅ Created payment link ${linkId} for ${amount} ${assetType}`)
+    console.log('DEBUG: Link created:', link)
 
     return res.status(201).json({
       success: true,
@@ -61,7 +63,7 @@ router.post('/', async (req: Request<{}, {}, any>, res: Response) => {
     console.error('❌ Create link error:', error)
     return res.status(500).json({ 
       error: 'Failed to create link',
-      details: process.env.NODE_ENV === 'development' ? error : undefined
+      details: process.env.NODE_ENV === 'production' ? error : undefined
     })
   }
 })
