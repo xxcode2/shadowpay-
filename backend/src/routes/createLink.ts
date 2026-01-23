@@ -35,16 +35,17 @@ router.post('/', async (req: Request<{}, {}, any>, res: Response) => {
     const linkId = crypto.randomBytes(16).toString('hex')
     console.log('DEBUG: About to create link:', { linkId, amount, assetType })
 
-    // ✅ Create link record (depositTx will be set later)
+    // ✅ Create link record
+    // depositTx is set to empty string initially (will be updated when frontend deposits)
+    // withdrawTx is omitted (can be null)
     const link = await prisma.paymentLink.create({
       data: {
         id: linkId,
         amount,
         assetType,
         claimed: false,
-        claimedBy: null,
-        depositTx: null, // Will be set when frontend submits deposit tx
-        withdrawTx: null,
+        depositTx: '', // Placeholder - will be updated by deposit endpoint
+        // claimedBy and withdrawTx will be set later
       } as any,
     })
 

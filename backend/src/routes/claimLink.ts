@@ -30,6 +30,23 @@ router.post('/', async (req: Request, res: Response) => {
       return res.status(400).json({ error: 'Invalid withdrawTx format' })
     }
 
+    // ✅ Check if link exists and has a deposit
+    const link = await prisma.paymentLink.findUnique({
+      where: { id: linkId },
+    })
+
+    if (!link) {
+      return res.status(404).json({ error: 'Link not found' })
+    }
+
+    if (!link.depositTx || link.depositTx === '') {
+      return res.status(400).json({ error: 'Link has no deposit - cannot claim' })
+    }
+
+    if (link.claimed) {
+      return res.status(400).json({ error: 'Link already claimed' })
+    }
+
     // ✅ Atomic claim (DOUBLE-CLAIM PREVENTION)
     // This UPDATE will only succeed if claimed=false
     // Multiple concurrent claims will result in only one success (count=1)
