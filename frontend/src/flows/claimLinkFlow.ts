@@ -69,12 +69,12 @@ export async function executeClaimLink(input: ClaimLinkInput): Promise<ClaimLink
     }
 
     // ✅ Step 3: Initialize Privacy Cash client
+    // Note: owner NOT passed in frontend mode - SDK uses encryption key + wallet signer
     console.log(`\n3️⃣ Initializing Privacy Cash client...`)
     const client = new PrivacyCash({
       RPC_url: SOLANA_RPC_URL,
-      owner: recipientWallet.publicKey.toBase58(),
       enableDebug: false,
-    })
+    } as any)
 
     // ✅ Step 4: Execute withdraw via Privacy Cash SDK
     console.log(`\n4️⃣ Executing withdrawal via Privacy Cash SDK...`)
@@ -144,9 +144,8 @@ export async function checkPrivateBalance(wallet: SigningWallet): Promise<number
 
     const client = new PrivacyCash({
       RPC_url: SOLANA_RPC_URL,
-      owner: wallet.publicKey.toBase58(),
       enableDebug: false,
-    })
+    } as any) // Frontend mode: SDK uses encryption key + wallet signer, not owner
 
     const balance = await client.getPrivateBalance()
     console.log(`🔍 Private balance: ${balance.lamports / 1e9} SOL`)

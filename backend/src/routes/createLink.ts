@@ -42,9 +42,9 @@ router.post('/', async (req: Request<{}, {}, any>, res: Response) => {
         assetType,
         claimed: false,
         claimedBy: null,
-        depositTx: '', // Will be set when frontend submits deposit tx
+        depositTx: null, // Will be set when frontend submits deposit tx
         withdrawTx: null,
-      },
+      } as any,
     })
 
     console.log(`✅ Created payment link ${linkId} for ${amount} ${assetType}`)

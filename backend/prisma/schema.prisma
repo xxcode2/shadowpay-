@@ -21,7 +21,7 @@ model PaymentLink {
   claimedBy   String?
 
   // Tx references
-  depositTx   String
+  depositTx   String?
   withdrawTx  String?
 
   // Relations

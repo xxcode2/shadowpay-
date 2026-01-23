@@ -11,7 +11,7 @@ console.log('DATABASE_URL:', process.env.DATABASE_URL ? '✓ Set' : '✗ Missing
 
 // Import routes AFTER config is loaded
 import depositRouter from './routes/deposit.js'
-import withdrawRouter from './routes/withdraw.js'
+import claimLinkRouter from './routes/claimLink.js'
 import linkRouter from './routes/link.js'
 
 const app = express()
@@ -39,7 +39,7 @@ app.use(express.json())
 // --- API Routes ---
 app.use('/api/create-link', createLinkRouter)
 app.use('/api/deposit', depositRouter)
-app.use('/api/claim-link', withdrawRouter) // Renamed from /withdraw to /claim-link
+app.use('/api/claim-link', claimLinkRouter)
 app.use('/api/link', linkRouter)
 
 // --- Health Check ---

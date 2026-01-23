@@ -16,7 +16,7 @@ export interface LinkResponse {
   assetType: string
   claimed: boolean
   claimedBy: string | null
-  depositTx: string
+  depositTx: string | null
   withdrawTx: string | null
   createdAt: Date
   updatedAt: Date
@@ -33,7 +33,7 @@ export class LinkManager {
         amount: input.amount,
         assetType: input.assetType,
         claimed: false,
-        depositTx: '',
+        depositTx: null,
         withdrawTx: null,
         // commitment not included - using UncheckedCreateInput pattern
       } as any,  // Force type as UncheckedCreateInput to bypass validation
