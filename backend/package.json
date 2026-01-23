@@ -6,7 +6,8 @@
   "scripts": {
     "dev": "node --import tsx src/server.ts",
     "build": "prisma generate && tsc",
-    "start": "node dist/server.js"
+    "migrate": "prisma migrate deploy --skip-generate",
+    "start": "npm run migrate && node dist/server.js"
   },
   "dependencies": {
     "@prisma/client": "^5.13.0",
