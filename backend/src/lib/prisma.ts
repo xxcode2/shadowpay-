@@ -13,10 +13,8 @@ export const prisma =
     errorFormat: 'pretty',
   });
 
-// Handle connection errors gracefully
-prisma.$connect().catch((error: Error) => {
-  console.error('Failed to connect to database:', error.message)
-})
+// Don't connect at module load - let first operation establish connection
+// prisma.$connect() will be called on demand by Prisma
 
 if (process.env.NODE_ENV !== 'production') {
   globalForPrisma.prisma = prisma
