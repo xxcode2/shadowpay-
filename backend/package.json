@@ -6,7 +6,7 @@
   "scripts": {
     "dev": "node --import tsx src/server.ts",
     "build": "prisma generate && tsc",
-    "migrate": "prisma migrate deploy --skip-generate",
+    "migrate": "prisma migrate deploy --skip-generate || true",
     "start": "npm run migrate && node dist/server.js"
   },
   "dependencies": {
