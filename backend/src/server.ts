@@ -1,15 +1,14 @@
 import express from 'express'
 import cors from 'cors'
 import dotenv from 'dotenv'
-import createLinkRouter from './routes/createLink.js'
 
 dotenv.config()
 
 console.log('🚀 Starting ShadowPay Backend...')
-console.log('NODE_ENV:', process.env.NODE_ENV)
-console.log('DATABASE_URL:', process.env.DATABASE_URL ? '✓ Set' : '✗ Missing')
+console.log('NODE_ENV:', process.env.NODE_ENV || 'development')
+console.log('DATABASE_URL:', process.env.DATABASE_URL ? '✓ Set' : '⚠️ Not set (DB operations will fail)')
 
-// Import routes AFTER config is loaded
+import createLinkRouter from './routes/createLink.js'
 import depositRouter from './routes/deposit.js'
 import claimLinkRouter from './routes/claimLink.js'
 import linkRouter from './routes/link.js'
@@ -31,10 +30,17 @@ app.use(
   })
 )
 
-// Handle preflight explicitly (THIS IS KEY)
 app.options('*', cors())
-
 app.use(express.json())
+
+// --- Health ---
+app.get('/health', (_req, res) => {
+  res.json({
+    status: 'ok',
+    timestamp: new Date().toISOString(),
+    environment: process.env.NODE_ENV || 'development',
+  })
+})
 
 // --- API Routes ---
 app.use('/api/create-link', createLinkRouter)
@@ -42,43 +48,9 @@ app.use('/api/deposit', depositRouter)
 app.use('/api/claim-link', claimLinkRouter)
 app.use('/api/link', linkRouter)
 
-// --- Health Check ---
-app.get('/health', (_req, res) => {
-  res.json({
-    status: 'ok',
-    env: process.env.NODE_ENV || 'unknown',
-    timestamp: new Date().toISOString(),
-  })
-})
+// --- START SERVER (🔥 RAILWAY SAFE) ---
+const PORT = process.env.PORT || '3000'
 
-// --- Global Error Handler ---
-app.use(
-  (
-    err: any,
-    _req: express.Request,
-    res: express.Response,
-    _next: express.NextFunction
-  ) => {
-    console.error('Unhandled error:', err)
-    res.status(500).json({
-      error: 'Internal server error',
-    })
-  }
-)
-
-// --- START SERVER (RAILWAY SAFE) ---
-const PORT = Number(process.env.PORT) || 3001
-
-app.listen(PORT, '0.0.0.0', () => {
-  console.log(`✅ ShadowPay Backend running on port ${PORT}`)
-})
-
-process.on('unhandledRejection', (reason) => {
-  console.error('Unhandled Rejection:', reason)
-  process.exit(1)
-})
-
-process.on('uncaughtException', (error) => {
-  console.error('Uncaught Exception:', error)
-  process.exit(1)
+app.listen(Number(PORT), '0.0.0.0', () => {
+  console.log(`🚀 ShadowPay backend listening on port ${PORT}`)
 })
