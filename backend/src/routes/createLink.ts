@@ -63,7 +63,7 @@ router.post('/', async (req: Request<{}, {}, any>, res: Response) => {
     console.error('❌ Create link error:', error)
     return res.status(500).json({ 
       error: 'Failed to create link',
-      details: process.env.NODE_ENV === 'production' ? error : undefined
+      details: process.env.NODE_ENV === 'development' ? error : undefined
     })
   }
 })
