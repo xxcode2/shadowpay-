@@ -35,10 +35,10 @@ app.use(express.json())
 
 // --- Health ---
 app.get('/health', (_req, res) => {
-  res.json({
+  res.status(200).json({
     status: 'ok',
+    port: process.env.PORT,
     timestamp: new Date().toISOString(),
-    environment: process.env.NODE_ENV || 'development',
   })
 })
 
@@ -48,15 +48,19 @@ app.use('/api/deposit', depositRouter)
 app.use('/api/claim-link', claimLinkRouter)
 app.use('/api/link', linkRouter)
 
-// --- START SERVER (🔥 RAILWAY SAFE) ---
-const PORT = process.env.PORT || '3000'
+// 🚨 CRITICAL: MUST USE RAILWAY PORT (8080)
+const PORT = Number(process.env.PORT)
 
-const server = app.listen(Number(PORT), '0.0.0.0', () => {
-  console.log(`🚀 ShadowPay backend listening on port ${PORT}`)
+if (!PORT) {
+  console.error('❌ PORT env not set - Railway must provide PORT=8080')
+  process.exit(1)
+}
+
+const server = app.listen(PORT, '0.0.0.0', () => {
+  console.log(`✅ Backend listening on port ${PORT}`)
 })
 
-// Error handling
 server.on('error', (error: any) => {
-  console.error('❌ Server error:', error.message)
+  console.error('❌ Failed to bind port', PORT, ':', error.message)
   process.exit(1)
 })
