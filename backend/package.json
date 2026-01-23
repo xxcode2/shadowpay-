@@ -6,8 +6,7 @@
   "scripts": {
     "dev": "node --import tsx src/server.ts",
     "build": "prisma generate && tsc",
-    "migrate": "test -z \"$DATABASE_URL\" && echo \"⚠️ Skipping migration - DATABASE_URL not set\" || prisma migrate deploy",
-    "start": "npm run migrate && node dist/server.js"
+    "start": "node dist/server.js"
   },
   "dependencies": {
     "@prisma/client": "^5.13.0",
