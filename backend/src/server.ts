@@ -51,6 +51,12 @@ app.use('/api/link', linkRouter)
 // --- START SERVER (🔥 RAILWAY SAFE) ---
 const PORT = process.env.PORT || '3000'
 
-app.listen(Number(PORT), '0.0.0.0', () => {
+const server = app.listen(Number(PORT), '0.0.0.0', () => {
   console.log(`🚀 ShadowPay backend listening on port ${PORT}`)
+})
+
+// Error handling
+server.on('error', (error: any) => {
+  console.error('❌ Server error:', error.message)
+  process.exit(1)
 })
