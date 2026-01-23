@@ -39,7 +39,7 @@ app.use(express.json())
 // --- API Routes ---
 app.use('/api/create-link', createLinkRouter)
 app.use('/api/deposit', depositRouter)
-app.use('/api/withdraw', withdrawRouter)
+app.use('/api/claim-link', withdrawRouter) // Renamed from /withdraw to /claim-link
 app.use('/api/link', linkRouter)
 
 // --- Health Check ---

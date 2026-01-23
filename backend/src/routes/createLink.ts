@@ -4,68 +4,60 @@ import crypto from 'crypto'
 
 const router = Router()
 
-interface CreateLinkRequest {
-  amount: number
-  assetType: 'SOL'
-  senderAddress: string
-  memo?: string
-  expiresInHours?: number
-}
-
 /**
  * POST /api/create-link
  *
- * This endpoint:
- * - creates a payment link record
- * - DOES NOT move funds (deposit handled elsewhere)
+ * Creates a payment link metadata record.
+ * Frontend will execute deposit via Privacy Cash SDK.
+ *
+ * Expected flow:
+ * 1. Frontend calls create-link with amount/assetType
+ * 2. Backend generates linkId, returns it
+ * 3. Frontend executes deposit via Privacy Cash SDK
+ * 4. Frontend calls deposit endpoint with depositTx
+ * 5. Backend stores depositTx, link is ready to claim
  */
-router.post('/', async (req: Request<{}, {}, CreateLinkRequest>, res: Response) => {
+router.post('/', async (req: Request<{}, {}, any>, res: Response) => {
   try {
-    const { amount, assetType, senderAddress, memo, expiresInHours } = req.body
+    const { amount, assetType } = req.body
 
+    // ✅ Validation
     if (!amount || amount <= 0) {
       return res.status(400).json({ error: 'Invalid amount' })
     }
 
-    if (assetType !== 'SOL') {
-      return res.status(400).json({ error: 'Only SOL supported' })
+    const validAssets = ['SOL', 'USDC', 'USDT']
+    if (!validAssets.includes(assetType)) {
+      return res.status(400).json({ error: `Asset must be one of: ${validAssets.join(', ')}` })
     }
 
-    if (!senderAddress) {
-      return res.status(400).json({ error: 'Sender required' })
-    }
-
-    // Generate linkId securely
+    // ✅ Generate secure linkId
     const linkId = crypto.randomBytes(16).toString('hex')
-    // Generate unique commitment for privacy
-    const commitment = crypto.randomBytes(32).toString('hex')
 
-    const expiresAt = expiresInHours
-      ? new Date(Date.now() + expiresInHours * 60 * 60 * 1000)
-      : null
-
+    // ✅ Create link record (depositTx will be set later)
     const link = await prisma.paymentLink.create({
       data: {
         id: linkId,
         amount,
         assetType,
-        commitment,
         claimed: false,
         claimedBy: null,
-        depositTx: 'PENDING',
+        depositTx: '', // Will be set when frontend submits deposit tx
         withdrawTx: null,
       },
     })
 
-    console.log(`Created link ${linkId} for ${amount} SOL`)
+    console.log(`✅ Created payment link ${linkId} for ${amount} ${assetType}`)
 
-    return res.json({
+    return res.status(201).json({
       success: true,
       linkId,
-      url: `https://shadowpayy.vercel.app?link=${linkId}`,
+      amount,
+      assetType,
+      shareUrl: `https://shadowpay.vercel.app?link=${linkId}`,
     })
   } catch (err) {
-    console.error('Create link error:', err)
+    console.error('❌ Create link error:', err)
     return res.status(500).json({ error: 'Failed to create link' })
   }
 })

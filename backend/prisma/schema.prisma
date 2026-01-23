@@ -16,9 +16,6 @@ model PaymentLink {
   amount      Float
   assetType   String   // "SOL", "USDC", "USDT"
 
-  // 🔐 CORE SECURITY FIELD (WAJIB)
-  commitment  String   @unique
-
   // Status
   claimed     Boolean  @default(false)
   claimedBy   String?

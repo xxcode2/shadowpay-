@@ -1,94 +1,105 @@
-import { Router, Request, Response } from 'express';
-import { PublicKey } from '@solana/web3.js';
-import prisma from '../lib/prisma.js';
+import { Router, Request, Response } from 'express'
+import { PublicKey } from '@solana/web3.js'
+import prisma from '../lib/prisma.js'
 
-const router = Router();
-
-interface WithdrawRequest {
-  linkId: string;
-  recipientAddress: string;
-}
+const router = Router()
 
 /**
- * POST /api/withdraw
+ * POST /api/claim-link (formerly /api/withdraw)
  *
  * Called AFTER Privacy Cash SDK withdraw succeeds on frontend.
- * Backend records the withdrawal and marks link as claimed.
+ * Frontend sends: linkId, withdrawTx, recipientAddress
+ * Backend marks link as claimed atomically to prevent double-claim.
+ *
+ * CRITICAL: Use atomic UPDATE with WHERE claimed=false to prevent race conditions.
  */
-router.post('/', async (req: Request<{}, {}, WithdrawRequest>, res: Response) => {
+router.post('/', async (req: Request<{}, {}, any>, res: Response) => {
   try {
-    const { linkId, recipientAddress } = req.body;
+    const { linkId, withdrawTx, recipientAddress } = req.body
 
+    // ✅ Validation
     if (!linkId || typeof linkId !== 'string') {
-      return res.status(400).json({ error: 'Link ID required' });
+      return res.status(400).json({ error: 'Link ID required' })
     }
 
-    if (!recipientAddress) {
-      return res.status(400).json({ error: 'Recipient address required' });
+    if (!withdrawTx || typeof withdrawTx !== 'string') {
+      return res.status(400).json({ error: 'Withdraw transaction hash required' })
     }
 
-    // Validate Solana address
+    if (!recipientAddress || typeof recipientAddress !== 'string') {
+      return res.status(400).json({ error: 'Recipient address required' })
+    }
+
+    // ✅ Validate Solana address format
     try {
-      new PublicKey(recipientAddress);
+      new PublicKey(recipientAddress)
     } catch {
-      return res.status(400).json({ error: 'Invalid recipient address' });
+      return res.status(400).json({ error: 'Invalid recipient wallet address' })
     }
 
-    // 🔐 Validate link exists
+    // ✅ Check link exists
     const link = await prisma.paymentLink.findUnique({
       where: { id: linkId },
-    });
+    })
 
     if (!link) {
-      return res.status(404).json({ error: 'Link not found' });
+      return res.status(404).json({ error: 'Link not found' })
     }
 
-    // 🔐 Prevent double-claim
-    if (link.claimed) {
-      return res.status(400).json({ error: 'Link already claimed' });
+    if (!link.depositTx || link.depositTx === '') {
+      return res.status(400).json({ error: 'Link has no deposit tx recorded' })
     }
 
-    // Generate mock withdrawal tx
-    const mockWithdrawTx = `mock_withdraw_${Date.now()}`;
-
-    // ✅ Mark link as claimed and save withdrawal transaction
-    const updatedLink = await prisma.paymentLink.update({
-      where: { id: linkId },
+    // 🔐 ATOMIC UPDATE - Prevent double-claim
+    // Only update if claimed is still false
+    const updated = await prisma.paymentLink.updateMany({
+      where: {
+        id: linkId,
+        claimed: false, // Critical: only update if not already claimed
+      },
       data: {
         claimed: true,
         claimedBy: recipientAddress,
-        withdrawTx: mockWithdrawTx,
+        withdrawTx,
       },
-    });
+    })
 
-    // Record transaction
+    // ✅ Check if update succeeded (0 means link was already claimed)
+    if (updated.count === 0) {
+      return res.status(400).json({ error: 'Link already claimed' })
+    }
+
+    // ✅ Record withdrawal transaction
     await prisma.transaction.create({
       data: {
         type: 'withdraw',
         linkId,
-        transactionHash: mockWithdrawTx,
+        transactionHash: withdrawTx,
         amount: link.amount,
         assetType: link.assetType,
         toAddress: recipientAddress,
         status: 'confirmed',
       },
-    });
+    })
 
-    console.log(`Claimed link ${linkId} to ${recipientAddress}`);
+    console.log(`✅ Link ${linkId} claimed by ${recipientAddress} | Withdraw tx: ${withdrawTx}`)
 
-    return res.json({
+    return res.status(200).json({
       success: true,
-      message: 'Withdrawal recorded and link claimed',
-      withdrawTx: mockWithdrawTx,
       linkId,
-    });
+      claimedBy: recipientAddress,
+      withdrawTx,
+      amount: link.amount,
+      assetType: link.assetType,
+      message: 'Link successfully claimed',
+    })
   } catch (error) {
-    console.error('Withdraw error:', error);
+    console.error('❌ Claim link error:', error)
     return res.status(500).json({
-      error: error instanceof Error ? error.message : 'Withdrawal failed',
-    });
+      error: error instanceof Error ? error.message : 'Failed to claim link',
+    })
   }
-});
+})
 
-export default router;
+export default router
 
