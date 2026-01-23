@@ -54,11 +54,15 @@ router.post('/', async (req: Request<{}, {}, any>, res: Response) => {
       linkId,
       amount,
       assetType,
-      shareUrl: `https://shadowpay.vercel.app?link=${linkId}`,
+      shareUrl: `https://shadowpayy.vercel.app?link=${linkId}`,
     })
   } catch (err) {
-    console.error('❌ Create link error:', err)
-    return res.status(500).json({ error: 'Failed to create link' })
+    const error = err instanceof Error ? err.message : String(err)
+    console.error('❌ Create link error:', error)
+    return res.status(500).json({ 
+      error: 'Failed to create link',
+      details: process.env.NODE_ENV === 'development' ? error : undefined
+    })
   }
 })
 
