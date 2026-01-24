@@ -1,10 +1,40 @@
 import { Router, Request, Response } from 'express'
+import { Keypair } from '@solana/web3.js'
 import prisma from '../lib/prisma.js'
 import { PrivacyCash } from 'privacycash'
 
 const router = Router()
 
 const SOLANA_RPC_URL = process.env.SOLANA_RPC_URL || 'https://api.mainnet-beta.solana.com'
+
+// Get operator keypair from env or generate one
+function getOperatorKeypair(): Keypair {
+  const operatorSecret = process.env.OPERATOR_SECRET_KEY
+  if (!operatorSecret) {
+    console.warn(
+      '⚠️  OPERATOR_SECRET_KEY not set. Generating ephemeral keypair (testing only). Set in .env for production.'
+    )
+    return Keypair.generate()
+  }
+
+  try {
+    // Parse secret key from base58 or comma-separated format
+    const secretArray = operatorSecret
+      .split(',')
+      .map(x => parseInt(x.trim(), 10))
+      .slice(0, 32)
+
+    if (secretArray.length !== 32) {
+      throw new Error('Invalid secret key format')
+    }
+
+    return Keypair.fromSecretKey(new Uint8Array(secretArray))
+  } catch (err) {
+    console.error('❌ Failed to parse OPERATOR_SECRET_KEY:', err)
+    console.warn('Falling back to generated keypair (testing only)')
+    return Keypair.generate()
+  }
+}
 
 /**
  * POST /api/deposit
@@ -56,8 +86,11 @@ router.post('/', async (req: Request<{}, {}, any>, res: Response) => {
 
     // ✅ Execute PrivacyCash deposit
     console.log(`🚀 Executing PrivacyCash deposit for link ${linkId}...`)
+    const operatorKeypair = getOperatorKeypair()
+
     const privacyCash = new PrivacyCash({
       RPC_url: SOLANA_RPC_URL,
+      owner: operatorKeypair,
       enableDebug: false,
     } as any)
 
