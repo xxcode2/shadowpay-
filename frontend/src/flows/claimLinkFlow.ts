@@ -34,13 +34,13 @@ export async function executeClaimLink(input: {
   const signatureHex = toHexString(signature)
 
   console.log('📡 Sending to backend for withdrawal...')
-  const res = await fetch(`${BACKEND_URL}/api/withdraw`, {
+  const res = await fetch(`${BACKEND_URL}/api/claim-link`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({
       linkId,
       recipientAddress: wallet.publicKey.toString(),
-      signature: signatureHex,
+      withdrawTx: signatureHex,
     }),
   })
 
