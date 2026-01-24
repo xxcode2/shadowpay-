@@ -1,33 +1,30 @@
 import { defineConfig } from 'vite'
-import { Buffer } from 'buffer'
+import rollupNodePolyFill from 'rollup-plugin-polyfill-node'
 
 export default defineConfig({
+  plugins: [rollupNodePolyFill()],
+
   define: {
     global: 'globalThis',
+    'process.env': {}, // 🔥 PENTING
   },
+
   resolve: {
     alias: {
-      'buffer': 'buffer',
+      process: 'process/browser',
+      buffer: 'buffer',
     },
   },
+
   optimizeDeps: {
-    esbuildOptions: {
-      define: {
-        global: 'globalThis',
-      },
-    },
+    include: ['buffer', 'process'],
   },
+
+  build: {
+    target: 'es2022',
+  },
+
   server: {
     port: 5173,
-    proxy: {
-      '/api': {
-        target: 'http://localhost:3001',
-        changeOrigin: true
-      }
-    }
   },
-  build: {
-    target: 'ES2022',
-    outDir: 'dist'
-  }
 })

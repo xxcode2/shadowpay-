@@ -11,7 +11,9 @@
   "dependencies": {
     "@solana/web3.js": "^1.98.4",
     "buffer": "^6.0.3",
-    "privacycash": "^1.1.11"
+    "privacycash": "^1.1.11",
+    "process": "^0.11.10",
+    "rollup-plugin-polyfill-node": "^0.13.0"
   },
   "devDependencies": {
     "@types/node": "^24.3.0",
