@@ -1,7 +1,7 @@
 import { Router, Request, Response } from 'express'
 import prisma from '../lib/prisma.js'
 import { PrivacyCash } from 'privacycash'
-import { Keypair } from '@solana/web3.js'
+import { Keypair, Connection } from '@solana/web3.js'
 
 const router = Router()
 
@@ -46,6 +46,19 @@ router.post('/', async (req: Request, res: Response) => {
     const operator = getOperatorKeypair()
     console.log(`📝 Operator: ${operator.publicKey.toString()}`)
 
+    // 🔍 CHECK OPERATOR BALANCE BEFORE WITHDRAW
+    try {
+      const connection = new Connection(SOLANA_RPC_URL, 'confirmed')
+      const balance = await connection.getBalance(operator.publicKey)
+      console.log(`💰 Operator balance: ${balance / 1e9} SOL`)
+      
+      if (balance < 5000000) {  // Less than 0.005 SOL
+        console.warn(`⚠️  Operator balance low: ${balance / 1e9} SOL (recommend > 0.1 SOL)`)
+      }
+    } catch (err) {
+      console.error('⚠️  Could not check operator balance:', err)
+    }
+
     const pc = new PrivacyCash({
       RPC_url: SOLANA_RPC_URL,
       owner: operator,
@@ -56,6 +69,7 @@ router.post('/', async (req: Request, res: Response) => {
     const lamports = Math.round(link.amount * 1e9)
     console.log(`🔄 Withdrawing: ${lamports} lamports (${link.amount} SOL)`)
 
+    console.log(`🚀 Calling PrivacyCash.withdraw()...`)
     const withdraw = await pc.withdraw({
       lamports,
       recipientAddress,
