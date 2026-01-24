@@ -1,0 +1,21 @@
+import { Keypair } from '@solana/web3.js'
+
+const keypair = Keypair.generate()
+const secretArray = Array.from(keypair.secretKey)
+
+console.log('\n' + '='.repeat(60))
+console.log('🔐 SOLANA OPERATOR KEYPAIR GENERATED')
+console.log('='.repeat(60))
+console.log('\n📍 Public Key (Operator Wallet Address):')
+console.log(keypair.publicKey.toString())
+console.log('\n🔑 Secret Key for OPERATOR_SECRET_KEY:')
+console.log(secretArray.join(','))
+console.log('\n' + '='.repeat(60))
+console.log('⚠️  SETUP INSTRUCTIONS:')
+console.log('='.repeat(60))
+console.log('1. Copy the Public Key above')
+console.log('2. Fund this wallet with SOL on mainnet')
+console.log('3. Add to .env.production:')
+console.log('   OPERATOR_SECRET_KEY=' + secretArray.join(','))
+console.log('\n⚠️  KEEP THE SECRET KEY SAFE - IT\'S YOUR PRIVATE KEY!')
+console.log('='.repeat(60) + '\n')
