@@ -62,11 +62,11 @@ export class App {
     const active = document.getElementById(`mode-${mode}`)
     active?.classList.add('bg-gradient-to-r', 'from-purple-600', 'to-blue-600', 'text-white')
 
-    document.getElementById('create-section')?.classList.add('hidden')
-    document.getElementById('claim-section')?.classList.add('hidden')
-    document.getElementById('history-section')?.classList.add('hidden')
+    document.getElementById('section-create')?.classList.add('hidden')
+    document.getElementById('section-claim')?.classList.add('hidden')
+    document.getElementById('section-history')?.classList.add('hidden')
 
-    document.getElementById(`${mode}-section`)?.classList.remove('hidden')
+    document.getElementById(`section-${mode}`)?.classList.remove('hidden')
   }
 
   // ================= WALLET =================
