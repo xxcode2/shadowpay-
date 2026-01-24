@@ -10,6 +10,15 @@ const BACKEND_URL =
   'https://shadowpay-backend-production.up.railway.app'
 
 /**
+ * Convert Uint8Array to hex string (browser-safe)
+ */
+function toHexString(bytes: Uint8Array): string {
+  return Array.from(bytes)
+    .map(b => b.toString(16).padStart(2, '0'))
+    .join('')
+}
+
+/**
  * ✅ FRONTEND ONLY: Sign message + notify backend
  * Backend will handle PrivacyCash deposit
  */
@@ -23,7 +32,7 @@ export async function executeDeposit(input: {
   console.log('🔐 Signing message for encryption...')
   const msg = new TextEncoder().encode('Privacy Money account sign in')
   const signature = await wallet.signMessage(msg)
-  const signatureHex = Buffer.from(signature).toString('hex')
+  const signatureHex = toHexString(signature)
 
   console.log('📡 Sending to backend for deposit...')
   const res = await fetch(`${BACKEND_URL}/api/deposit`, {
