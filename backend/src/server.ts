@@ -69,6 +69,20 @@ app.use('/api/claim-link', claimLinkRouter)
 app.use('/api/link', linkRouter)
 app.use('/api/history', historyRouter)
 
+// 404 Handler
+app.use((_req, res) => {
+  res.status(404).json({ error: 'Route not found' })
+})
+
+// 🚨 GLOBAL ERROR HANDLER (catch all errors)
+app.use((err: any, _req: express.Request, res: express.Response, _next: express.NextFunction) => {
+  console.error('❌ UNHANDLED ERROR:', err)
+  res.status(500).json({
+    error: err.message || 'Internal Server Error',
+    type: err.constructor.name,
+  })
+})
+
 // 🚨 CRITICAL: MUST USE RAILWAY PORT (8080)
 const PORT = Number(process.env.PORT)
 
