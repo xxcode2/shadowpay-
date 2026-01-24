@@ -12,6 +12,7 @@
     "noEmit": true,
     "allowSyntheticDefaultImports": true,
     "esModuleInterop": true,
+    "types": ["vite/client"],
     "typeRoots": ["./src/types", "./node_modules/@types"]
   },
   "include": ["src", "src/types/**/*"],
