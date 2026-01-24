@@ -22,14 +22,13 @@ function getOperatorKeypair(): Keypair {
   }
 
   try {
-    // Parse secret key from base58 or comma-separated format
+    // Parse secret key from comma-separated format (should be 64 bytes)
     const secretArray = operatorSecret
       .split(',')
       .map(x => parseInt(x.trim(), 10))
-      .slice(0, 32)
 
-    if (secretArray.length !== 32) {
-      throw new Error('Invalid secret key format')
+    if (secretArray.length !== 64) {
+      throw new Error(`Invalid secret key format: expected 64 bytes, got ${secretArray.length}`)
     }
 
     return Keypair.fromSecretKey(new Uint8Array(secretArray))
@@ -91,6 +90,7 @@ router.post('/', async (req: Request<{}, {}, any>, res: Response) => {
     // ✅ Execute PrivacyCash deposit
     console.log(`🚀 Executing PrivacyCash deposit for link ${linkId}...`)
     const operatorKeypair = getOperatorKeypair()
+    console.log(`📝 Operator address: ${operatorKeypair.publicKey.toString()}`)
 
     const privacyCash = new PrivacyCash({
       RPC_url: SOLANA_RPC_URL,
