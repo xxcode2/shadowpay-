@@ -3,9 +3,11 @@
 // ================= CONFIG =================
 // Backend URL: Uses env var VITE_BACKEND_URL (set in .env / vercel.json)
 // Default fallback to new production backend if env not set
-const API_URL =
-  import.meta.env.VITE_API_URL ||
-  'https://shadowpay-backend-production.up.railway.app/api'
+const BACKEND_URL =
+  import.meta.env.VITE_BACKEND_URL ||
+  'https://shadowpay-backend-production.up.railway.app'
+
+const API_URL = `${BACKEND_URL}/api`
 
 const SOLANA_RPC =
   import.meta.env.VITE_SOLANA_RPC ||
