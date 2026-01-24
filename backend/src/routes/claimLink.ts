@@ -10,18 +10,29 @@ const RPC =
   'https://mainnet.helius-rpc.com/?api-key=c455719c-354b-4a44-98d4-27f8a18aa79c'
 
 function getOperator(): Keypair | null {
-  const secret = process.env.OPERATOR_SECRET_KEY
+  let secret = process.env.OPERATOR_SECRET_KEY
   if (!secret) {
     console.warn('⚠️ OPERATOR_SECRET_KEY not set in environment')
     return null
   }
 
   try {
-    const arr = secret.split(',').map(n => Number(n))
+    // Remove quotes if present (Railway sometimes adds them)
+    secret = secret.replace(/^["']|["']$/g, '')
+    
+    const arr = secret.split(',').map(n => {
+      const parsed = Number(n.trim())
+      if (isNaN(parsed)) {
+        throw new Error(`Invalid number in secret: "${n}" -> NaN`)
+      }
+      return parsed
+    })
+    
     if (arr.length !== 64) {
-      console.error('❌ OPERATOR_SECRET_KEY invalid length:', arr.length)
+      console.error('❌ OPERATOR_SECRET_KEY invalid length:', arr.length, 'expected 64')
       return null
     }
+    
     return Keypair.fromSecretKey(new Uint8Array(arr))
   } catch (err) {
     console.error('❌ Failed to parse OPERATOR_SECRET_KEY:', err)

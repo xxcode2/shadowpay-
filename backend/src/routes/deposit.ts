@@ -11,7 +11,7 @@ const SOLANA_RPC_URL = process.env.SOLANA_RPC_URL ||
 
 // Get operator keypair from env or generate one
 function getOperatorKeypair(): Keypair {
-  const operatorSecret = process.env.OPERATOR_SECRET_KEY
+  let operatorSecret = process.env.OPERATOR_SECRET_KEY
   if (!operatorSecret) {
     console.warn(
       '⚠️  OPERATOR_SECRET_KEY not set. Generating ephemeral keypair (testing only). Set in .env for production.'
@@ -20,10 +20,19 @@ function getOperatorKeypair(): Keypair {
   }
 
   try {
+    // Remove quotes if present (Railway sometimes adds them)
+    operatorSecret = operatorSecret.replace(/^[\"']|[\"']$/g, '')
+    
     // Parse secret key from comma-separated format (should be 64 bytes)
     const secretArray = operatorSecret
       .split(',')
-      .map(x => parseInt(x.trim(), 10))
+      .map(x => {
+        const parsed = parseInt(x.trim(), 10)
+        if (isNaN(parsed)) {
+          throw new Error(`Invalid number: "${x}" -> NaN`)
+        }
+        return parsed
+      })
 
     if (secretArray.length !== 64) {
       throw new Error(`Invalid secret key format: expected 64 bytes, got ${secretArray.length}`)
