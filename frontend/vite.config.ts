@@ -1,6 +1,10 @@
 import { defineConfig } from 'vite'
 
 export default defineConfig({
+  define: {
+    'process.env': JSON.stringify(process.env),
+    global: 'globalThis',
+  },
   server: {
     port: 5173,
     proxy: {
