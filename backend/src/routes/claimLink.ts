@@ -85,7 +85,8 @@ router.post('/', async (req: Request, res: Response) => {
     let withdrawTx: string
     try {
       const withdrawResult = await privacyCash.withdraw({
-        to: recipientAddress,
+        lamports: link.amount,
+        recipientAddress: recipientAddress,
       })
       withdrawTx = withdrawResult.tx
       console.log(`✅ Withdrawal executed: ${withdrawTx}`)
