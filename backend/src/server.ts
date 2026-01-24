@@ -16,21 +16,20 @@ import linkRouter from './routes/link.js'
 const app = express()
 
 // --- CORS ---
-app.use(
-  cors({
-    origin: [
-      'https://shadowpayy.vercel.app',
-      'https://shadowpay.vercel.app',
-      'http://localhost:5173',
-      'http://localhost:3000',
-    ],
-    methods: ['GET', 'POST', 'OPTIONS'],
-    allowedHeaders: ['Content-Type', 'Authorization'],
-    credentials: false,
-  })
-)
+const corsOptions = {
+  origin: [
+    'https://shadowpayy.vercel.app',
+    'https://shadowpay.vercel.app',
+    'http://localhost:5173',
+    'http://localhost:3000',
+  ],
+  methods: ['GET', 'POST', 'OPTIONS'],
+  allowedHeaders: ['Content-Type', 'Authorization'],
+  credentials: false,
+}
 
-app.options('*', cors())
+app.use(cors(corsOptions))
+app.options('*', cors(corsOptions))
 app.use(express.json())
 
 // --- Health ---
