@@ -16,6 +16,19 @@ import historyRouter from './routes/history.js'
 
 const app = express()
 
+// ✅ CORS PALING ATAS
+app.use(cors({
+  origin: [
+    'https://shadowpayy.vercel.app',
+    'https://shadowpay.vercel.app',
+    'http://localhost:5173',
+  ],
+  methods: ['GET', 'POST', 'OPTIONS'],
+}))
+
+app.options('*', cors())
+app.use(express.json({ limit: '1mb' }))
+
 // --- MIDDLEWARE ---
 app.use(express.json({ limit: '1mb' }))
 app.use(express.urlencoded({ extended: true }))
@@ -27,22 +40,7 @@ app.use((req, _res, next) => {
   next()
 })
 
-// --- CORS ---
-app.use(
-  cors({
-    origin: [
-      'https://shadowpayy.vercel.app',
-      'https://shadowpay.vercel.app',
-      'http://localhost:5173',
-      'http://localhost:3000',
-    ],
-    methods: ['GET', 'POST', 'OPTIONS'],
-    allowedHeaders: ['Content-Type', 'Authorization'],
-    credentials: false,
-  })
-)
 
-app.options('*', cors())
 
 // --- Health ---
 app.get('/health', (_req, res) => {

@@ -9,7 +9,6 @@ const BACKEND_URL =
   import.meta.env.VITE_BACKEND_URL ||
   'https://shadowpay-backend-production.up.railway.app'
 
-// Uint8Array → hex
 function toHex(bytes: Uint8Array): string {
   return [...bytes].map(b => b.toString(16).padStart(2, '0')).join('')
 }
@@ -20,22 +19,11 @@ export async function executeClaimLink(input: {
 }) {
   const { linkId, wallet } = input
 
-  if (!wallet?.publicKey) {
-    throw new Error('Wallet not connected')
-  }
-
-  console.log('🔐 Signing message for claim authorization...')
-
   const message = new TextEncoder().encode(
     `ShadowPay claim authorization for ${linkId}`
   )
 
   const signed = await wallet.signMessage(message)
-
-  if (!signed?.signature) {
-    throw new Error('Wallet did not return signature')
-  }
-
   const signatureHex = toHex(signed.signature)
 
   const payload = {
@@ -44,8 +32,6 @@ export async function executeClaimLink(input: {
     signature: signatureHex,
   }
 
-  console.log('📡 Sending claim request:', payload)
-
   const res = await fetch(`${BACKEND_URL}/api/claim-link`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
@@ -53,12 +39,8 @@ export async function executeClaimLink(input: {
   })
 
   if (!res.ok) {
-    const err = await res.text()
-    throw new Error(`Claim failed: ${err}`)
+    throw new Error(await res.text())
   }
 
-  const data = await res.json()
-  console.log('✅ Claim successful:', data.withdrawTx)
-
-  return data
+  return res.json()
 }
