@@ -1,8 +1,8 @@
 import { Buffer } from 'buffer'
 
-// Polyfill Buffer for browser (Solana Web3.js needs this)
-if (!(window as any).Buffer) {
-  ;(window as any).Buffer = Buffer
+if (typeof window !== 'undefined') {
+  // @ts-ignore
+  window.Buffer = Buffer
 }
 
 import { App } from './app'
