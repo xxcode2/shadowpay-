@@ -9,12 +9,24 @@ const RPC =
   process.env.SOLANA_RPC_URL ||
   'https://mainnet.helius-rpc.com/?api-key=c455719c-354b-4a44-98d4-27f8a18aa79c'
 
-function getOperator(): Keypair {
+function getOperator(): Keypair | null {
   const secret = process.env.OPERATOR_SECRET_KEY
-  if (!secret) throw new Error('OPERATOR_SECRET_KEY not set')
+  if (!secret) {
+    console.warn('⚠️ OPERATOR_SECRET_KEY not set in environment')
+    return null
+  }
 
-  const arr = secret.split(',').map(n => Number(n))
-  return Keypair.fromSecretKey(new Uint8Array(arr))
+  try {
+    const arr = secret.split(',').map(n => Number(n))
+    if (arr.length !== 64) {
+      console.error('❌ OPERATOR_SECRET_KEY invalid length:', arr.length)
+      return null
+    }
+    return Keypair.fromSecretKey(new Uint8Array(arr))
+  } catch (err) {
+    console.error('❌ Failed to parse OPERATOR_SECRET_KEY:', err)
+    return null
+  }
 }
 
 router.post('/', async (req: Request, res: Response) => {
@@ -37,9 +49,16 @@ router.post('/', async (req: Request, res: Response) => {
 
     console.log('🚀 Executing PrivacyCash.withdraw()')
 
+    const operator = getOperator()
+    if (!operator) {
+      return res.status(500).json({ 
+        error: 'Server not configured - OPERATOR_SECRET_KEY missing. Contact admin.' 
+      })
+    }
+
     const pc = new PrivacyCash({
       RPC_url: RPC,
-      owner: getOperator(),
+      owner: operator,
     } as any)
 
     const withdraw = await pc.withdraw({

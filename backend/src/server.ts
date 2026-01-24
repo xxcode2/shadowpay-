@@ -46,10 +46,19 @@ app.options('*', cors())
 
 // --- Health ---
 app.get('/health', (_req, res) => {
+  const operatorSecret = process.env.OPERATOR_SECRET_KEY
+  const dbUrl = process.env.DATABASE_URL
+  
   res.status(200).json({
     status: 'ok',
     port: process.env.PORT,
+    node_env: process.env.NODE_ENV,
     timestamp: new Date().toISOString(),
+    config: {
+      DATABASE_URL: dbUrl ? '✓ Set' : '❌ Missing',
+      OPERATOR_SECRET_KEY: operatorSecret ? '✓ Set' : '❌ Missing (required for claim/deposit)',
+      SOLANA_RPC_URL: process.env.SOLANA_RPC_URL ? '✓ Set' : '❌ Missing',
+    },
   })
 })
 
