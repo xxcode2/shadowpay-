@@ -2,7 +2,7 @@ import { PublicKey } from '@solana/web3.js'
 
 export interface SigningWallet {
   publicKey: PublicKey
-  signMessage(message: Uint8Array): Promise<Uint8Array>
+  signMessage(message: Uint8Array): Promise<{ signature: Uint8Array }>
 }
 
 const BACKEND_URL =
@@ -11,9 +11,7 @@ const BACKEND_URL =
 
 // Uint8Array → hex
 function toHex(bytes: Uint8Array): string {
-  return Array.from(bytes)
-    .map(b => b.toString(16).padStart(2, '0'))
-    .join('')
+  return [...bytes].map(b => b.toString(16).padStart(2, '0')).join('')
 }
 
 export async function executeClaimLink(input: {
@@ -22,14 +20,28 @@ export async function executeClaimLink(input: {
 }) {
   const { linkId, wallet } = input
 
-  console.log('🔐 Signing authorization message...')
-  const message = new TextEncoder().encode('Privacy Money account sign in')
-  const signature = await wallet.signMessage(message)
+  if (!wallet?.publicKey) {
+    throw new Error('Wallet not connected')
+  }
+
+  console.log('🔐 Signing message for claim authorization...')
+
+  const message = new TextEncoder().encode(
+    `ShadowPay claim authorization for ${linkId}`
+  )
+
+  const signed = await wallet.signMessage(message)
+
+  if (!signed?.signature) {
+    throw new Error('Wallet did not return signature')
+  }
+
+  const signatureHex = toHex(signed.signature)
 
   const payload = {
     linkId,
     recipientAddress: wallet.publicKey.toString(),
-    signature: toHex(signature),
+    signature: signatureHex,
   }
 
   console.log('📡 Sending claim request:', payload)
