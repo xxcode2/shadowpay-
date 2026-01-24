@@ -48,6 +48,12 @@ export class App {
     document.getElementById('claim-form')
       ?.addEventListener('submit', e => this.verifyLink(e))
 
+    document.getElementById('close-success-modal')
+      ?.addEventListener('click', () => this.hideSuccessModal())
+
+    document.getElementById('copy-link-btn')
+      ?.addEventListener('click', () => this.copyGeneratedLink())
+
     document.getElementById('confirm-claim-btn')
       ?.addEventListener('click', () => this.claim())
   }
@@ -199,6 +205,18 @@ export class App {
 
   private showSuccessModal() {
     document.getElementById('success-modal')?.classList.remove('hidden')
+  }
+
+  private hideSuccessModal() {
+    document.getElementById('success-modal')?.classList.add('hidden')
+  }
+
+  private copyGeneratedLink() {
+    const linkInput = document.getElementById('generated-link') as HTMLInputElement
+    if (linkInput && linkInput.value) {
+      navigator.clipboard.writeText(linkInput.value)
+      this.setStatus('✅ Link copied to clipboard')
+    }
   }
 
   private setStatus(msg: string) {
