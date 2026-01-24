@@ -15,7 +15,7 @@ import linkRouter from './routes/link.js'
 
 const app = express()
 
-// --- CORS ---
+// ✅ STEP 1: CORS MUST BE FIRST - BEFORE ALL MIDDLEWARE
 const corsOptions = {
   origin: [
     'https://shadowpayy.vercel.app',
@@ -30,9 +30,11 @@ const corsOptions = {
 
 app.use(cors(corsOptions))
 app.options('*', cors(corsOptions))
+
+// ✅ STEP 2: BODY PARSING
 app.use(express.json())
 
-// --- Health ---
+// ✅ STEP 3: HEALTH CHECK
 app.get('/health', (_req, res) => {
   res.status(200).json({
     status: 'ok',
@@ -41,17 +43,35 @@ app.get('/health', (_req, res) => {
   })
 })
 
-// --- API Routes ---
+// ✅ STEP 4: API ROUTES
 app.use('/api/create-link', createLinkRouter)
 app.use('/api/deposit', depositRouter)
 app.use('/api/claim-link', claimLinkRouter)
 app.use('/api/link', linkRouter)
 
-// 🚨 CRITICAL: MUST USE RAILWAY PORT (8080)
+// ✅ STEP 5: 404 HANDLER - Must come AFTER routes
+app.use((_req, res) => {
+  res.status(404).json({ error: 'Route not found' })
+})
+
+// ✅ STEP 6: GLOBAL ERROR HANDLER - Must be LAST middleware
+app.use((err: any, _req: express.Request, res: express.Response, _next: express.NextFunction) => {
+  console.error('❌ UNHANDLED ERROR:', err)
+  
+  // Don't crash on error - always send response
+  if (!res.headersSent) {
+    res.status(500).json({
+      error: err.message || 'Internal Server Error',
+      type: err.constructor.name,
+    })
+  }
+})
+
+// ✅ STEP 7: LISTEN
 const PORT = Number(process.env.PORT)
 
 if (!PORT) {
-  console.error('❌ PORT env not set - Railway must provide PORT=8080')
+  console.error('❌ PORT env not set')
   process.exit(1)
 }
 
@@ -60,6 +80,16 @@ const server = app.listen(PORT, '0.0.0.0', () => {
 })
 
 server.on('error', (error: any) => {
-  console.error('❌ Failed to bind port', PORT, ':', error.message)
+  console.error('❌ Server error:', error.message)
+  process.exit(1)
+})
+
+// Catch unhandled promise rejections
+process.on('unhandledRejection', (reason: any) => {
+  console.error('❌ UNHANDLED REJECTION:', reason)
+})
+
+process.on('uncaughtException', (err: any) => {
+  console.error('❌ UNCAUGHT EXCEPTION:', err)
   process.exit(1)
 })
