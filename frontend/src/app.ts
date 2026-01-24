@@ -31,6 +31,20 @@ export class App {
 
   // ================= EVENTS =================
   private bindEvents() {
+    // Mode switching
+    document
+      .getElementById('mode-create')
+      ?.addEventListener('click', () => this.switchMode('create'))
+
+    document
+      .getElementById('mode-claim')
+      ?.addEventListener('click', () => this.switchMode('claim'))
+
+    document
+      .getElementById('mode-history')
+      ?.addEventListener('click', () => this.switchMode('history'))
+
+    // Wallet
     document
       .getElementById('connect-wallet-btn')
       ?.addEventListener('click', () => this.connectWallet())
@@ -39,6 +53,7 @@ export class App {
       .getElementById('disconnect-wallet-btn')
       ?.addEventListener('click', () => this.disconnectWallet())
 
+    // Forms
     document
       .getElementById('create-form')
       ?.addEventListener('submit', e => this.createLink(e))
@@ -50,6 +65,34 @@ export class App {
     document
       .getElementById('confirm-claim-btn')
       ?.addEventListener('click', () => this.claim())
+  }
+
+  // ================= MODE SWITCHING =================
+  private switchMode(mode: 'create' | 'claim' | 'history') {
+    // Update button states
+    document.querySelectorAll('.mode-btn').forEach(btn => {
+      btn.classList.remove('bg-gradient-to-r', 'from-purple-600', 'to-blue-600', 'text-white')
+      btn.classList.add('text-gray-400', 'hover:text-white')
+    })
+
+    const activeBtn = document.getElementById(`mode-${mode}`)
+    if (activeBtn) {
+      activeBtn.classList.remove('text-gray-400', 'hover:text-white')
+      activeBtn.classList.add('bg-gradient-to-r', 'from-purple-600', 'to-blue-600', 'text-white')
+    }
+
+    // Show/hide sections
+    document.getElementById('create-section')?.classList.add('hidden')
+    document.getElementById('claim-section')?.classList.add('hidden')
+    document.getElementById('history-section')?.classList.add('hidden')
+
+    if (mode === 'create') {
+      document.getElementById('create-section')?.classList.remove('hidden')
+    } else if (mode === 'claim') {
+      document.getElementById('claim-section')?.classList.remove('hidden')
+    } else if (mode === 'history') {
+      document.getElementById('history-section')?.classList.remove('hidden')
+    }
   }
 
   // ================= WALLET =================
