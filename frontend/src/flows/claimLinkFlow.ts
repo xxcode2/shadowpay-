@@ -2,8 +2,8 @@ import { PrivacyCash } from 'privacycash'
 import { PublicKey } from '@solana/web3.js'
 import { PrivacyCashService, SigningWallet } from '../services/privacyCashService.js'
 
-const SOLANA_RPC_URL = process.env.VITE_SOLANA_RPC_URL || 'https://api.mainnet-beta.solana.com'
-const BACKEND_URL = process.env.VITE_BACKEND_URL || 'http://localhost:3000'
+const SOLANA_RPC_URL = import.meta.env.VITE_SOLANA_RPC_URL || 'https://api.mainnet-beta.solana.com'
+const BACKEND_URL = import.meta.env.VITE_BACKEND_URL || 'http://localhost:3000'
 
 /**
  * Withdraw Flow (Claim Link)

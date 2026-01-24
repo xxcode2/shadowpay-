@@ -3,7 +3,7 @@
 // ================= CONFIG =================
 const API_URL =
   import.meta.env.VITE_API_URL ||
-  'https://shadowpay-backend.up.railway.app/api'
+  'https://shadowpay-backend-production.up.railway.app/api'
 
 const SOLANA_RPC =
   import.meta.env.VITE_SOLANA_RPC ||

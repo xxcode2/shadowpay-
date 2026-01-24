@@ -5,11 +5,11 @@
 
 export const CONFIG = {
   // APIs
-  BACKEND_URL: process.env.VITE_BACKEND_URL || 'http://localhost:3000',
-  SOLANA_RPC_URL: process.env.VITE_SOLANA_RPC_URL || 'https://api.mainnet-beta.solana.com',
+  BACKEND_URL: import.meta.env.VITE_BACKEND_URL || 'http://localhost:3000',
+  SOLANA_RPC_URL: import.meta.env.VITE_SOLANA_RPC_URL || 'https://api.mainnet-beta.solana.com',
 
   // UI
-  SHARE_BASE_URL: process.env.VITE_SHARE_BASE_URL || 'https://shadowpay.vercel.app',
+  SHARE_BASE_URL: import.meta.env.VITE_SHARE_BASE_URL || 'https://shadowpay.vercel.app',
 
   // Deposit defaults
   DEFAULT_ASSET_TYPE: 'SOL' as const,
