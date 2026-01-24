@@ -1,5 +1,7 @@
 /// <reference types="vite/client" />
 
+import { executeDeposit } from './flows/depositFlow.js'
+
 // ================= CONFIG =================
 // Backend URL: Uses env var VITE_BACKEND_URL (set in .env / vercel.json)
 // Default fallback to new production backend if env not set
@@ -149,34 +151,46 @@ export class App {
         return
       }
 
-      this.showLoadingModal('Processing…')
+      this.showLoadingModal('Creating link…')
       this.setStatus('⏳ Creating payment link…')
 
-      // Create link metadata on backend
+      // 1️⃣ CREATE LINK (metadata only)
       const res = await fetch(`${API_URL}/create-link`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           amount,
           assetType: 'SOL',
-          senderAddress: this.walletAddress,
         }),
       })
 
       if (!res.ok) throw new Error('Failed to create link')
 
       const data = await res.json()
-      const linkUrl = `${window.location.origin}?link=${data.linkId}`
-      ;(document.getElementById('generated-link') as HTMLInputElement).value = linkUrl
+      const linkId = data.linkId
+
+      // 🔥 2️⃣ DEPOSIT VIA PRIVACY CASH (PHANTOM OPEN HERE)
+      this.setStatus('⏳ Waiting for Phantom approval…')
+
+      await executeDeposit({
+        linkId,
+        lamports: Math.round(amount * 1e9),
+        wallet: window.solana as any,
+      })
+
+      // 3️⃣ SUCCESS UI
+      const linkUrl = `${window.location.origin}?link=${linkId}`
+      ;(document.getElementById('generated-link') as HTMLInputElement).value =
+        linkUrl
 
       document.getElementById('link-result')?.classList.remove('hidden')
       document.getElementById('success-message')!.textContent =
-        `✅ Link created: ${data.linkId}`
+        `✅ ${amount} SOL deposited successfully`
 
       this.hideLoadingModal()
       this.showSuccessModal()
       amountInput.value = ''
-      this.setStatus(`✅ Link ready to deposit: ${data.linkId}`)
+      this.setStatus(`✅ Link ready: ${linkId}`)
     } catch (err) {
       console.error(err)
       this.hideLoadingModal()
