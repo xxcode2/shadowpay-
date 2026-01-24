@@ -1,6 +1,8 @@
 /// <reference types="vite/client" />
 
 // ================= CONFIG =================
+// Backend URL: Uses env var VITE_BACKEND_URL (set in .env / vercel.json)
+// Default fallback to new production backend if env not set
 const API_URL =
   import.meta.env.VITE_API_URL ||
   'https://shadowpay-backend-production.up.railway.app/api'
