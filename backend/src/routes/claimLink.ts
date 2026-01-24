@@ -34,20 +34,27 @@ router.post('/', async (req: Request, res: Response) => {
       return res.status(400).json({ error: 'Missing parameters' })
     }
 
+    console.log(`📥 Claim request: linkId=${linkId}, recipient=${recipientAddress}`)
+
     const link = await prisma.paymentLink.findUnique({ where: { id: linkId } })
     if (!link) return res.status(404).json({ error: 'Link not found' })
     if (!link.depositTx) return res.status(400).json({ error: 'No deposit' })
     if (link.claimed) return res.status(400).json({ error: 'Already claimed' })
 
+    console.log(`✅ Link found: ${link.amount} ${link.assetType}, depositTx: ${link.depositTx}`)
+
     const operator = getOperatorKeypair()
+    console.log(`📝 Operator: ${operator.publicKey.toString()}`)
 
     const pc = new PrivacyCash({
       RPC_url: SOLANA_RPC_URL,
       owner: operator,
+      enableDebug: true,
     } as any)
 
     // ✅ FIX UTAMA: SOL → LAMPORTS
     const lamports = Math.round(link.amount * 1e9)
+    console.log(`🔄 Withdrawing: ${lamports} lamports (${link.amount} SOL)`)
 
     const withdraw = await pc.withdraw({
       lamports,
@@ -55,6 +62,7 @@ router.post('/', async (req: Request, res: Response) => {
     })
 
     const withdrawTx = withdraw.tx
+    console.log(`✅ Withdraw executed: ${withdrawTx}`)
 
     await prisma.$transaction([
       prisma.paymentLink.update({
@@ -78,10 +86,12 @@ router.post('/', async (req: Request, res: Response) => {
       }),
     ])
 
+    console.log(`✅ Link ${linkId} claimed and recorded in DB`)
     res.json({ success: true, withdrawTx })
   } catch (err: any) {
-    console.error('❌ CLAIM ERROR:', err)
-    res.status(500).json({ error: err.message })
+    console.error('❌ CLAIM ERROR:', err.message)
+    console.error('Stack:', err.stack)
+    res.status(500).json({ error: err.message || 'Withdrawal failed' })
   }
 })
 

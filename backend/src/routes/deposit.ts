@@ -30,19 +30,28 @@ router.post('/', async (req: Request, res: Response) => {
       return res.status(400).json({ error: 'Invalid payload' })
     }
 
+    console.log(`📥 Deposit request: linkId=${linkId}, lamports=${lamports}, sender=${senderAddress}`)
+
     const link = await prisma.paymentLink.findUnique({ where: { id: linkId } })
     if (!link) return res.status(404).json({ error: 'Link not found' })
     if (link.depositTx) return res.status(400).json({ error: 'Already deposited' })
 
+    console.log(`✅ Link found: ${link.amount} ${link.assetType}`)
+
     const operator = getOperatorKeypair()
+    console.log(`📝 Operator: ${operator.publicKey.toString()}`)
 
     const pc = new PrivacyCash({
       RPC_url: SOLANA_RPC_URL,
       owner: operator,
+      enableDebug: true,
     } as any)
 
+    console.log(`🔄 Executing deposit: ${lamports} lamports`)
     const deposit = await pc.deposit({ lamports })
     const depositTx = deposit.tx
+
+    console.log(`✅ Deposit executed: ${depositTx}`)
 
     await prisma.$transaction([
       prisma.paymentLink.update({
@@ -62,10 +71,12 @@ router.post('/', async (req: Request, res: Response) => {
       }),
     ])
 
+    console.log(`✅ Deposit recorded in DB for link ${linkId}`)
     res.json({ success: true, depositTx })
   } catch (err: any) {
-    console.error('❌ DEPOSIT ERROR:', err)
-    res.status(500).json({ error: err.message })
+    console.error('❌ DEPOSIT ERROR:', err.message)
+    console.error('Stack:', err.stack)
+    res.status(500).json({ error: err.message || 'Deposit failed' })
   }
 })
 
