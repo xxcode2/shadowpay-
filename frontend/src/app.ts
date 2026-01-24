@@ -23,6 +23,17 @@ export class App {
   init() {
     this.bindEvents()
     this.setStatus('Ready — Connect wallet to start')
+
+    // Auto-fill link ID from URL parameter
+    const params = new URLSearchParams(window.location.search)
+    const linkParam = params.get('link')
+    if (linkParam) {
+      const linkInput = document.getElementById('link-id-input') as HTMLInputElement
+      if (linkInput) {
+        linkInput.value = linkParam
+        this.switchMode('claim')
+      }
+    }
   }
 
   // ================= EVENTS =================
