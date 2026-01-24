@@ -1,33 +1,58 @@
 import { Router, Request, Response } from 'express'
 import prisma from '../lib/prisma.js'
+import { PrivacyCash } from 'privacycash'
+import { Keypair } from '@solana/web3.js'
 
 const router = Router()
+
+const SOLANA_NETWORK = process.env.SOLANA_NETWORK || 'devnet'
+const SOLANA_RPC_URL = process.env.SOLANA_RPC_URL || 
+  (SOLANA_NETWORK === 'mainnet' 
+    ? 'https://api.mainnet-beta.solana.com'
+    : 'https://api.devnet.solana.com')
+
+// Get operator keypair from env
+function getOperatorKeypair(): Keypair {
+  const operatorSecret = process.env.OPERATOR_SECRET_KEY
+  if (!operatorSecret) {
+    console.warn('⚠️ OPERATOR_SECRET_KEY not set. Using generated keypair (testing only).')
+    return Keypair.generate()
+  }
+
+  try {
+    const secretArray = operatorSecret.split(',').map(x => parseInt(x.trim(), 10))
+    if (secretArray.length !== 64) {
+      throw new Error(`Invalid secret key format: expected 64 bytes, got ${secretArray.length}`)
+    }
+    return Keypair.fromSecretKey(new Uint8Array(secretArray))
+  } catch (err) {
+    console.error('❌ Failed to parse OPERATOR_SECRET_KEY:', err)
+    return Keypair.generate()
+  }
+}
 
 /**
  * POST /api/claim-link
  *
- * Marks a payment link as claimed after successful withdrawal via Privacy Cash SDK.
+ * Backend executes PrivacyCash withdrawal for claimed link.
  * Uses atomic database update to prevent double-claiming.
  *
- * Frontend flow:
- * 1. Frontend executes withdraw via Privacy Cash SDK
- * 2. Frontend calls this endpoint with linkId, withdrawTx, and recipientAddress
- * 3. Backend atomically marks link as claimed (with WHERE claimed=false)
- * 4. If multiple claims happen simultaneously, only first one succeeds
+ * Flow:
+ * 1. Frontend signs message + sends linkId, recipientAddress, signature
+ * 2. Backend verifies link exists and not yet claimed
+ * 3. Backend executes PrivacyCash.withdraw() to get real withdrawTx
+ * 4. Backend atomically marks link as claimed
+ * 5. Backend records transaction with withdrawTx from PrivacyCash
  */
 router.post('/', async (req: Request, res: Response) => {
   try {
-    const { linkId, withdrawTx, recipientAddress } = req.body
+    const { linkId, recipientAddress, signature } = req.body
 
     // ✅ Validation
-    if (!linkId || !withdrawTx || !recipientAddress) {
+    if (!linkId || !recipientAddress || !signature) {
       return res.status(400).json({
-        error: 'Missing required parameters: linkId, withdrawTx, recipientAddress',
+        error: 'Missing required parameters: linkId, recipientAddress, signature',
       })
-    }
-
-    if (typeof withdrawTx !== 'string' || withdrawTx.length < 10) {
-      return res.status(400).json({ error: 'Invalid withdrawTx format' })
     }
 
     // ✅ Check if link exists and has a deposit
@@ -45,6 +70,28 @@ router.post('/', async (req: Request, res: Response) => {
 
     if (link.claimed) {
       return res.status(400).json({ error: 'Link already claimed' })
+    }
+
+    // ✅ Execute PrivacyCash withdrawal
+    console.log(`🚀 Executing PrivacyCash withdrawal for link ${linkId}...`)
+    const operatorKeypair = getOperatorKeypair()
+    
+    const privacyCash = new PrivacyCash({
+      RPC_url: SOLANA_RPC_URL,
+      owner: operatorKeypair,
+      enableDebug: false,
+    } as any)
+
+    let withdrawTx: string
+    try {
+      const withdrawResult = await privacyCash.withdraw({
+        to: recipientAddress,
+      })
+      withdrawTx = withdrawResult.tx
+      console.log(`✅ Withdrawal executed: ${withdrawTx}`)
+    } catch (err) {
+      console.error('❌ PrivacyCash withdrawal failed:', err)
+      return res.status(500).json({ error: 'Withdrawal execution failed' })
     }
 
     // ✅ Atomic claim (DOUBLE-CLAIM PREVENTION)

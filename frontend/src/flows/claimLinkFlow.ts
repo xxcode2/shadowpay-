@@ -39,7 +39,7 @@ export async function executeClaimLink(input: {
     recipientAddress: typeof wallet.publicKey === 'string' 
       ? wallet.publicKey 
       : wallet.publicKey.toString(),
-    withdrawTx: signatureHex,
+    signature: signatureHex, // For auth only, backend will execute withdraw
   }
   console.log('📦 Payload:', payload)
   
