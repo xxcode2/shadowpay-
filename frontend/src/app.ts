@@ -202,7 +202,8 @@ export class App {
   }
 
   private setStatus(msg: string) {
-    document.getElementById('status-message')!.textContent = msg
+    const el = document.getElementById('status-message')
+    if (el) el.textContent = msg
     console.log(msg)
   }
 }

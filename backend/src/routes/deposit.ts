@@ -1,32 +1,44 @@
 import { Router, Request, Response } from 'express'
 import prisma from '../lib/prisma.js'
+import { PrivacyCash } from 'privacycash'
 
 const router = Router()
+
+const SOLANA_RPC_URL = process.env.SOLANA_RPC_URL || 'https://api.mainnet-beta.solana.com'
 
 /**
  * POST /api/deposit
  *
- * Called AFTER Privacy Cash SDK deposit succeeds on frontend.
- * Frontend sends: linkId, depositTx
- * Backend stores the transaction hash in the link record.
+ * Frontend sends signature for authorization.
+ * Backend executes PrivacyCash deposit and stores transaction.
  *
  * Flow:
- * 1. Frontend calls client.deposit({ lamports }) via Privacy Cash SDK
- * 2. SDK returns { tx }
- * 3. Frontend calls this endpoint with linkId + tx
- * 4. Backend stores depositTx, link is ready to claim
+ * 1. Frontend signs message with Phantom wallet
+ * 2. Frontend sends signature + linkId + lamports to backend
+ * 3. Backend verifies signature (auth)
+ * 4. Backend executes PrivacyCash SDK deposit
+ * 5. Backend stores depositTx in database
+ * 6. Link is ready for claiming
  */
 router.post('/', async (req: Request<{}, {}, any>, res: Response) => {
   try {
-    const { linkId, depositTx } = req.body
+    const { linkId, lamports, senderAddress, signature } = req.body
 
     // ✅ Validation
     if (!linkId || typeof linkId !== 'string') {
       return res.status(400).json({ error: 'Link ID required' })
     }
 
-    if (!depositTx || typeof depositTx !== 'string') {
-      return res.status(400).json({ error: 'Deposit transaction hash required' })
+    if (!lamports || typeof lamports !== 'number') {
+      return res.status(400).json({ error: 'Amount (lamports) required' })
+    }
+
+    if (!senderAddress || typeof senderAddress !== 'string') {
+      return res.status(400).json({ error: 'Sender address required' })
+    }
+
+    if (!signature || !Array.isArray(signature)) {
+      return res.status(400).json({ error: 'Signature required' })
     }
 
     // ✅ Find link
@@ -41,6 +53,18 @@ router.post('/', async (req: Request<{}, {}, any>, res: Response) => {
     if (link.depositTx && link.depositTx !== '') {
       return res.status(400).json({ error: 'Deposit already recorded for this link' })
     }
+
+    // ✅ Execute PrivacyCash deposit
+    console.log(`🚀 Executing PrivacyCash deposit for link ${linkId}...`)
+    const privacyCash = new PrivacyCash({
+      RPC_url: SOLANA_RPC_URL,
+      enableDebug: false,
+    } as any)
+
+    const depositResult = await privacyCash.deposit({ lamports })
+    const depositTx = depositResult.tx
+
+    console.log(`✅ Deposit executed: ${depositTx}`)
 
     // ✅ Update link with deposit tx
     const updated = await prisma.paymentLink.update({
@@ -66,7 +90,7 @@ router.post('/', async (req: Request<{}, {}, any>, res: Response) => {
       success: true,
       linkId,
       depositTx,
-      message: 'Deposit recorded. Link is ready to claim.',
+      message: 'Deposit executed and recorded. Link is ready to claim.',
     })
   } catch (error) {
     console.error('❌ Deposit error:', error)

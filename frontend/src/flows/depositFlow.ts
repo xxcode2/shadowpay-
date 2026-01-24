@@ -29,10 +29,9 @@ export async function executeDeposit(input: {
 }) {
   const { linkId, lamports, wallet } = input
 
-  console.log('🔐 Signing message for encryption...')
+  console.log('🔐 Signing message for authorization...')
   const msg = new TextEncoder().encode('Privacy Money account sign in')
   const signature = await wallet.signMessage(msg)
-  const signatureHex = toHexString(signature)
 
   console.log('📡 Sending to backend for deposit...')
   const res = await fetch(`${BACKEND_URL}/api/deposit`, {
@@ -41,8 +40,8 @@ export async function executeDeposit(input: {
     body: JSON.stringify({
       linkId,
       lamports,
-      senderPubkey: wallet.publicKey.toString(),
-      signature: signatureHex,
+      senderAddress: wallet.publicKey.toString(),
+      signature: Array.from(signature),
     }),
   })
 
@@ -52,7 +51,7 @@ export async function executeDeposit(input: {
   }
 
   const data = await res.json()
-  console.log('✅ Deposit recorded:', data.depositTx)
+  console.log('✅ Deposit executed:', data.depositTx)
 
   return {
     success: true,
