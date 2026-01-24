@@ -1,8 +1,5 @@
 /// <reference types="vite/client" />
 
-import { PrivacyCash } from 'privacycash'
-import { EncryptionService } from 'privacycash/utils'
-
 // ================= CONFIG =================
 // Backend URL: Uses env var VITE_BACKEND_URL (set in .env / vercel.json)
 // Default fallback to new production backend if env not set
@@ -28,8 +25,6 @@ declare global {
 export class App {
   private walletAddress: string | null = null
   private pendingLamports: number | null = null
-  private privacyCash: PrivacyCash | null = null
-  private encryptionReady = false
 
   init() {
     this.bindEvents()
@@ -154,10 +149,10 @@ export class App {
         return
       }
 
-      this.showLoadingModal('Processing deposit…')
+      this.showLoadingModal('Processing…')
       this.setStatus('⏳ Creating payment link…')
 
-      // Send deposit request to backend
+      // Create link metadata on backend
       const res = await fetch(`${API_URL}/create-link`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -168,72 +163,20 @@ export class App {
         }),
       })
 
-      if (!res.ok) throw new Error('Backend failed')
+      if (!res.ok) throw new Error('Failed to create link')
 
       const data = await res.json()
-
-      // ================= PRIVACY CASH DEPOSIT =================
-      this.setStatus('⏳ Initializing Privacy Cash...')
-      const lamports = Math.round(amount * 1e9)
-
-      // 1️⃣ Derive encryption key (Phantom signMessage)
-      if (!this.encryptionReady) {
-        this.setStatus('⏳ Signing encryption key...')
-        const encodedMessage = new TextEncoder().encode('Privacy Money account sign in')
-        const signedMessage = await window.solana.signMessage(encodedMessage)
-
-        const encryptionService = new EncryptionService()
-        encryptionService.deriveEncryptionKeyFromSignature(
-          signedMessage.signature ?? signedMessage
-        )
-
-        this.encryptionReady = true
-        this.setStatus('✅ Encryption key derived')
-      }
-
-      // 2️⃣ Init Privacy Cash client
-      this.setStatus('⏳ Initializing Privacy Cash client...')
-      this.privacyCash = new PrivacyCash({
-        RPC_url: SOLANA_RPC,
-        owner: this.walletAddress,
-      } as any)
-
-      // 3️⃣ Deposit (🔥 PHANTOM WILL OPEN HERE FOR TRANSACTION SIGNING 🔥)
-      this.setStatus('⏳ Executing deposit...')
-      const depositResult = await this.privacyCash.deposit({
-        lamports,
-      })
-
-      console.log('✅ Deposit tx:', depositResult.tx)
-      this.setStatus('✅ Deposit successful')
-
-      // 4️⃣ Notify backend of deposit
-      this.setStatus('⏳ Recording deposit on backend...')
-      const depositRes = await fetch(`${API_URL}/deposit`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          linkId: data.linkId,
-          depositTx: depositResult.tx,
-        }),
-      })
-
-      if (!depositRes.ok) {
-        throw new Error('Failed to record deposit')
-      }
-
       const linkUrl = `${window.location.origin}?link=${data.linkId}`
-      ;(document.getElementById('generated-link') as HTMLInputElement).value =
-        linkUrl
+      ;(document.getElementById('generated-link') as HTMLInputElement).value = linkUrl
 
       document.getElementById('link-result')?.classList.remove('hidden')
       document.getElementById('success-message')!.textContent =
-        `✅ Successfully deposited ${amount} SOL and created link`
+        `✅ Link created: ${data.linkId}`
 
       this.hideLoadingModal()
       this.showSuccessModal()
       amountInput.value = ''
-      this.setStatus(`✅ Link ready: ${data.linkId}`)
+      this.setStatus(`✅ Link ready to deposit: ${data.linkId}`)
     } catch (err) {
       console.error(err)
       this.hideLoadingModal()
