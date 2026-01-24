@@ -9,40 +9,31 @@ const BACKEND_URL =
   import.meta.env.VITE_BACKEND_URL ||
   'https://shadowpay-backend-production.up.railway.app'
 
-/**
- * Convert Uint8Array to hex string (browser-safe)
- */
-function toHexString(bytes: Uint8Array): string {
+// Uint8Array → hex
+function toHex(bytes: Uint8Array): string {
   return Array.from(bytes)
     .map(b => b.toString(16).padStart(2, '0'))
     .join('')
 }
 
-/**
- * ✅ FRONTEND ONLY: Sign message + notify backend
- * Backend will handle PrivacyCash withdraw
- */
 export async function executeClaimLink(input: {
   linkId: string
   wallet: SigningWallet
 }) {
   const { linkId, wallet } = input
 
-  console.log('🔐 Signing message for withdrawal...')
-  const msg = new TextEncoder().encode('Privacy Money account sign in')
-  const signature = await wallet.signMessage(msg)
-  const signatureHex = toHexString(signature)
+  console.log('🔐 Signing authorization message...')
+  const message = new TextEncoder().encode('Privacy Money account sign in')
+  const signature = await wallet.signMessage(message)
 
-  console.log('📡 Sending to backend for withdrawal...')
   const payload = {
     linkId,
-    recipientAddress: typeof wallet.publicKey === 'string' 
-      ? wallet.publicKey 
-      : wallet.publicKey.toString(),
-    signature: signatureHex, // For auth only, backend will execute withdraw
+    recipientAddress: wallet.publicKey.toString(),
+    signature: toHex(signature),
   }
-  console.log('📦 Payload:', payload)
-  
+
+  console.log('📡 Sending claim request:', payload)
+
   const res = await fetch(`${BACKEND_URL}/api/claim-link`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
@@ -50,15 +41,12 @@ export async function executeClaimLink(input: {
   })
 
   if (!res.ok) {
-    const error = await res.text()
-    throw new Error(`Withdrawal failed: ${error}`)
+    const err = await res.text()
+    throw new Error(`Claim failed: ${err}`)
   }
 
   const data = await res.json()
-  console.log('✅ Withdrawal executed:', data.withdrawTx)
+  console.log('✅ Claim successful:', data.withdrawTx)
 
-  return {
-    success: true,
-    withdrawTx: data.withdrawTx,
-  }
+  return data
 }

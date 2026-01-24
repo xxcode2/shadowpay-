@@ -1,136 +1,119 @@
 import { Router, Request, Response } from 'express'
 import prisma from '../lib/prisma.js'
 import { PrivacyCash } from 'privacycash'
-import { Keypair } from '@solana/web3.js'
+import { Keypair, PublicKey, Connection, SystemProgram, Transaction, sendAndConfirmTransaction } from '@solana/web3.js'
+// @ts-ignore - tweetnacl types not in npm registry
+import nacl from 'tweetnacl'
 
 const router = Router()
 
 const SOLANA_NETWORK = process.env.SOLANA_NETWORK || 'devnet'
-const SOLANA_RPC_URL = process.env.SOLANA_RPC_URL || 
-  (SOLANA_NETWORK === 'mainnet' 
+const SOLANA_RPC_URL =
+  process.env.SOLANA_RPC_URL ||
+  (SOLANA_NETWORK === 'mainnet'
     ? 'https://api.mainnet-beta.solana.com'
     : 'https://api.devnet.solana.com')
 
-// Get operator keypair from env
+// ------------------ OPERATOR KEYPAIR ------------------
 function getOperatorKeypair(): Keypair {
-  const operatorSecret = process.env.OPERATOR_SECRET_KEY
-  if (!operatorSecret) {
-    console.warn('⚠️ OPERATOR_SECRET_KEY not set. Using generated keypair (testing only).')
+  const secret = process.env.OPERATOR_SECRET_KEY
+  if (!secret) {
+    console.warn('⚠️ OPERATOR_SECRET_KEY not set — using ephemeral keypair (TEST ONLY)')
     return Keypair.generate()
   }
 
-  try {
-    const secretArray = operatorSecret.split(',').map(x => parseInt(x.trim(), 10))
-    if (secretArray.length !== 64) {
-      throw new Error(`Invalid secret key format: expected 64 bytes, got ${secretArray.length}`)
-    }
-    return Keypair.fromSecretKey(new Uint8Array(secretArray))
-  } catch (err) {
-    console.error('❌ Failed to parse OPERATOR_SECRET_KEY:', err)
-    return Keypair.generate()
+  const arr = secret.split(',').map(n => parseInt(n.trim(), 10))
+  if (arr.length !== 64) {
+    throw new Error('Invalid OPERATOR_SECRET_KEY format (must be 64 numbers)')
   }
+
+  return Keypair.fromSecretKey(new Uint8Array(arr))
 }
 
-/**
- * POST /api/claim-link
- *
- * Backend executes PrivacyCash withdrawal for claimed link.
- * Uses atomic database update to prevent double-claiming.
- *
- * Flow:
- * 1. Frontend signs message + sends linkId, recipientAddress, signature
- * 2. Backend verifies link exists and not yet claimed
- * 3. Backend executes PrivacyCash.withdraw() to get real withdrawTx
- * 4. Backend atomically marks link as claimed
- * 5. Backend records transaction with withdrawTx from PrivacyCash
- */
+// ------------------ CLAIM LINK ------------------
 router.post('/', async (req: Request, res: Response) => {
   try {
     const { linkId, recipientAddress, signature } = req.body
 
-    // ✅ Validation
     if (!linkId || !recipientAddress || !signature) {
       return res.status(400).json({
         error: 'Missing required parameters: linkId, recipientAddress, signature',
       })
     }
 
-    // ✅ Check if link exists and has a deposit
+    // 🔐 VERIFY SIGNATURE
+    const message = new TextEncoder().encode('Privacy Money account sign in')
+    const isValid = nacl.sign.detached.verify(
+      message,
+      Buffer.from(signature, 'hex'),
+      new PublicKey(recipientAddress).toBytes()
+    )
+
+    if (!isValid) {
+      return res.status(401).json({ error: 'Invalid wallet signature' })
+    }
+
+    // 🔍 FIND LINK
     const link = await prisma.paymentLink.findUnique({
       where: { id: linkId },
     })
 
-    if (!link) {
-      return res.status(404).json({ error: 'Link not found' })
-    }
+    if (!link) return res.status(404).json({ error: 'Link not found' })
+    if (!link.depositTx) return res.status(400).json({ error: 'Link has no deposit' })
+    if (link.claimed) return res.status(400).json({ error: 'Link already claimed' })
 
-    if (!link.depositTx || link.depositTx === '') {
-      return res.status(400).json({ error: 'Link has no deposit - cannot claim' })
-    }
+    const operator = getOperatorKeypair()
+    const connection = new Connection(SOLANA_RPC_URL)
 
-    if (link.claimed) {
-      return res.status(400).json({ error: 'Link already claimed' })
-    }
-
-    // ✅ Execute PrivacyCash withdrawal
-    console.log(`🚀 Executing PrivacyCash withdrawal for link ${linkId}...`)
-    const operatorKeypair = getOperatorKeypair()
-    
+    // 1️⃣ WITHDRAW FROM PRIVACYCASH (to operator)
     const privacyCash = new PrivacyCash({
       RPC_url: SOLANA_RPC_URL,
-      owner: operatorKeypair,
+      owner: operator,
       enableDebug: false,
     } as any)
 
-    let withdrawTx: string
-    try {
-      const withdrawResult = await privacyCash.withdraw({
-        lamports: link.amount,
-        recipientAddress: recipientAddress,
-      })
-      withdrawTx = withdrawResult.tx
-      console.log(`✅ Withdrawal executed: ${withdrawTx}`)
-    } catch (err) {
-      console.error('❌ PrivacyCash withdrawal failed:', err)
-      return res.status(500).json({ error: 'Withdrawal execution failed' })
-    }
+    console.log(`🚀 Withdrawing from PrivacyCash for link ${linkId}`)
+    const withdrawResult = await privacyCash.withdraw({
+      lamports: link.amount,
+    })
 
-    // ✅ Atomic claim (DOUBLE-CLAIM PREVENTION)
-    // This UPDATE will only succeed if claimed=false
-    // Multiple concurrent claims will result in only one success (count=1)
+    console.log('✅ PrivacyCash withdraw tx:', withdrawResult.tx)
+
+    // 2️⃣ TRANSFER SOL TO RECIPIENT
+    const transferTx = await sendAndConfirmTransaction(
+      connection,
+      new Transaction().add(
+        SystemProgram.transfer({
+          fromPubkey: operator.publicKey,
+          toPubkey: new PublicKey(recipientAddress),
+          lamports: link.amount,
+        })
+      ),
+      [operator]
+    )
+
+    console.log('✅ Transfer to recipient tx:', transferTx)
+
+    // 3️⃣ ATOMIC CLAIM UPDATE
     const updated = await prisma.paymentLink.updateMany({
-      where: {
-        id: linkId,
-        claimed: false, // KEY: Only update if not yet claimed
-      },
+      where: { id: linkId, claimed: false },
       data: {
         claimed: true,
         claimedBy: recipientAddress,
-        withdrawTx: withdrawTx,
+        withdrawTx: transferTx,
       },
     })
 
-    // ✅ Check if claim was successful
-    if (updated.count === 0) {
-      // Either link doesn't exist OR already claimed
-      return res.status(400).json({
-        error: 'Link not found or already claimed',
-      })
-    }
-
     if (updated.count !== 1) {
-      // Should never happen with proper DB constraints, but safety check
-      return res.status(500).json({
-        error: 'Unexpected claim state - contact support',
-      })
+      return res.status(400).json({ error: 'Link already claimed or invalid' })
     }
 
-    // ✅ Record withdrawal transaction
+    // 4️⃣ RECORD TRANSACTION
     await prisma.transaction.create({
       data: {
         type: 'withdraw',
         linkId,
-        transactionHash: withdrawTx,
+        transactionHash: transferTx,
         amount: link.amount,
         assetType: link.assetType,
         status: 'confirmed',
@@ -138,17 +121,15 @@ router.post('/', async (req: Request, res: Response) => {
       },
     })
 
-    console.log(`✅ Link ${linkId} claimed by ${recipientAddress}`)
-
     return res.json({
       success: true,
-      message: 'Link claimed successfully',
       linkId,
-      claimedBy: recipientAddress,
+      withdrawTx: transferTx,
+      message: 'Link claimed successfully',
     })
   } catch (err) {
-    console.error('❌ Claim link error:', err)
-    return res.status(500).json({ error: 'Failed to claim link' })
+    console.error('❌ Claim error:', err)
+    return res.status(500).json({ error: 'Claim failed' })
   }
 })
 
