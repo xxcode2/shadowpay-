@@ -1,30 +1,39 @@
 import { defineConfig } from 'vite'
-import rollupNodePolyFill from 'rollup-plugin-polyfill-node'
+import { NodeGlobalsPolyfillPlugin } from '@esbuild-plugins/node-globals-polyfill'
+import { NodeModulesPolyfillPlugin } from '@esbuild-plugins/node-modules-polyfill'
 
 export default defineConfig({
-  plugins: [rollupNodePolyFill()],
+  optimizeDeps: {
+    esbuildOptions: {
+      define: {
+        global: 'globalThis',
+      },
+      plugins: [
+        NodeGlobalsPolyfillPlugin({
+          buffer: true,
+          process: true,
+        }),
+        NodeModulesPolyfillPlugin(),
+      ],
+    },
+  },
 
   define: {
     global: 'globalThis',
-    'process.env': {}, // 🔥 PENTING
+    'process.env': {},
   },
 
   resolve: {
     alias: {
+      buffer: 'buffer/',
       process: 'process/browser',
-      buffer: 'buffer',
     },
-  },
-
-  optimizeDeps: {
-    include: ['buffer', 'process'],
   },
 
   build: {
     target: 'es2022',
-  },
-
-  server: {
-    port: 5173,
+    commonjsOptions: {
+      transformMixedEsModules: true,
+    },
   },
 })

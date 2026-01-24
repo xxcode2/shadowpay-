@@ -1,8 +1,8 @@
-import process from 'process'
 import { Buffer } from 'buffer'
+import process from 'process'
 
-globalThis.process = process
 globalThis.Buffer = Buffer
+globalThis.process = process
 
 import { App } from './app'
 
