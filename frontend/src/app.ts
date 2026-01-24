@@ -45,7 +45,10 @@ export class App {
       ?.addEventListener('click', () => this.switchMode('claim'))
 
     document.getElementById('mode-history')
-      ?.addEventListener('click', () => this.switchMode('history'))
+      ?.addEventListener('click', async () => {
+        this.switchMode('history')
+        await this.loadHistory()
+      })
 
     document.getElementById('connect-wallet-btn')
       ?.addEventListener('click', () => this.connectWallet())
@@ -67,6 +70,27 @@ export class App {
 
     document.getElementById('confirm-claim-btn')
       ?.addEventListener('click', () => this.claim())
+
+    // History tabs
+    document.getElementById('history-sent-tab')
+      ?.addEventListener('click', () => {
+        document.getElementById('history-sent-content')?.classList.remove('hidden')
+        document.getElementById('history-received-content')?.classList.add('hidden')
+        document.getElementById('history-sent-tab')?.classList.add('bg-purple-500/20', 'text-purple-300')
+        document.getElementById('history-sent-tab')?.classList.remove('bg-gray-800', 'text-gray-400')
+        document.getElementById('history-received-tab')?.classList.add('bg-gray-800', 'text-gray-400')
+        document.getElementById('history-received-tab')?.classList.remove('bg-purple-500/20', 'text-purple-300')
+      })
+
+    document.getElementById('history-received-tab')
+      ?.addEventListener('click', () => {
+        document.getElementById('history-sent-content')?.classList.add('hidden')
+        document.getElementById('history-received-content')?.classList.remove('hidden')
+        document.getElementById('history-received-tab')?.classList.add('bg-purple-500/20', 'text-purple-300')
+        document.getElementById('history-received-tab')?.classList.remove('bg-gray-800', 'text-gray-400')
+        document.getElementById('history-sent-tab')?.classList.add('bg-gray-800', 'text-gray-400')
+        document.getElementById('history-sent-tab')?.classList.remove('bg-purple-500/20', 'text-purple-300')
+      })
   }
 
   // ================= MODE =================
@@ -84,6 +108,11 @@ export class App {
     document.getElementById('section-history')?.classList.add('hidden')
 
     document.getElementById(`section-${mode}`)?.classList.remove('hidden')
+
+    // Reset claim preview when switching away from claim mode
+    if (mode !== 'claim') {
+      document.getElementById('preview-card')?.classList.add('hidden')
+    }
   }
 
   // ================= WALLET =================
@@ -158,6 +187,7 @@ export class App {
       this.hideLoadingModal()
       this.showSuccessModal()
       this.setStatus(`✅ Link ready: ${linkId}`)
+      await this.loadHistory()
       input.value = ''
     } catch (err) {
       console.error(err)
@@ -225,6 +255,7 @@ export class App {
 
       this.hideLoadingModal()
       this.setStatus('✅ Withdrawal complete')
+      await this.loadHistory()
     } catch (err) {
       console.error(err)
       this.hideLoadingModal()
@@ -263,5 +294,120 @@ export class App {
     const el = document.getElementById('status-message')
     if (el) el.textContent = msg
     console.log(msg)
+  }
+
+  // ================= HISTORY =================
+  private async loadHistory() {
+    if (!this.walletAddress) {
+      this.setStatus('❌ Connect wallet to view history')
+      return
+    }
+
+    try {
+      this.showLoadingModal('Loading history…')
+
+      const res = await fetch(
+        `${API_URL}/history/${this.walletAddress}`
+      )
+
+      if (!res.ok) throw new Error('Failed to load history')
+
+      const data = await res.json()
+      
+      console.log('📊 History data received:', data)
+
+      // ✅ DEFENSIVE: ensure arrays exist
+      const sent = Array.isArray(data.sent) ? data.sent : []
+      const received = Array.isArray(data.received) ? data.received : []
+
+      console.log(`📤 Sent: ${sent.length} links`)
+      console.log(`📥 Received: ${received.length} links`)
+
+      this.renderSentHistory(sent)
+      this.renderReceivedHistory(received)
+      
+      // Reset tab view to Sent by default
+      document.getElementById('history-sent-content')?.classList.remove('hidden')
+      document.getElementById('history-received-content')?.classList.add('hidden')
+      document.getElementById('history-sent-tab')?.classList.add('bg-purple-500/20', 'text-purple-300')
+      document.getElementById('history-sent-tab')?.classList.remove('bg-gray-800', 'text-gray-400')
+      document.getElementById('history-received-tab')?.classList.add('bg-gray-800', 'text-gray-400')
+      document.getElementById('history-received-tab')?.classList.remove('bg-purple-500/20', 'text-purple-300')
+      
+      this.hideLoadingModal()
+      this.setStatus(`✅ History loaded: ${sent.length} sent, ${received.length} received`)
+    } catch (err) {
+      console.error('❌ History load error:', err)
+      this.hideLoadingModal()
+      this.setStatus('❌ Failed to load history')
+    }
+  }
+
+  private renderSentHistory(items: any[]) {
+    const list = document.getElementById('sent-list')!
+    const empty = document.getElementById('sent-empty')!
+
+    list.innerHTML = ''
+
+    if (items.length === 0) {
+      empty.classList.remove('hidden')
+      return
+    }
+
+    empty.classList.add('hidden')
+
+    items.forEach(item => {
+      const div = document.createElement('div')
+      div.className = 'history-item glass-card p-4 rounded-xl'
+      div.innerHTML = `
+        <div class="flex justify-between items-center">
+          <div>
+            <p class="text-sm text-gray-400">Link ID</p>
+            <p class="font-mono text-white text-sm">${item.linkId}</p>
+            <p class="text-xs text-gray-500">${new Date(item.createdAt).toLocaleString()}</p>
+          </div>
+          <div class="text-right">
+            <p class="text-lg font-bold text-purple-400">${item.amount} SOL</p>
+            <p class="text-xs ${item.claimed ? 'text-green-400' : 'text-yellow-400'}">
+              ${item.claimed ? '✅ Claimed' : '⏳ Unclaimed'}
+            </p>
+          </div>
+        </div>
+      `
+      list.appendChild(div)
+    })
+  }
+
+  private renderReceivedHistory(items: any[]) {
+    const list = document.getElementById('received-list')!
+    const empty = document.getElementById('received-empty')!
+
+    list.innerHTML = ''
+
+    if (items.length === 0) {
+      empty.classList.remove('hidden')
+      return
+    }
+
+    empty.classList.add('hidden')
+
+    items.forEach(item => {
+      const div = document.createElement('div')
+      div.className = 'history-item glass-card p-4 rounded-xl'
+      div.innerHTML = `
+        <div class="flex justify-between items-center">
+          <div>
+            <p class="text-sm text-gray-400">From Link</p>
+            <p class="font-mono text-white text-sm">${item.linkId}</p>
+            <p class="text-xs text-gray-500">${new Date(item.claimedAt).toLocaleString()}</p>
+          </div>
+          <div class="text-right">
+            <p class="text-lg font-bold text-cyan-400">${item.amount} SOL</p>
+            <p class="text-xs text-green-400">✅ Claimed</p>
+          </div>
+        </div>
+      `
+      list.appendChild(div)
+    })
   }
 }

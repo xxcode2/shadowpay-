@@ -118,6 +118,7 @@ router.post('/', async (req: Request<{}, {}, any>, res: Response) => {
         amount: link.amount,
         assetType: link.assetType,
         status: 'confirmed',
+        fromAddress: senderAddress,
       },
     })
 

@@ -12,6 +12,7 @@ import createLinkRouter from './routes/createLink.js'
 import depositRouter from './routes/deposit.js'
 import claimLinkRouter from './routes/claimLink.js'
 import linkRouter from './routes/link.js'
+import historyRouter from './routes/history.js'
 
 const app = express()
 
@@ -47,6 +48,7 @@ app.use('/api/create-link', createLinkRouter)
 app.use('/api/deposit', depositRouter)
 app.use('/api/claim-link', claimLinkRouter)
 app.use('/api/link', linkRouter)
+app.use('/api/history', historyRouter)
 
 // 🚨 CRITICAL: MUST USE RAILWAY PORT (8080)
 const PORT = Number(process.env.PORT)

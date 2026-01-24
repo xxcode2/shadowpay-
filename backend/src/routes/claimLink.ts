@@ -77,6 +77,19 @@ router.post('/', async (req: Request, res: Response) => {
       })
     }
 
+    // ✅ Record withdrawal transaction
+    await prisma.transaction.create({
+      data: {
+        type: 'withdraw',
+        linkId,
+        transactionHash: withdrawTx,
+        amount: link.amount,
+        assetType: link.assetType,
+        status: 'confirmed',
+        toAddress: recipientAddress,
+      },
+    })
+
     console.log(`✅ Link ${linkId} claimed by ${recipientAddress}`)
 
     return res.json({
