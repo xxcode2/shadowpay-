@@ -43,7 +43,6 @@ app.use(
 )
 
 app.options('*', cors())
-app.use(express.json())
 
 // --- Health ---
 app.get('/health', (_req, res) => {
