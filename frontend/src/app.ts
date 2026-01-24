@@ -142,6 +142,9 @@ export class App {
 
       const { linkId } = await res.json()
 
+      // 📌 SAVE LINKID TO GLOBAL STATE (WAJIB!)
+      window.currentLinkId = linkId
+
       // 2️⃣ Deposit via Privacy Cash (PHANTOM POPUP HERE)
       await executeDeposit({
         linkId,
@@ -174,8 +177,34 @@ export class App {
     if (!res.ok) return this.setStatus('❌ Invalid link')
 
     const data = await res.json()
+    
+    // 📌 SAVE TO STATE
     window.currentLinkId = linkId
     this.pendingLamports = Math.round(data.amount * 1e9)
+
+    // 📌 SHOW PREVIEW CARD (WAJIB!)
+    const previewCard = document.getElementById('preview-card')
+    if (previewCard) {
+      previewCard.classList.remove('hidden')
+    }
+
+    // 📌 UPDATE PREVIEW VALUES
+    const amountEl = document.getElementById('preview-amount')
+    if (amountEl) {
+      amountEl.textContent = `${data.amount.toFixed(3)}`
+    }
+
+    const memoEl = document.getElementById('preview-memo')
+    if (memoEl) {
+      memoEl.textContent = data.memo || 'No memo'
+    }
+
+    // 📌 SHOW CONFIRM BUTTON (WAJIB!)
+    const confirmBtn = document.getElementById('confirm-claim-btn')
+    if (confirmBtn) {
+      confirmBtn.classList.remove('hidden')
+    }
+
     this.setStatus(`✅ Link valid: ${data.amount} SOL`)
   }
 
