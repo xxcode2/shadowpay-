@@ -45,6 +45,9 @@ importers:
       pg:
         specifier: ^8.17.2
         version: 8.17.2
+      privacycash:
+        specifier: ^1.1.11
+        version: 1.1.11(bufferutil@4.1.0)(fastestsmallesttextencoderdecoder@1.0.22)(typescript@5.9.3)(utf-8-validate@5.0.10)
     devDependencies:
       '@types/cors':
         specifier: ^2.8.16
