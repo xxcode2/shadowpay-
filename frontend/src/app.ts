@@ -164,18 +164,26 @@ export class App {
 
   // ================= CLAIM =================
   private async claim() {
-    if (!window.currentLinkId || !this.walletAddress) return
+    if (!window.currentLinkId || !this.walletAddress) return alert('No link selected')
 
-    await fetch(`${API_URL}/withdraw`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
+    try {
+      this.showLoadingModal('Withdrawing...')
+
+      // Import executeClaimLink dynamically
+      const { executeClaimLink } = await import('./flows/claimLinkFlow.js')
+
+      await executeClaimLink({
         linkId: window.currentLinkId,
-        recipientAddress: this.walletAddress,
-      }),
-    })
+        wallet: this.getSigningWallet(),
+      })
 
-    this.setStatus('✅ Withdrawal complete')
+      this.hideLoadingModal()
+      this.setStatus('✅ Withdrawal complete')
+    } catch (err) {
+      console.error(err)
+      this.hideLoadingModal()
+      this.setStatus('❌ Withdrawal failed')
+    }
   }
 
   // ================= UI =================

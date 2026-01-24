@@ -1,5 +1,3 @@
-import { PrivacyCash } from 'privacycash'
-import { EncryptionService } from 'privacycash/utils'
 import { PublicKey } from '@solana/web3.js'
 
 export interface SigningWallet {
@@ -7,14 +5,14 @@ export interface SigningWallet {
   signMessage(message: Uint8Array): Promise<Uint8Array>
 }
 
-const SOLANA_RPC =
-  import.meta.env.VITE_SOLANA_RPC_URL ||
-  'https://api.mainnet-beta.solana.com'
-
 const BACKEND_URL =
   import.meta.env.VITE_BACKEND_URL ||
   'https://shadowpay-backend-production.up.railway.app'
 
+/**
+ * ✅ FRONTEND ONLY: Sign message + notify backend
+ * Backend will handle PrivacyCash deposit
+ */
 export async function executeDeposit(input: {
   linkId: string
   lamports: number
@@ -22,38 +20,33 @@ export async function executeDeposit(input: {
 }) {
   const { linkId, lamports, wallet } = input
 
-  console.log('🔐 Deriving encryption key...')
+  console.log('🔐 Signing message for encryption...')
   const msg = new TextEncoder().encode('Privacy Money account sign in')
-  const sig = await wallet.signMessage(msg)
+  const signature = await wallet.signMessage(msg)
+  const signatureHex = Buffer.from(signature).toString('hex')
 
-  const encryption = new EncryptionService()
-  encryption.deriveEncryptionKeyFromSignature(sig)
-
-  console.log('🚀 Initializing Privacy Cash client...')
-  const client = new PrivacyCash({
-    RPC_url: SOLANA_RPC,
-    enableDebug: false,
-  } as any)
-
-  console.log('💸 Depositing...')
-  const result = await client.deposit({ lamports })
-
-  console.log('✅ Deposit tx:', result.tx)
-
-  console.log('📡 Notifying backend...')
+  console.log('📡 Sending to backend for deposit...')
   const res = await fetch(`${BACKEND_URL}/api/deposit`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({
       linkId,
-      depositTx: result.tx,
+      lamports,
+      senderPubkey: wallet.publicKey.toString(),
+      signature: signatureHex,
     }),
   })
 
-  if (!res.ok) throw new Error('Failed to record deposit')
+  if (!res.ok) {
+    const error = await res.text()
+    throw new Error(`Deposit failed: ${error}`)
+  }
+
+  const data = await res.json()
+  console.log('✅ Deposit recorded:', data.depositTx)
 
   return {
     success: true,
-    depositTx: result.tx,
+    depositTx: data.depositTx,
   }
 }
