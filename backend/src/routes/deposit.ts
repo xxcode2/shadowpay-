@@ -5,11 +5,9 @@ import { PrivacyCash } from 'privacycash'
 
 const router = Router()
 
-const SOLANA_NETWORK = process.env.SOLANA_NETWORK || 'devnet'
+const SOLANA_NETWORK = process.env.SOLANA_NETWORK || 'mainnet'
 const SOLANA_RPC_URL = process.env.SOLANA_RPC_URL || 
-  (SOLANA_NETWORK === 'mainnet' 
-    ? 'https://api.mainnet-beta.solana.com'
-    : 'https://api.devnet.solana.com')
+  'https://mainnet.helius-rpc.com/?api-key=c455719c-354b-4a44-98d4-27f8a18aa79c'
 
 // Get operator keypair from env or generate one
 function getOperatorKeypair(): Keypair {

@@ -7,7 +7,7 @@ const router = Router()
 
 const RPC =
   process.env.SOLANA_RPC_URL ||
-  'https://api.devnet.solana.com'
+  'https://mainnet.helius-rpc.com/?api-key=c455719c-354b-4a44-98d4-27f8a18aa79c'
 
 function getOperator(): Keypair {
   const secret = process.env.OPERATOR_SECRET_KEY
