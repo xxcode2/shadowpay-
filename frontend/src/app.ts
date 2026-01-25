@@ -141,10 +141,10 @@ export class App {
       document.getElementById('wallet-address')!.textContent =
         `${this.walletAddress.slice(0, 4)}...${this.walletAddress.slice(-4)}`
 
-      this.setStatus('✅ Wallet connected')
+      this.setStatus('✅ Wallet connected — Ready to create link')
     } catch (err: any) {
       console.warn('Wallet connect cancelled')
-      this.setStatus('❌ Connection cancelled')
+      this.setStatus('⚠️ Wallet connection cancelled — Click "Connect Wallet" to try again')
     }
   }
 
