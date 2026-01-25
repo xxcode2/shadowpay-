@@ -296,7 +296,28 @@
       </p>
      </div>
     </div>
-   </div><!-- Notification -->
+   </div><!-- Already Claimed Modal -->
+   <div id="already-claimed-modal" class="hidden fixed inset-0 z-50 flex items-center justify-center p-4 modal-backdrop bg-black/60">
+    <div class="modal-content gradient-border rounded-3xl p-8 max-w-md w-full glow-effect">
+     <div class="text-center">
+      <div class="w-20 h-20 mx-auto mb-6 rounded-full bg-gradient-to-br from-red-400 to-pink-600 flex items-center justify-center glow-effect">
+       <svg class="w-10 h-10 text-white" fill="none" viewbox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4v2m0 4v2m0-14a9 9 0 110 18 9 9 0 010-18z" />
+       </svg>
+      </div>
+      <h3 class="text-2xl font-display font-bold text-white mb-3">Payment Already Claimed</h3>
+      <p class="text-gray-400 mb-6">This payment link has already been claimed and cannot be used again.</p>
+      
+      <div class="mb-6 p-4 rounded-xl bg-yellow-500/10 border border-yellow-500/20">
+       <p class="text-sm text-yellow-300"><strong class="text-yellow-400">💡 Tip:</strong> Ask the sender for a new payment link if you need another payment.</p>
+      </div>
+      
+      <button id="close-already-claimed-modal" class="w-full py-3 rounded-xl bg-gradient-to-r from-purple-600 to-blue-600 hover:from-purple-700 hover:to-blue-700 text-white font-medium transition-all">
+       Close
+      </button>
+     </div>
+    </div>
+   </div>
+  </div><!-- Notification -->
    <div id="copy-notification" class="hidden fixed bottom-8 right-8 z-50 copy-notification">
     <div class="px-6 py-4 rounded-xl glass-card border border-green-500/30 flex items-center gap-3 glow-effect">
      <svg class="w-5 h-5 text-green-400" fill="none" viewbox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7" />

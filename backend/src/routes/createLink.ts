@@ -20,7 +20,7 @@ const router = Router()
  */
 router.post('/', async (req: Request<{}, {}, any>, res: Response) => {
   try {
-    const { amount, assetType } = req.body
+    const { amount, assetType, memo } = req.body
 
     // ✅ Validation
     if (!amount || amount <= 0) {
@@ -32,9 +32,18 @@ router.post('/', async (req: Request<{}, {}, any>, res: Response) => {
       return res.status(400).json({ error: `Asset must be one of: ${validAssets.join(', ')}` })
     }
 
+    // ✅ Validate memo if provided
+    if (memo && typeof memo !== 'string') {
+      return res.status(400).json({ error: 'Memo must be a string' })
+    }
+
+    if (memo && memo.length > 100) {
+      return res.status(400).json({ error: 'Memo must be 100 characters or less' })
+    }
+
     // ✅ Generate secure linkId
     const linkId = crypto.randomBytes(16).toString('hex')
-    console.log('DEBUG: About to create link:', { linkId, amount, assetType })
+    console.log('DEBUG: About to create link:', { linkId, amount, assetType, memo })
 
     // ✅ Calculate lamports (source of truth for on-chain amount)
     const lamports = BigInt(Math.round(amount * LAMPORTS_PER_SOL))
@@ -48,13 +57,14 @@ router.post('/', async (req: Request<{}, {}, any>, res: Response) => {
         amount,
         lamports,
         assetType,
+        memo: memo || null, // ✅ Save memo or null if not provided
         claimed: false,
         depositTx: '', // Placeholder - will be updated by deposit endpoint
         // claimedBy and withdrawTx will be set later
       } as any,
     })
 
-    console.log(`✅ Created payment link ${linkId} for ${amount} ${assetType}`)
+    console.log(`✅ Created payment link ${linkId} for ${amount} ${assetType}` + (memo ? ` with memo: "${memo}"` : ''))
     console.log('DEBUG: Link created:', link)
 
     return res.status(201).json({
@@ -62,6 +72,7 @@ router.post('/', async (req: Request<{}, {}, any>, res: Response) => {
       linkId,
       amount,
       assetType,
+      memo: memo || null, // ✅ Send memo back to frontend
       shareUrl: `https://shadowpayy.vercel.app?link=${linkId}`,
     })
   } catch (err) {

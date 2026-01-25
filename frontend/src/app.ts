@@ -124,6 +124,12 @@ export class App {
         this.fetchHistory()
       })
 
+    // ✅ Already claimed modal close button
+    document.getElementById('close-already-claimed-modal')
+      ?.addEventListener('click', () => {
+        document.getElementById('already-claimed-modal')?.classList.add('hidden')
+      })
+
     if (import.meta.env.DEV) console.log('✅ All events bound')
   }
 
@@ -270,7 +276,9 @@ export class App {
     if (!this.walletAddress) return alert('❌ Connect wallet first')
 
     const input = document.getElementById('amount-input') as HTMLInputElement
+    const memoInput = document.getElementById('memo-input') as HTMLInputElement // ✅ Get memo input
     const amount = Number(input.value)
+    const memo = memoInput?.value?.trim() || '' // ✅ Capture memo
     
     // ✅ Enforce minimum 0.01 SOL (Privacy Cash requirement)
     if (!amount || amount <= 0) {
@@ -311,6 +319,7 @@ export class App {
       const { linkId, depositTx } = await createLink({
         amountSOL: amount,
         wallet: this.getSigningWallet(),
+        memo, // ✅ Pass memo to createLink
       })
 
       const linkUrl = `${window.location.origin}?link=${linkId}`
@@ -432,11 +441,33 @@ export class App {
       if (import.meta.env.DEV) console.error('❌ Claim error:', err)
       this.hideLoadingModal()
       const errMsg = err?.message || 'Unknown error'
+      
+      // ✅ Check for already claimed error
+      if (errMsg.includes('LINK_ALREADY_CLAIMED')) {
+        this.showAlreadyClaimedModal()
+        return
+      }
+      
       this.setStatus(`❌ Error: ${errMsg}`)
     }
   }
 
   // ================= UI =================
+  // ✅ Show already claimed modal
+  private showAlreadyClaimedModal() {
+    const modal = document.getElementById('already-claimed-modal')
+    if (modal) {
+      modal.classList.remove('hidden')
+    }
+    
+    // Disable claim button
+    const confirmBtn = document.getElementById('confirm-claim-btn') as HTMLButtonElement
+    if (confirmBtn) {
+      confirmBtn.disabled = true
+      confirmBtn.textContent = '❌ Already Claimed'
+    }
+  }
+
   private showLoadingModal(msg: string) {
     const el = document.getElementById('loading-message')
     if (el) el.textContent = msg
