@@ -1,4 +1,5 @@
 import { Router, Request, Response } from 'express'
+import { LAMPORTS_PER_SOL } from '@solana/web3.js'
 import prisma from '../lib/prisma.js'
 import crypto from 'crypto'
 
@@ -35,6 +36,9 @@ router.post('/', async (req: Request<{}, {}, any>, res: Response) => {
     const linkId = crypto.randomBytes(16).toString('hex')
     console.log('DEBUG: About to create link:', { linkId, amount, assetType })
 
+    // ✅ Calculate lamports (source of truth for on-chain amount)
+    const lamports = BigInt(Math.round(amount * LAMPORTS_PER_SOL))
+
     // ✅ Create link record
     // depositTx is set to empty string initially (will be updated when frontend deposits)
     // withdrawTx is omitted (can be null)
@@ -42,6 +46,7 @@ router.post('/', async (req: Request<{}, {}, any>, res: Response) => {
       data: {
         id: linkId,
         amount,
+        lamports,
         assetType,
         claimed: false,
         depositTx: '', // Placeholder - will be updated by deposit endpoint

@@ -1,3 +1,4 @@
+import { LAMPORTS_PER_SOL } from '@solana/web3.js'
 import prisma from '../lib/prisma.js'
 
 /**
@@ -28,9 +29,13 @@ export class LinkManager {
    * Returns the link ID to be shared
    */
   static async createLink(input: CreateLinkInput): Promise<string> {
+    // ✅ Calculate lamports (source of truth for on-chain amount)
+    const lamports = BigInt(Math.round(input.amount * LAMPORTS_PER_SOL))
+
     const link = await prisma.paymentLink.create({
       data: {
         amount: input.amount,
+        lamports,
         assetType: input.assetType,
         claimed: false,
         depositTx: null,
