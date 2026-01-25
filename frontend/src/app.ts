@@ -38,35 +38,69 @@ export class App {
 
   // ================= EVENTS =================
   private bindEvents() {
+    console.log('🔧 Binding events...')
+
     document.getElementById('mode-create')
-      ?.addEventListener('click', () => this.switchMode('create'))
+      ?.addEventListener('click', () => {
+        console.log('📍 Mode: create')
+        this.switchMode('create')
+      })
 
     document.getElementById('mode-claim')
-      ?.addEventListener('click', () => this.switchMode('claim'))
+      ?.addEventListener('click', () => {
+        console.log('📍 Mode: claim')
+        this.switchMode('claim')
+      })
 
     document.getElementById('mode-history')
-      ?.addEventListener('click', () => this.switchMode('history'))
+      ?.addEventListener('click', () => {
+        console.log('📍 Mode: history')
+        this.switchMode('history')
+      })
 
     document.getElementById('connect-wallet-btn')
-      ?.addEventListener('click', () => this.connectWallet())
+      ?.addEventListener('click', () => {
+        console.log('📍 Click: connect-wallet')
+        this.connectWallet()
+      })
 
     document.getElementById('disconnect-wallet-btn')
-      ?.addEventListener('click', () => this.disconnectWallet())
+      ?.addEventListener('click', () => {
+        console.log('📍 Click: disconnect-wallet')
+        this.disconnectWallet()
+      })
 
     document.getElementById('create-form')
-      ?.addEventListener('submit', e => this.createLink(e))
+      ?.addEventListener('submit', e => {
+        console.log('📍 Submit: create-form')
+        this.createLink(e)
+      })
 
     document.getElementById('claim-form')
-      ?.addEventListener('submit', e => this.verifyLink(e))
+      ?.addEventListener('submit', e => {
+        console.log('📍 Submit: claim-form')
+        this.verifyLink(e)
+      })
 
     document.getElementById('close-success-modal')
-      ?.addEventListener('click', () => this.hideSuccessModal())
+      ?.addEventListener('click', () => {
+        console.log('📍 Click: close-success-modal')
+        this.hideSuccessModal()
+      })
 
     document.getElementById('copy-link-btn')
-      ?.addEventListener('click', () => this.copyGeneratedLink())
+      ?.addEventListener('click', () => {
+        console.log('📍 Click: copy-link')
+        this.copyGeneratedLink()
+      })
 
     document.getElementById('confirm-claim-btn')
-      ?.addEventListener('click', () => this.claim())
+      ?.addEventListener('click', () => {
+        console.log('📍 Click: confirm-claim')
+        this.claim()
+      })
+
+    console.log('✅ All events bound')
   }
 
   // ================= MODE =================
