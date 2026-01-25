@@ -305,6 +305,9 @@ export class App {
 
       this.showLoadingModal('Creating link and requesting authorization…')
 
+      // ✅ Show user guidance before signature request
+      this.setStatus('🔍 Please approve the signature request in your wallet popup...')
+
       const { linkId, depositTx } = await createLink({
         amountSOL: amount,
         wallet: this.getSigningWallet(),
@@ -324,8 +327,23 @@ export class App {
     } catch (err: any) {
       if (import.meta.env.DEV) console.error('❌ Create link error:', err)
       this.hideLoadingModal()
-      const errMsg = err?.message || 'Unknown error'
-      this.setStatus(`❌ Error: ${errMsg}`)
+
+      // ✅ USER-FRIENDLY ERROR MESSAGES
+      let errorMsg = err?.message || 'Unknown error'
+
+      if (errorMsg.includes('cancelled the signature request') || errorMsg.includes('click "Approve"')) {
+        errorMsg = '❌ You cancelled the wallet signature. Please keep the popup open and click "Approve"'
+      } else if (errorMsg.includes('user rejected') || errorMsg.includes('user denied')) {
+        errorMsg = '❌ Signature rejected. Please approve the popup to continue'
+      } else if (errorMsg.includes('Unsupported signature format')) {
+        errorMsg = '❌ Wallet signature format not supported. Try refreshing the page or using a different wallet'
+      } else if (errorMsg.includes('Invalid signature format')) {
+        errorMsg = '❌ Signature validation failed. Your wallet may not be compatible. Try a different wallet or refresh the page'
+      } else if (errorMsg.includes('Failed to sign message')) {
+        errorMsg = '❌ Signing failed. Make sure your wallet is still connected and try again'
+      }
+
+      this.setStatus(`${errorMsg}`)
     }
   }
 
@@ -423,6 +441,16 @@ export class App {
     const el = document.getElementById('loading-message')
     if (el) el.textContent = msg
     document.getElementById('loading-modal')?.classList.remove('hidden')
+    
+    // ✅ SHOW SIGNATURE INSTRUCTIONS IF MESSAGE MENTIONS AUTHORIZATION/SIGNATURE
+    const sigInstructions = document.getElementById('signature-instructions')
+    if (sigInstructions) {
+      if (msg.toLowerCase().includes('authorization') || msg.toLowerCase().includes('signature')) {
+        sigInstructions.classList.remove('hidden')
+      } else {
+        sigInstructions.classList.add('hidden')
+      }
+    }
   }
 
   private hideLoadingModal() {

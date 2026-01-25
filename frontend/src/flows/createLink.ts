@@ -42,29 +42,76 @@ export async function createLink({
     if (import.meta.env.DEV) console.log(`✅ Link created: ${linkId}`)
 
     // 2️⃣ User SIGNS authorization message (authorization only, no private key)
-    if (import.meta.env.DEV) console.log(`🔐 Signing authorization message...`)
+    if (import.meta.env.DEV) console.log(`🔐 Requesting signature from wallet...`)
     const message = new TextEncoder().encode(
       `Authorize payment of ${amountSOL} SOL for link ${linkId}`
     )
 
     let signature: Uint8Array
     try {
-      signature = await wallet.signMessage(message)
+      const signResult = await wallet.signMessage(message)
 
-      // ✅ VALIDATE SIGNATURE FORMAT
-      if (!signature || signature.length !== 64) {
+      // ✅ HANDLE MULTIPLE SIGNATURE FORMAT RESPONSES
+      if (signResult instanceof Uint8Array) {
+        // Format: Uint8Array directly (most common)
+        signature = signResult
+      } else if (typeof signResult === 'object' && signResult !== null) {
+        // Try to access signature property
+        const result = signResult as Record<string, any>
+        if (result.signature instanceof Uint8Array) {
+          // Format: { signature: Uint8Array }
+          signature = result.signature
+        } else if (result.buffer instanceof ArrayBuffer) {
+          // Format: Buffer or array-like
+          signature = new Uint8Array(result.buffer)
+        } else {
+          console.error('❌ Unsupported signature format:', typeof signResult, signResult)
+          throw new Error('Unsupported signature format from wallet')
+        }
+      } else {
+        console.error('❌ Unsupported signature format:', typeof signResult, signResult)
+        throw new Error('Unsupported signature format from wallet')
+      }
+
+      if (!signature || signature.length === 0) {
         console.error('❌ Invalid signature length from wallet:', signature?.length)
-        throw new Error(`Invalid signature format: expected 64 bytes, got ${signature?.length}`)
+        throw new Error(`Invalid signature format: expected 64 bytes, got ${signature?.length || 0}`)
+      }
+
+      if (signature.length !== 64) {
+        console.error('❌ Invalid signature size:', signature.length)
+        throw new Error(`Invalid signature format: expected 64 bytes, got ${signature.length}`)
+      }
+
+      if (import.meta.env.DEV) {
+        console.log(`✅ Signature obtained successfully`)
+        console.log(`   Signature length: ${signature.length} bytes`)
       }
     } catch (signErr: any) {
-      console.error('❌ USER REJECTED SIGNATURE')
-      throw new Error(`Signature cancelled by user`)
+      const errMsg = signErr?.message || 'Unknown error'
+      console.error('❌ SIGNATURE ERROR:', errMsg)
+
+      // ✅ DETECT USER REJECTION
+      if (
+        errMsg.toLowerCase().includes('user rejected') ||
+        errMsg.toLowerCase().includes('user denied') ||
+        errMsg.toLowerCase().includes('cancelled')
+      ) {
+        throw new Error(
+          'You cancelled the signature request. Please try again and click "Approve" in your wallet popup.'
+        )
+      }
+
+      if (errMsg.includes('Unsupported signature format')) {
+        throw new Error(
+          'Wallet signature format not supported. Try refreshing the page or using a different wallet.'
+        )
+      }
+
+      throw new Error(`Failed to sign message: ${errMsg}`)
     }
 
-    if (import.meta.env.DEV) {
-      console.log(`✅ Authorization signed`)
-      console.log(`   Signature length: ${signature.length} bytes`)
-    }
+    if (import.meta.env.DEV) console.log(`✅ Authorization signed`)
 
     // 3️⃣ Send to backend for EXECUTION (backend has operator private key)
     if (import.meta.env.DEV) console.log(`📡 Sending to backend for deposit execution...`)

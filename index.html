@@ -287,7 +287,14 @@
     <div class="modal-content gradient-border rounded-3xl p-8 max-w-sm w-full text-center glow-effect">
      <div class="loading-spinner mx-auto mb-6"></div>
      <h3 class="text-xl font-display font-bold text-white mb-2">Processing...</h3>
-     <p id="loading-message" class="text-gray-400 text-sm"></p>
+     <p id="loading-message" class="text-gray-400 text-sm mb-4"></p>
+     <!-- ✅ NEW: Signature instruction -->
+     <div id="signature-instructions" class="hidden bg-blue-500/20 border border-blue-500/50 rounded-lg p-3 mb-4">
+      <p class="text-sm text-blue-300">
+       <span class="font-semibold">💡 Tip:</span> Your wallet popup should appear. 
+       <br>Keep it open and click "Approve" to sign.
+      </p>
+     </div>
     </div>
    </div><!-- Notification -->
    <div id="copy-notification" class="hidden fixed bottom-8 right-8 z-50 copy-notification">
