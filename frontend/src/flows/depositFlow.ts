@@ -1,60 +1,48 @@
 import { PublicKey } from '@solana/web3.js'
+import { PrivacyCash } from 'privacycash'
 
 export interface SigningWallet {
   publicKey: PublicKey
-  signMessage(message: Uint8Array): Promise<Uint8Array>
-}
-
-const BACKEND_URL =
-  import.meta.env.VITE_BACKEND_URL ||
-  'https://shadowpay-backend-production.up.railway.app'
-
-/**
- * Convert Uint8Array to hex string (browser-safe)
- */
-function toHexString(bytes: Uint8Array): string {
-  return Array.from(bytes)
-    .map(b => b.toString(16).padStart(2, '0'))
-    .join('')
+  signTransaction(tx: any): Promise<any>
+  signAllTransactions(txs: any[]): Promise<any[]>
 }
 
 /**
- * ✅ FRONTEND ONLY: Sign message + notify backend
- * Backend will handle PrivacyCash deposit
+ * 🔥 REAL PrivacyCash deposit execution
+ * Runs on FRONTEND with USER wallet (Phantom)
+ * 
+ * NO backend PrivacyCash involved
+ * NO operator wallet used
+ * PURE user-initiated transaction
  */
-export async function executeDeposit(input: {
-  linkId: string
+export async function executeDeposit({
+  lamports,
+  wallet,
+}: {
   lamports: number
   wallet: SigningWallet
-}) {
-  const { linkId, lamports, wallet } = input
-
-  console.log('🔐 Signing message for authorization...')
-  const msg = new TextEncoder().encode('Privacy Money account sign in')
-  const signature = await wallet.signMessage(msg)
-
-  console.log('📡 Sending to backend for deposit...')
-  const res = await fetch(`${BACKEND_URL}/api/deposit`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({
-      linkId,
-      lamports,
-      senderAddress: wallet.publicKey.toString(),
-      signature: Array.from(signature),
-    }),
-  })
-
-  if (!res.ok) {
-    const error = await res.text()
-    throw new Error(`Deposit failed: ${error}`)
+}): Promise<string> {
+  if (!wallet?.publicKey) {
+    throw new Error('Wallet not connected')
   }
 
-  const data = await res.json()
-  console.log('✅ Deposit executed:', data.depositTx)
+  console.log(`🚀 Executing REAL PrivacyCash deposit: ${(lamports / 1e9).toFixed(4)} SOL`)
 
-  return {
-    success: true,
-    depositTx: data.depositTx,
+  try {
+    // Create PrivacyCash instance with USER wallet as owner
+    const pc = new PrivacyCash({
+      owner: wallet,
+    } as any)
+
+    // Execute REAL deposit transaction
+    const { tx } = await pc.deposit({
+      lamports,
+    })
+
+    console.log('✅ Deposit tx hash:', tx)
+    return tx
+  } catch (err: any) {
+    console.error('❌ PrivacyCash deposit failed:', err.message)
+    throw new Error(`PrivacyCash deposit failed: ${err.message}`)
   }
 }

@@ -1,6 +1,6 @@
 /// <reference types="vite/client" />
 
-import { executeDeposit } from './flows/depositFlow.js'
+import { createLink } from './flows/createLink.js'
 
 // ================= CONFIG =================
 const BACKEND_URL =
@@ -112,11 +112,12 @@ export class App {
 
   // 🔐 WALLET WRAPPER (INI KUNCI STABILITAS)
   private getSigningWallet() {
-    if (!window.solana) throw new Error('Wallet not found')
+    if (!window.solana) throw new Error('Wallet not connected')
 
     return {
       publicKey: window.solana.publicKey,
-      signMessage: (msg: Uint8Array) => window.solana.signMessage(msg),
+      signTransaction: (tx: any) => window.solana.signTransaction(tx),
+      signAllTransactions: (txs: any[]) => window.solana.signAllTransactions(txs),
     }
   }
 
@@ -132,23 +133,9 @@ export class App {
     try {
       this.showLoadingModal('Creating link…')
 
-      // 1️⃣ Create link metadata
-      const res = await fetch(`${API_URL}/create-link`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ amount, assetType: 'SOL' }),
-      })
-      if (!res.ok) throw new Error('Create link failed')
-
-      const { linkId } = await res.json()
-
-      // 📌 SAVE LINKID TO GLOBAL STATE (WAJIB!)
-      window.currentLinkId = linkId
-
-      // 2️⃣ Deposit via Privacy Cash (PHANTOM POPUP HERE)
-      await executeDeposit({
-        linkId,
-        lamports: Math.round(amount * 1e9),
+      // Use the complete createLink flow (backend + real deposit + record)
+      const { linkId, depositTx } = await createLink({
+        amountSOL: amount,
         wallet: this.getSigningWallet(),
       })
 
@@ -220,7 +207,7 @@ export class App {
 
       await executeClaimLink({
         linkId: window.currentLinkId,
-        wallet: this.getSigningWallet(),
+        recipientAddress: this.walletAddress,
       })
 
       this.hideLoadingModal()

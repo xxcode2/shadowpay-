@@ -1,6 +1,5 @@
 import { Router, Request, Response } from 'express'
 import { Connection, Keypair, LAMPORTS_PER_SOL } from '@solana/web3.js'
-import crypto from 'crypto'
 import prisma from '../lib/prisma.js'
 import { PrivacyCash } from 'privacycash'
 import { assertOperatorBalance } from '../utils/operatorBalanceGuard.js'
@@ -10,81 +9,135 @@ const router = Router()
 const RPC = process.env.SOLANA_RPC_URL!
 const operatorSecret = process.env.OPERATOR_SECRET_KEY!
 
+/**
+ * Parse operator keypair from OPERATOR_SECRET_KEY env
+ * Format: comma-separated array of 64 numbers
+ */
 function getOperator(): Keypair {
-  const arr = operatorSecret.replace(/^["']|["']$/g, '').split(',').map(Number)
-  if (arr.length !== 64) throw new Error('Invalid OPERATOR_SECRET_KEY')
-  return Keypair.fromSecretKey(new Uint8Array(arr))
+  if (!operatorSecret) {
+    throw new Error('OPERATOR_SECRET_KEY not configured')
+  }
+
+  try {
+    // Remove quotes if present, split by comma, parse as numbers
+    const arr = operatorSecret
+      .replace(/^["']|["']$/g, '')
+      .split(',')
+      .map(x => parseInt(x.trim(), 10))
+
+    if (arr.length !== 64) {
+      throw new Error(`Invalid OPERATOR_SECRET_KEY: expected 64 bytes, got ${arr.length}`)
+    }
+
+    return Keypair.fromSecretKey(new Uint8Array(arr))
+  } catch (err: any) {
+    throw new Error(`Failed to parse OPERATOR_SECRET_KEY: ${err.message}`)
+  }
 }
 
+/**
+ * POST /api/claim-link
+ *
+ * REAL PrivacyCash withdrawal - Operator acts as RELAYER
+ *
+ * Flow:
+ * 1. Frontend sends linkId + recipientAddress
+ * 2. Backend verifies link + deposit exists
+ * 3. Backend checks operator has fee buffer (0.01 SOL)
+ * 4. Backend executes REAL PrivacyCash.withdraw() as RELAYER
+ * 5. Backend records withdrawal transaction atomically
+ *
+ * CRITICAL:
+ * - Operator is RELAYER only (pays network fees, not withdrawal amount)
+ * - PrivacyCash handles the actual fund transfer (encrypted circuit proof)
+ * - Operator balance guard checks FEE safety only, not withdrawal amount
+ */
 router.post('/', async (req: Request, res: Response) => {
   try {
     const { linkId, recipientAddress } = req.body
 
-    if (!linkId || !recipientAddress) {
-      return res.status(400).json({ error: 'linkId and recipientAddress required' })
+    // ✅ Validation
+    if (!linkId || typeof linkId !== 'string') {
+      return res.status(400).json({ error: 'linkId required' })
     }
 
-    const link = await prisma.paymentLink.findUnique({ where: { id: linkId } })
-    if (!link) return res.status(404).json({ error: 'Link not found' })
-    if (!link.depositTx) return res.status(400).json({ error: 'Link has no deposit' })
-    if (link.claimed) return res.status(400).json({ error: 'Already claimed' })
+    if (!recipientAddress || typeof recipientAddress !== 'string') {
+      return res.status(400).json({ error: 'recipientAddress required' })
+    }
 
+    // ✅ Find link
+    const link = await prisma.paymentLink.findUnique({
+      where: { id: linkId },
+    })
+
+    if (!link) {
+      return res.status(404).json({ error: 'Link not found' })
+    }
+
+    if (!link.depositTx || link.depositTx === '') {
+      return res.status(400).json({ error: 'Link has no deposit' })
+    }
+
+    if (link.claimed) {
+      return res.status(400).json({ error: 'Link already claimed' })
+    }
+
+    // ✅ Get operator keypair
     const operator = getOperator()
     const connection = new Connection(RPC)
 
-    // ✅ SOURCE OF TRUTH: lamports from DB (no rounding)
-    const lamports = Number(link.lamports)
+    // 🔒 BALANCE GUARD: Check operator has fee buffer only (NOT withdrawal amount)
+    // PrivacyCash handles the actual fund transfer, operator only pays network fees
+    await assertOperatorBalance(
+      connection,
+      operator.publicKey,
+      0.01 * LAMPORTS_PER_SOL  // FEE safety buffer only
+    )
 
-    // ✅ BALANCE GUARD (before withdraw execution)
-    await assertOperatorBalance(connection, operator.publicKey, lamports)
+    console.log(`🚀 Executing REAL PrivacyCash withdrawal for link ${linkId}`)
+    console.log(`📤 Operator (relayer): ${operator.publicKey.toString()}`)
+    console.log(`🎯 Recipient: ${recipientAddress}`)
+    console.log(`💰 Amount: ${(link.amount).toFixed(6)} SOL (${Number(link.lamports)} lamports)`)
 
+    // ✅ Create PrivacyCash instance with operator as RELAYER
     const pc = new PrivacyCash({
-      RPC_url: RPC,
       owner: operator,
+      RPC_url: RPC,
     } as any)
 
-    // ✅ Hard guard: reject zero or non-positive lamports
-    const lamportsNum = Number(lamports)
+    // ✅ Convert lamports to number for PrivacyCash SDK
+    const lamportsNum = Number(link.lamports)
+
     if (!Number.isFinite(lamportsNum) || lamportsNum <= 0) {
-      console.error('❌ Invalid withdrawal amount:', { lamports, lamportsNum })
       return res.status(400).json({
         error: `Invalid withdrawal amount: ${lamportsNum} lamports (must be > 0)`,
       })
     }
 
-    console.log(`💸 Simulating withdrawal of ${lamportsNum} lamports (${(lamportsNum / LAMPORTS_PER_SOL).toFixed(6)} SOL) to ${recipientAddress}`)
+    // 🔥 EXECUTE REAL WITHDRAWAL
+    const { tx: withdrawTx } = await pc.withdraw({
+      lamports: lamportsNum,
+      recipientAddress,
+    })
 
-    // 🚫 CRITICAL: PrivacyCash.withdraw() CANNOT be safely called from custom backend on mainnet
-    // Reason: PrivacyCash requires official relayer + indexer + specific PDA account layout
-    // Calling it directly causes: "Transfer: from must not carry data" (SystemProgram constraint)
-    // This is a protocol-level incompatibility, not a code bug
-    //
-    // For hackathon/demo: Use simulated withdrawal
-    // For production: Integrate with official PrivacyCash relayer
-    //
-    // ❌ DO NOT attempt: await pc.withdraw({ lamports: lamportsNum, recipientAddress })
+    console.log(`✅ Real withdrawal tx: ${withdrawTx}`)
 
-    // ✅ SAFE MODE: Simulate withdrawal with virtual transaction
-    const simulatedWithdrawTx = `simulated_${Date.now()}_${crypto.randomBytes(8).toString('hex')}`
-
-    console.log(`✅ Simulated withdrawal tx: ${simulatedWithdrawTx}`)
-
-    // ✅ ATOMIC transaction - update link + record withdrawal
+    // ✅ ATOMIC update: Link + Transaction record (prevents double-claim)
     await prisma.$transaction([
       prisma.paymentLink.update({
         where: { id: linkId },
         data: {
           claimed: true,
           claimedBy: recipientAddress,
-          withdrawTx: simulatedWithdrawTx,
+          withdrawTx,
         },
       }),
       prisma.transaction.create({
         data: {
           type: 'withdraw',
           linkId,
-          transactionHash: simulatedWithdrawTx,
-          lamports,
+          transactionHash: withdrawTx,
+          lamports: link.lamports,
           assetType: link.assetType,
           status: 'confirmed',
           toAddress: recipientAddress,
@@ -92,12 +145,19 @@ router.post('/', async (req: Request, res: Response) => {
       }),
     ])
 
-    console.log(`✅ Link ${linkId} claimed by ${recipientAddress} | Simulated withdrawal tx: ${simulatedWithdrawTx}`)
+    console.log(`✅ Link ${linkId} claimed by ${recipientAddress} | Withdrawal tx: ${withdrawTx}`)
 
-    res.json({ success: true, withdrawTx: simulatedWithdrawTx })
+    return res.status(200).json({
+      success: true,
+      withdrawTx,
+      linkId,
+      message: 'Withdrawal completed successfully',
+    })
   } catch (err: any) {
-    console.error('❌ CLAIM ERROR:', err)
-    res.status(500).json({ error: err.message })
+    console.error('❌ CLAIM ERROR:', err.message)
+    return res.status(500).json({
+      error: err.message || 'Withdrawal failed',
+    })
   }
 })
 
