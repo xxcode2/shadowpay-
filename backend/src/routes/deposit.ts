@@ -1,93 +1,51 @@
 import { Router, Request, Response } from 'express'
-import { LAMPORTS_PER_SOL, PublicKey, Connection, Keypair } from '@solana/web3.js'
-import nacl from 'tweetnacl'
+import { LAMPORTS_PER_SOL, PublicKey } from '@solana/web3.js'
 import prisma from '../lib/prisma.js'
-import { PrivacyCash } from 'privacycash'
-import { assertOperatorBalance } from '../utils/operatorBalanceGuard.js'
-import { validateOperatorAccount } from '../utils/walletValidator.js'
 
 const router = Router()
-
-const RPC = process.env.SOLANA_RPC_URL || 'https://mainnet.helius-rpc.com'
-
-function getOperator(): Keypair {
-  const secretKeyStr = process.env.OPERATOR_SECRET_KEY
-  if (!secretKeyStr) {
-    throw new Error('OPERATOR_SECRET_KEY not set in environment variables')
-  }
-
-  try {
-    // ✅ Handle comma-separated format (no brackets)
-    let keyArray: number[]
-    if (secretKeyStr.startsWith('[') && secretKeyStr.endsWith(']')) {
-      // Format: [1,2,3,...,64]
-      keyArray = JSON.parse(secretKeyStr)
-    } else {
-      // Format: 1,2,3,...,64 (comma-separated, as stored in Railway)
-      keyArray = secretKeyStr
-        .split(',')
-        .map(num => parseInt(num.trim(), 10))
-        .filter(num => !isNaN(num))
-    }
-    
-    if (keyArray.length !== 64) {
-      throw new Error(`Invalid key length: ${keyArray.length} (expected 64)`)
-    }
-    
-    // ✅ Create proper Keypair from secret key array
-    const secretKey = Uint8Array.from(keyArray)
-    return Keypair.fromSecretKey(secretKey)
-  } catch (err) {
-    console.error('❌ Failed to parse OPERATOR_SECRET_KEY:', err)
-    console.error('Raw value (first 50 chars):', secretKeyStr.substring(0, 50) + '...')
-    
-    throw new Error(
-      'Invalid OPERATOR_SECRET_KEY format. Expected 64 comma-separated numbers or JSON array.'
-    )
-  }
-}
 
 /**
  * POST /api/deposit
  *
- * CORRECT ENDPOINT: Backend executes real PrivacyCash deposit with operator wallet
+ * ✅ CORRECT ENDPOINT: Backend ONLY RECORDS the deposit
  * 
- * Frontend ONLY provides:
- * - Authorization signature from user (proof of intent)
- * - Public key and link ID
+ * Frontend executes REAL PrivacyCash deposit with USER wallet
+ * Frontend provides:
+ * - linkId: Payment link ID
+ * - depositTx: Transaction hash from user's PrivacyCash deposit
+ * - publicKey: User's wallet address (for history tracking)
+ * - amount: Deposit amount in SOL
  *
  * Backend ONLY:
- * - Verifies the signature (optional)
- * - Executes REAL PrivacyCash deposit with OPERATOR wallet
- * - Records deposit tx hash in database
+ * - Validates the deposit transaction exists
+ * - Records it in database
  * - Enables the link for claiming
  *
  * ARCHITECTURE COMPLIANCE:
- * ✅ PrivacyCash SDK runs ONLY on backend
- * ✅ Operator private key NEVER leaves backend
- * ✅ Frontend never handles private keys
- * ✅ User authorization via message signature
- * ✅ Relayer pattern: operator as deposit executor
+ * ✅ PrivacyCash deposit executed by FRONTEND with USER wallet
+ * ✅ Backend has NO private keys, NO relayer role for deposit
+ * ✅ Backend is stateless record keeper
+ * ✅ Operator needed ONLY for withdraw (relayer pattern)
  */
 router.post('/', async (req: Request<{}, {}, any>, res: Response) => {
   try {
-    const { linkId, signature, publicKey, amount } = req.body
+    const { linkId, depositTx, publicKey, amount } = req.body
 
     // ✅ Validation
     if (!linkId || typeof linkId !== 'string') {
       return res.status(400).json({ error: 'linkId required' })
     }
 
-    if (!signature || !Array.isArray(signature)) {
-      return res.status(400).json({ error: 'signature (array) required' })
+    if (!depositTx || typeof depositTx !== 'string') {
+      return res.status(400).json({ error: 'depositTx (transaction hash) required' })
     }
 
     if (!publicKey || typeof publicKey !== 'string') {
-      return res.status(400).json({ error: 'publicKey required' })
+      return res.status(400).json({ error: 'publicKey (sender address) required' })
     }
 
     if (!amount || typeof amount !== 'number') {
-      return res.status(400).json({ error: 'amount required' })
+      return res.status(400).json({ error: 'amount (SOL) required' })
     }
 
     // ✅ Find link
@@ -103,136 +61,47 @@ router.post('/', async (req: Request<{}, {}, any>, res: Response) => {
       return res.status(400).json({ error: 'Deposit already recorded for this link' })
     }
 
-    // ✅ Verify signature (optional - skip for now to debug format issues)
-    // TODO: Once deposit flow works, add proper signature verification
-    // The signature format from Phantom needs to be validated against the message
-    if (process.env.NODE_ENV !== 'development' && false) {
-      // Disabled temporarily - will re-enable with proper format handling
-      try {
-        const message = new TextEncoder().encode(
-          `Authorize deposit of ${amount} SOL for link ${linkId}`
-        )
-        const isValid = nacl.sign.detached.verify(
-          message,
-          new Uint8Array(signature),
-          new PublicKey(publicKey).toBytes()
-        )
-
-        if (!isValid) {
-          return res.status(401).json({ error: 'Invalid signature' })
-        }
-      } catch (sigErr: any) {
-        console.error('❌ Signature verification failed:', sigErr.message)
-        return res.status(401).json({ error: `Signature verification failed: ${sigErr.message}` })
-      }
-    }
-
-    // ✅ Get operator and validate account BEFORE attempting deposit
-    const operator = getOperator()
-    const lamports = Math.round(amount * LAMPORTS_PER_SOL)
-    const connection = new Connection(RPC)
-    
     if (process.env.NODE_ENV === 'development') {
-      console.log(`🔐 [DEPOSIT] Validating operator wallet for: ${lamports} lamports`)
+      console.log(`✅ [DEPOSIT RECORD] Link: ${linkId}`)
+      console.log(`   Amount: ${amount} SOL`)
+      console.log(`   Depositor: ${publicKey}`)
+      console.log(`   Tx: ${depositTx}`)
     }
 
-    // ✅ CRITICAL: Check that operator wallet is CLEAN (no data)
-    const accountValidation = await validateOperatorAccount(connection, operator.publicKey)
-    if (!accountValidation.isValid) {
-      console.error('❌ Operator account validation failed:', accountValidation.reason)
-      return res.status(400).json({
-        error: 'Operator wallet configuration error',
-        details: accountValidation.reason,
-        action: 'Create a NEW clean SOL wallet: solana-keygen new --no-passphrase -o operator-key.json'
-      })
-    }
-
-    if (process.env.NODE_ENV === 'development') {
-      console.log(`✅ Operator wallet is CLEAN (no associated data)`)
-    }
-
-    // ✅ Check balance
-    if (process.env.NODE_ENV === 'development') {
-      console.log(`💰 [DEPOSIT] Checking operator balance...`)
-    }
-
-    // Check operator balance before proceeding
-    try {
-      await assertOperatorBalance(connection, operator.publicKey, lamports)
-    } catch (balanceErr: any) {
-      console.error('❌ Balance check failed:', balanceErr.message)
-      return res.status(400).json({
-        error: 'Operator wallet underfunded',
-        details: balanceErr.message,
-        solution: 'Top up operator wallet with sufficient SOL'
-      })
-    }
-
-    try {
-      if (process.env.NODE_ENV === 'development') {
-        console.log(`🏦 [DEPOSIT] Executing PrivacyCash deposit for link: ${linkId}`)
-        console.log(`   Amount: ${amount} SOL (${lamports} lamports)`)
-        console.log(`   User: ${publicKey}`)
-      }
-
-      const pc = new PrivacyCash({
-        RPC_url: RPC,
-        owner: operator,
-        enableDebug: process.env.NODE_ENV === 'development',
-      } as any)
-
-
-      if (process.env.NODE_ENV === 'development') {
-        console.log(`🏦 [DEPOSIT] Executing PrivacyCash deposit: ${lamports} lamports`)
-      }
-
-      const depositResult = await pc.deposit({ lamports })
-      const depositTx = depositResult.tx
-
-      if (process.env.NODE_ENV === 'development') {
-        console.log(`✅ [DEPOSIT] Deposit successful: ${depositTx}`)
-      }
-
-      // ✅ Record deposit in database
-      await prisma.paymentLink.update({
-        where: { id: linkId },
-        data: {
-          depositTx,
-        },
-      })
-
-      // ✅ Create transaction record
-      await prisma.transaction.create({
-        data: {
-          type: 'deposit',
-          linkId,
-          transactionHash: depositTx,
-          amount: link.amount, // Use amount in SOL, not lamports
-          assetType: link.assetType,
-          status: 'confirmed',
-        },
-      })
-
-      console.log(`✅ Deposit executed and recorded: ${depositTx}`)
-
-      return res.status(200).json({
-        success: true,
-        linkId,
+    // ✅ Record deposit in database
+    await prisma.paymentLink.update({
+      where: { id: linkId },
+      data: {
         depositTx,
-        message: 'Deposit executed successfully. Ready to claim.',
-      })
-    } catch (depositErr: any) {
-      console.error('❌ PrivacyCash deposit error:', depositErr.message)
-      return res.status(500).json({
-        error: `Deposit failed: ${depositErr.message || depositErr.toString()}`,
-      })
-    }
-  } catch (error) {
-    console.error('❌ Deposit request error:', error)
-    return res.status(500).json({
-      error: error instanceof Error ? error.message : 'Failed to execute deposit',
+      },
     })
 
+    // ✅ Create transaction record for history
+    await prisma.transaction.create({
+      data: {
+        type: 'deposit',
+        linkId,
+        transactionHash: depositTx,
+        amount: link.amount, // Amount in SOL
+        assetType: link.assetType,
+        status: 'confirmed',
+        fromAddress: publicKey, // Track who created the link
+      },
+    })
+
+    console.log(`✅ Deposit recorded: ${depositTx}`)
+
+    return res.status(200).json({
+      success: true,
+      linkId,
+      depositTx,
+      message: 'Deposit recorded. Link ready to claim.',
+    })
+  } catch (error) {
+    console.error('❌ Deposit record error:', error)
+    return res.status(500).json({
+      error: error instanceof Error ? error.message : 'Failed to record deposit',
+    })
   }
 })
 

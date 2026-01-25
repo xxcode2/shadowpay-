@@ -160,46 +160,46 @@ export class App {
     if (!historyContainer) return
 
     const sentHtml = sent.map(item => `
-      <div class="border rounded-lg p-4 mb-3 bg-white shadow-sm">
+      <div class="border border-purple-500/30 rounded-lg p-4 mb-3 bg-gray-900/50 shadow-sm">
         <div class="flex justify-between items-start">
           <div>
-            <div class="font-medium">📤 Sent: ${item.amount} SOL</div>
-            <div class="text-sm text-gray-500">Link: ${item.linkId.slice(0, 8)}...</div>
-            <div class="text-xs text-gray-400 mt-1">${new Date(item.createdAt).toLocaleString()}</div>
+            <div class="font-medium text-white">📤 Sent: ${item.amount} SOL</div>
+            <div class="text-sm text-gray-400">Link ID: ${item.linkId.slice(0, 8)}...</div>
+            <div class="text-xs text-gray-500 mt-1">${new Date(item.createdAt).toLocaleString()}</div>
           </div>
-          <span class="px-2 py-1 text-xs font-medium rounded-full ${
-            item.claimed ? 'bg-green-100 text-green-800' : 'bg-yellow-100 text-yellow-800'
+          <span class="px-3 py-1 text-xs font-medium rounded-full ${
+            item.claimed ? 'bg-emerald-500/20 text-emerald-400' : 'bg-amber-500/20 text-amber-400'
           }">
-            ${item.claimed ? 'Claimed' : 'Pending'}
+            ${item.claimed ? '✅ Claimed' : '⏳ Waiting'}
           </span>
         </div>
       </div>
     `).join('')
 
     const receivedHtml = received.map(item => `
-      <div class="border rounded-lg p-4 mb-3 bg-white shadow-sm">
+      <div class="border border-cyan-500/30 rounded-lg p-4 mb-3 bg-gray-900/50 shadow-sm">
         <div class="flex justify-between items-start">
           <div>
-            <div class="font-medium">📥 Received: ${item.amount} SOL</div>
-            <div class="text-sm text-gray-500">Link: ${item.linkId.slice(0, 8)}...</div>
-            <div class="text-xs text-gray-400 mt-1">${new Date(item.claimedAt).toLocaleString()}</div>
+            <div class="font-medium text-white">📥 Received: ${item.amount} SOL</div>
+            <div class="text-sm text-gray-400">From: Private sender (anonymous)</div>
+            <div class="text-xs text-gray-500 mt-1">${new Date(item.claimedAt).toLocaleString()}</div>
           </div>
-          <span class="px-2 py-1 text-xs font-medium rounded-full bg-blue-100 text-blue-800">
-            Completed
+          <span class="px-3 py-1 text-xs font-medium rounded-full bg-cyan-500/20 text-cyan-400">
+            ✅ Completed
           </span>
         </div>
       </div>
     `).join('')
 
     historyContainer.innerHTML = `
-      <div class="mb-6">
-        <h3 class="text-lg font-bold mb-3">📤 Sent Links</h3>
-        ${sent.length > 0 ? sentHtml : '<p class="text-gray-500">No sent links yet</p>'}
+      <div class="mb-8">
+        <h3 class="text-lg font-bold text-white mb-3">📤 Sent Links</h3>
+        ${sent.length > 0 ? sentHtml : '<p class="text-gray-500 text-center py-8">No sent links yet. Create one to get started!</p>'}
       </div>
       
       <div>
-        <h3 class="text-lg font-bold mb-3">📥 Received Links</h3>
-        ${received.length > 0 ? receivedHtml : '<p class="text-gray-500">No received links yet</p>'}
+        <h3 class="text-lg font-bold text-white mb-3">📥 Received Links</h3>
+        ${received.length > 0 ? receivedHtml : '<p class="text-gray-500 text-center py-8">No received payments yet. Ask someone to send you a link!</p>'}
       </div>
     `
   }
