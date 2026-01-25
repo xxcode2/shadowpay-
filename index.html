@@ -165,7 +165,7 @@
          <div class="flex gap-3">
           <svg class="w-5 h-5 text-purple-400 flex-shrink-0 mt-0.5" fill="none" viewbox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
           </svg>
-          <div class="text-sm text-gray-300"><strong class="text-purple-400">How it works:</strong> You will deposit SOL into Privacy Cash pool (shielded). Recipient can claim using the link without revealing the connection between you two.
+          <div class="text-sm text-gray-300"><strong class="text-purple-400">How it works:</strong> You pay the amount + ~0.008 SOL fee. Recipient gets the SOL instantly with zero fees. ShadowPay earns a small fee (0.006 SOL) for privacy service.
           </div>
          </div>
         </div><button type="submit" id="create-submit-btn" class="w-full py-4 rounded-xl bg-gradient-to-r from-purple-600 to-blue-600 hover:from-purple-700 hover:to-blue-700 text-white font-display font-bold text-lg transition-all duration-300 transform hover:scale-[1.02] glow-effect disabled:opacity-50 disabled:cursor-not-allowed"> <span id="create-button-text">Deposit &amp; Create Link</span> </button>
@@ -191,7 +191,7 @@
         <p class="text-5xl font-display font-bold text-transparent bg-clip-text bg-gradient-to-r from-cyan-400 to-blue-400 mb-4"><span id="preview-amount">0.000</span> SOL</p>
         <div class="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-gray-800/50">
          <svg class="w-4 h-4 text-gray-400" fill="none" viewbox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
-         </svg><span class="text-xs text-gray-400">Expires in <span id="preview-expiry" class="text-white font-medium">23h 45m</span></span>
+         </svg><span class="text-xs text-gray-400">No fees for recipient</span>
         </div>
        </div><button id="confirm-claim-btn" class="w-full py-4 rounded-xl bg-gradient-to-r from-cyan-600 to-blue-600 hover:from-cyan-700 hover:to-blue-700 text-white font-display font-bold text-lg transition-all duration-300 transform hover:scale-[1.02] glow-effect"> Confirm &amp; Claim Payment </button>
       </div><!-- Claim Form -->

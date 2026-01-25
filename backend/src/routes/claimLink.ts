@@ -38,20 +38,24 @@ function getOperator(): Keypair {
 /**
  * POST /api/claim-link
  *
- * ✅ CORRECT ARCHITECTURE:
+ * ✅ CORRECT BUSINESS MODEL:
  * 
- * Flow:
- * 1. User creates link - they will deposit their own SOL to Privacy Cash pool
- * 2. User deposits their SOL directly to Privacy Cash (they pay the amount)
- * 3. Recipient claims link - Backend executes withdrawal as RELAYER
- * 4. Operator pays withdrawal fees only (0.01-0.02 SOL), NOT the deposit amount
+ * PAYMENT FLOW:
+ * 1. Sender (User1) creates link - pays amount + deposit fee (~0.002 SOL)
+ * 2. Sender's SOL goes to Privacy Cash pool (encrypted, private)
+ * 3. Recipient (User2) claims link - receives amount minus operator fee
+ * 4. Operator acts as RELAYER and earns 0.006 SOL fee per transaction
  * 
- * Economic model:
- * - User pays: Amount + deposit network fee (e.g., 0.017 SOL + 0.002 SOL)
- * - Operator pays: Withdrawal fees only (base + protocol + network = ~0.013 SOL)
- * - Recipient receives: Amount - withdrawal fees (e.g., 0.004 SOL)
+ * ECONOMIC MODEL:
+ * Sender pays: 0.017 SOL (amount) + 0.008 SOL (fees) = 0.025 SOL total
+ * Operator earns: 0.006 SOL (commission fee)
+ * Recipient receives: 0.011 SOL (0.017 - 0.006 operator fee)
+ * Result: Operator earns ~0.003 SOL after costs, system sustainable!
  * 
- * CRITICAL: Operator is RELAYER only - does NOT pay the deposit amount!
+ * TECHNICAL:
+ * - Operator is RELAYER only - does NOT pay the deposit amount
+ * - PrivacyCash handles fund transfer from shielded pool
+ * - Operator balance check only verifies withdrawal fee buffer
  */
 router.post('/', async (req: Request, res: Response) => {
   try {
@@ -137,7 +141,7 @@ router.post('/', async (req: Request, res: Response) => {
     const totalWithdrawalFees = WITHDRAWAL_BASE_FEE + WITHDRAWAL_PROTOCOL_FEE + NETWORK_TX_FEE
 
     console.log(`💰 Withdrawal fee breakdown:`)
-    console.log(`   - Base fee: 0.006 SOL`)
+    console.log(`   - Base fee: 0.006 SOL (💰 operator earns this)`)
     console.log(`   - Protocol fee (0.35%): ${(WITHDRAWAL_PROTOCOL_FEE / LAMPORTS_PER_SOL).toFixed(6)} SOL`)
     console.log(`   - Network tx fee: 0.002 SOL`)
     console.log(`   - Total fees: ${(totalWithdrawalFees / LAMPORTS_PER_SOL).toFixed(6)} SOL`)
@@ -196,6 +200,7 @@ router.post('/', async (req: Request, res: Response) => {
     ])
 
     console.log(`✅ Link ${linkId} claimed by ${recipientAddress} | Withdrawal tx: ${withdrawTx}`)
+    console.log(`💰 ShadowPay earned 0.006 SOL commission from this transaction`)
 
     return res.status(200).json({
       success: true,

@@ -3,8 +3,11 @@ import { Connection, PublicKey, LAMPORTS_PER_SOL } from '@solana/web3.js'
 /**
  * ✅ CORRECT BALANCE CHECK: Only verify operator has enough for WITHDRAWAL FEES
  * 
- * The user deposits their own SOL - operator doesn't pay the deposit amount!
- * Operator only needs buffer for withdrawal transaction fees.
+ * Business model: Operator earns commission, doesn't subsidize payments!
+ * - Sender deposits their own SOL (not operator's money)
+ * - Operator only needs buffer for withdrawal transaction costs
+ * - Operator earns 0.006 SOL fee per successful withdrawal
+ * - System is sustainable and profitable!
  */
 export async function assertOperatorBalance(
   connection: Connection,

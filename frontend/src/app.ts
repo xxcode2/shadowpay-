@@ -295,24 +295,34 @@ export class App {
       const TOTAL_COST = amount + TOTAL_FEE
 
       if (import.meta.env.DEV) {
-        console.log(`💰 Fee Breakdown for ${amount} SOL:`)
-        console.log(`   Base fee: ${PRIVACY_CASH_BASE_FEE} SOL`)
-        console.log(`   Protocol fee (0.35%): ${PRIVACY_CASH_PROTOCOL_FEE.toFixed(6)} SOL`)
-        console.log(`   Network fee: ${NETWORK_FEE} SOL`)
-        console.log(`   Total cost: ${TOTAL_COST.toFixed(6)} SOL`)
+        console.log(`💰 COMPLETE FEE BREAKDOWN FOR ${amount} SOL:`)
+        console.log(`\nWHAT YOU PAY:`)
+        console.log(`   Deposit amount: ${amount} SOL`)
+        console.log(`   Network fee: ~${NETWORK_FEE} SOL`)
+        console.log(`   Total YOU pay: ${TOTAL_COST.toFixed(6)} SOL`)
+        console.log(`\nWHAT OPERATOR EARNS:`)
+        console.log(`   Operator fee: 0.006 SOL`)
+        console.log(`\nWHAT RECIPIENT GETS:`)
+        console.log(`   Recipient amount: ${Math.max(amount - 0.006, 0).toFixed(6)} SOL`)
       }
 
       // Show cost breakdown to user
+      // ✅ CALCULATE RECIPIENT AMOUNT (after operator fee)
+      const OPERATOR_FEE = 0.006 // SOL
+      const RECIPIENT_AMOUNT = amount - OPERATOR_FEE
+
       this.setStatus(
-        `💳 You will authorize: ${TOTAL_COST.toFixed(6)} SOL` +
-        `\n  Amount to send: ${amount} SOL` +
-        `\n  Fees: ${TOTAL_FEE.toFixed(6)} SOL`
+        `💳 YOU WILL PAY: ${TOTAL_COST.toFixed(6)} SOL` +
+        `\n  📤 Amount sent: ${amount} SOL` +
+        `\n  💰 Fees: ${TOTAL_FEE.toFixed(6)} SOL` +
+        `\n\n📥 RECIPIENT GETS: ${Math.max(RECIPIENT_AMOUNT, 0).toFixed(6)} SOL` +
+        `\n  (after 0.006 SOL ShadowPay fee)`
       )
 
-      this.showLoadingModal('Creating link and requesting authorization…')
+      this.showLoadingModal('🔐 Requesting wallet authorization...')
 
       // ✅ Show user guidance before signature request
-      this.setStatus('🔍 Please approve the signature request in your wallet popup...')
+      this.setStatus('⏳ Waiting for your approval in wallet popup...')
 
       const { linkId, depositTx } = await createLink({
         amountSOL: amount,
@@ -324,10 +334,12 @@ export class App {
       this.hideLoadingModal()
       this.showSuccessWithLinkId(linkId, linkUrl)
       this.setStatus(
-        `✅ Link created! Authorization approved.` +
-        `\n📤 You sent: ${amount} SOL to Privacy Cash pool` +
-        `\n💰 Recipient will receive: ~${(amount - PRIVACY_CASH_BASE_FEE).toFixed(6)} SOL after withdrawal` +
-        `\n\n📋 Share this link with recipient:` 
+        `✅ Payment link created!` +
+        `\n\n💰 PAYMENT DETAILS:` +
+        `\nYou paid: ${TOTAL_COST.toFixed(6)} SOL` +
+        `\nRecipient gets: ${Math.max(amount - 0.006, 0).toFixed(6)} SOL` +
+        `\n🔐 Private & anonymous (only you know the details)` +
+        `\n\n📋 Share this link with recipient to claim:` 
       )
       input.value = ''
     } catch (err: any) {
@@ -337,16 +349,18 @@ export class App {
       // ✅ USER-FRIENDLY ERROR MESSAGES
       let errorMsg = err?.message || 'Unknown error'
 
-      if (errorMsg.includes('cancelled the signature request') || errorMsg.includes('click "Approve"')) {
-        errorMsg = '❌ You cancelled the wallet signature. Please keep the popup open and click "Approve"'
+      if (errorMsg.includes('Operator balance insufficient')) {
+        errorMsg = '❌ ShadowPay service temporarily unavailable. Please try again in a moment.'
+      } else if (errorMsg.includes('cancelled the signature request') || errorMsg.includes('click "Approve"')) {
+        errorMsg = '❌ Payment cancelled. Keep the popup open and click "Approve" to continue.'
       } else if (errorMsg.includes('user rejected') || errorMsg.includes('user denied')) {
-        errorMsg = '❌ Signature rejected. Please approve the popup to continue'
+        errorMsg = '❌ Payment rejected. Please approve the transaction in your wallet.'
       } else if (errorMsg.includes('Unsupported signature format')) {
-        errorMsg = '❌ Wallet signature format not supported. Try refreshing the page or using a different wallet'
+        errorMsg = '❌ Wallet not compatible. Try refreshing or use Phantom wallet.'
       } else if (errorMsg.includes('Invalid signature format')) {
-        errorMsg = '❌ Signature validation failed. Your wallet may not be compatible. Try a different wallet or refresh the page'
-      } else if (errorMsg.includes('Failed to sign message')) {
-        errorMsg = '❌ Signing failed. Make sure your wallet is still connected and try again'
+        errorMsg = '❌ Signature validation failed. Try refreshing the page.'
+      } else if (errorMsg.includes('Failed to sign')) {
+        errorMsg = '❌ Wallet signing failed. Make sure your wallet is connected.'
       }
 
       this.setStatus(`${errorMsg}`)
