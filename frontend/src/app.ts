@@ -19,8 +19,11 @@ declare global {
 export class App {
   private walletAddress: string | null = null
   private pendingLamports: number | null = null
+  private bound: boolean = false
 
   init() {
+    if (this.bound) return
+    this.bound = true
     this.bindEvents()
     this.setStatus('Ready — Connect wallet to start')
 
@@ -38,69 +41,69 @@ export class App {
 
   // ================= EVENTS =================
   private bindEvents() {
-    console.log('🔧 Binding events...')
+    if (import.meta.env.DEV) console.log('🔧 Binding events...')
 
     document.getElementById('mode-create')
       ?.addEventListener('click', () => {
-        console.log('📍 Mode: create')
+        if (import.meta.env.DEV) console.log('📍 Mode: create')
         this.switchMode('create')
       })
 
     document.getElementById('mode-claim')
       ?.addEventListener('click', () => {
-        console.log('📍 Mode: claim')
+        if (import.meta.env.DEV) console.log('📍 Mode: claim')
         this.switchMode('claim')
       })
 
     document.getElementById('mode-history')
       ?.addEventListener('click', () => {
-        console.log('📍 Mode: history')
+        if (import.meta.env.DEV) console.log('📍 Mode: history')
         this.switchMode('history')
       })
 
     document.getElementById('connect-wallet-btn')
       ?.addEventListener('click', () => {
-        console.log('📍 Click: connect-wallet')
+        if (import.meta.env.DEV) console.log('📍 Click: connect-wallet')
         this.connectWallet()
       })
 
     document.getElementById('disconnect-wallet-btn')
       ?.addEventListener('click', () => {
-        console.log('📍 Click: disconnect-wallet')
+        if (import.meta.env.DEV) console.log('📍 Click: disconnect-wallet')
         this.disconnectWallet()
       })
 
     document.getElementById('create-form')
       ?.addEventListener('submit', e => {
-        console.log('📍 Submit: create-form')
+        if (import.meta.env.DEV) console.log('📍 Submit: create-form')
         this.createLink(e)
       })
 
     document.getElementById('claim-form')
       ?.addEventListener('submit', e => {
-        console.log('📍 Submit: claim-form')
+        if (import.meta.env.DEV) console.log('📍 Submit: claim-form')
         this.verifyLink(e)
       })
 
     document.getElementById('close-success-modal')
       ?.addEventListener('click', () => {
-        console.log('📍 Click: close-success-modal')
+        if (import.meta.env.DEV) console.log('📍 Click: close-success-modal')
         this.hideSuccessModal()
       })
 
     document.getElementById('copy-link-btn')
       ?.addEventListener('click', () => {
-        console.log('📍 Click: copy-link')
+        if (import.meta.env.DEV) console.log('📍 Click: copy-link')
         this.copyGeneratedLink()
       })
 
     document.getElementById('confirm-claim-btn')
       ?.addEventListener('click', () => {
-        console.log('📍 Click: confirm-claim')
+        if (import.meta.env.DEV) console.log('📍 Click: confirm-claim')
         this.claim()
       })
 
-    console.log('✅ All events bound')
+    if (import.meta.env.DEV) console.log('✅ All events bound')
   }
 
   // ================= MODE =================
@@ -122,16 +125,16 @@ export class App {
 
   // ================= WALLET =================
   private async connectWallet() {
-    try {
-      if (!window.solana) {
-        alert('❌ Phantom wallet not found. Please install it: https://phantom.app')
-        return
-      }
+    if (!window.solana || !window.solana.isPhantom) {
+      alert('❌ Phantom wallet not found. Please install it: https://phantom.app')
+      return
+    }
 
-      console.log('🔐 Connecting to Phantom...')
-      const res = await window.solana.connect()
+    try {
+      if (import.meta.env.DEV) console.log('🔐 Connecting to Phantom...')
+      const res = await window.solana.connect({ onlyIfTrusted: false })
       this.walletAddress = res.publicKey.toString()
-      console.log('✅ Connected:', this.walletAddress)
+      if (import.meta.env.DEV) console.log('✅ Connected:', this.walletAddress)
 
       document.getElementById('connect-wallet-btn')?.classList.add('hidden')
       document.getElementById('wallet-connected')?.classList.remove('hidden')
@@ -140,8 +143,8 @@ export class App {
 
       this.setStatus('✅ Wallet connected')
     } catch (err: any) {
-      console.error('❌ Wallet connection failed:', err.message)
-      this.setStatus(`❌ Connection failed: ${err.message}`)
+      console.warn('Wallet connect cancelled')
+      this.setStatus('❌ Connection cancelled')
     }
   }
 
@@ -157,6 +160,7 @@ export class App {
 
     return {
       publicKey: window.solana.publicKey,
+      signMessage: (message: Uint8Array) => window.solana.signMessage(message),
       signTransaction: (tx: any) => window.solana.signTransaction(tx),
       signAllTransactions: (txs: any[]) => window.solana.signAllTransactions(txs),
     }
@@ -173,7 +177,7 @@ export class App {
 
     try {
       this.showLoadingModal('Creating link…')
-      console.log(`📝 Creating link for ${amount} SOL...`)
+      if (import.meta.env.DEV) console.log(`📝 Creating link for ${amount} SOL...`)
 
       // Use the complete createLink flow (backend + real deposit + record)
       const { linkId, depositTx } = await createLink({
@@ -189,7 +193,7 @@ export class App {
       this.setStatus(`✅ Link ready: ${linkId}`)
       input.value = ''
     } catch (err: any) {
-      console.error('❌ Create link error:', err)
+      if (import.meta.env.DEV) console.error('❌ Create link error:', err)
       this.hideLoadingModal()
       const errMsg = err?.message || 'Unknown error'
       this.setStatus(`❌ Error: ${errMsg}`)
@@ -246,7 +250,7 @@ export class App {
 
     try {
       this.showLoadingModal('Withdrawing...')
-      console.log(`💸 Claiming link ${window.currentLinkId}...`)
+      if (import.meta.env.DEV) console.log(`💸 Claiming link ${window.currentLinkId}...`)
 
       // Import executeClaimLink dynamically
       const { executeClaimLink } = await import('./flows/claimLinkFlow.js')
@@ -259,7 +263,7 @@ export class App {
       this.hideLoadingModal()
       this.setStatus('✅ Withdrawal complete')
     } catch (err: any) {
-      console.error('❌ Claim error:', err)
+      if (import.meta.env.DEV) console.error('❌ Claim error:', err)
       this.hideLoadingModal()
       const errMsg = err?.message || 'Unknown error'
       this.setStatus(`❌ Error: ${errMsg}`)
@@ -296,6 +300,6 @@ export class App {
   private setStatus(msg: string) {
     const el = document.getElementById('status-message')
     if (el) el.textContent = msg
-    console.log(msg)
+    if (import.meta.env.DEV) console.log(msg)
   }
 }

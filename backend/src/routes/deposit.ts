@@ -49,7 +49,9 @@ router.post('/', async (req: Request<{}, {}, any>, res: Response) => {
     }
 
     // ✅ Record deposit (store tx hash only)
-    console.log(`📝 Recording REAL deposit tx ${depositTx} for link ${linkId}`)
+    if (process.env.NODE_ENV === 'development') {
+      console.log(`📝 Recording REAL deposit tx ${depositTx} for link ${linkId}`)
+    }
 
     await prisma.paymentLink.update({
       where: { id: linkId },

@@ -20,7 +20,7 @@ export async function createLink({
 
   try {
     // 1️⃣ Create link metadata on backend
-    console.log(`📝 Creating payment link for ${amountSOL} SOL...`)
+    if (import.meta.env.DEV) console.log(`📝 Creating payment link for ${amountSOL} SOL...`)
     const createRes = await fetch(`${BACKEND_URL}/api/create-link`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -35,15 +35,15 @@ export async function createLink({
     }
 
     const { linkId } = await createRes.json()
-    console.log(`✅ Link created: ${linkId}`)
+    if (import.meta.env.DEV) console.log(`✅ Link created: ${linkId}`)
 
     // 2️⃣ REAL deposit by USER wallet
     const lamports = Math.round(amountSOL * 1e9)
-    console.log(`💰 Prompting wallet for REAL deposit (${amountSOL} SOL)...`)
+    if (import.meta.env.DEV) console.log(`💰 Prompting wallet for REAL deposit (${amountSOL} SOL)...`)
     const depositTx = await executeDeposit({ lamports, wallet })
 
     // 3️⃣ Notify backend to record the tx hash
-    console.log(`📡 Recording deposit tx on backend...`)
+    if (import.meta.env.DEV) console.log(`📡 Recording deposit tx on backend...`)
     const recordRes = await fetch(`${BACKEND_URL}/api/deposit`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -57,10 +57,10 @@ export async function createLink({
       throw new Error(`Failed to record deposit: ${recordRes.statusText}`)
     }
 
-    console.log(`✅ Deposit recorded on backend`)
+    if (import.meta.env.DEV) console.log(`✅ Deposit recorded on backend`)
     return { linkId, depositTx }
   } catch (err: any) {
-    console.error('❌ CREATE LINK FLOW ERROR:', err.message)
+    if (import.meta.env.DEV) console.error('❌ CREATE LINK FLOW ERROR:', err.message)
     throw err
   }
 }

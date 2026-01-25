@@ -17,7 +17,7 @@ export async function executeClaimLink(input: {
     import.meta.env.VITE_BACKEND_URL ||
     'https://shadowpay-backend-production.up.railway.app'
 
-  console.log(`🚀 Claiming link ${linkId} for ${recipientAddress}...`)
+  if (import.meta.env.DEV) console.log(`🚀 Claiming link ${linkId} for ${recipientAddress}...`)
 
   try {
     const res = await fetch(`${BACKEND_URL}/api/claim-link`, {
@@ -35,14 +35,14 @@ export async function executeClaimLink(input: {
     }
 
     const data = await res.json()
-    console.log(`✅ Withdrawal completed: ${data.withdrawTx}`)
+    if (import.meta.env.DEV) console.log(`✅ Withdrawal completed: ${data.withdrawTx}`)
 
     return {
       success: true,
       withdrawTx: data.withdrawTx,
     }
   } catch (err: any) {
-    console.error('❌ Claim link error:', err.message)
+    if (import.meta.env.DEV) console.error('❌ Claim link error:', err.message)
     throw err
   }
 }
