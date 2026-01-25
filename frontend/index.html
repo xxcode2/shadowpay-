@@ -220,30 +220,49 @@
       <div class="text-center mb-10">
        <h2 class="text-4xl font-display font-bold text-white mb-3">Transaction History</h2>
        <p class="text-gray-400">View your sent and received private payments</p>
+       <button id="fetch-history-btn" class="mt-4 px-6 py-3 rounded-xl bg-gradient-to-r from-purple-600 to-blue-600 hover:from-purple-700 hover:to-blue-700 text-white font-medium transition-all">
+        🔄 Refresh History
+       </button>
       </div>
-      <div class="flex gap-2 mb-6 justify-center"><button id="history-sent-tab" class="history-tab px-6 py-2 rounded-xl bg-purple-500/20 text-purple-300 font-medium text-sm transition-all"> 📤 Sent Links </button> <button id="history-received-tab" class="history-tab px-6 py-2 rounded-xl bg-gray-800 text-gray-400 font-medium text-sm transition-all"> 📥 Received </button>
-      </div>
-      <div id="history-sent-content" class="history-content">
-       <div id="sent-list" class="space-y-4"></div>
-       <div id="sent-empty" class="hidden text-center py-12">
-        <svg class="w-16 h-16 mx-auto text-gray-600 mb-4" fill="none" viewbox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M20 13V6a2 2 0 00-2-2H6a2 2 0 00-2 2v7m16 0v5a2 2 0 01-2 2H6a2 2 0 01-2-2v-5m16 0h-2.586a1 1 0 00-.707.293l-2.414 2.414a1 1 0 01-.707.293h-3.172a1 1 0 01-.707-.293l-2.414-2.414A1 1 0 006.586 13H4" />
-        </svg>
-        <p class="text-gray-500">No sent links yet</p>
-        <p class="text-gray-600 text-sm">Create a payment link to get started</p>
-       </div>
-      </div>
-      <div id="history-received-content" class="history-content hidden">
-       <div id="received-list" class="space-y-4"></div>
-       <div id="received-empty" class="hidden text-center py-12">
-        <svg class="w-16 h-16 mx-auto text-gray-600 mb-4" fill="none" viewbox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
-        </svg>
-        <p class="text-gray-500">No claimed payments yet</p>
-        <p class="text-gray-600 text-sm">Claim a payment link to see it here</p>
+      <div id="history-container" class="space-y-4">
+       <div class="text-center py-12">
+        <p class="text-gray-400">Click Refresh to load your transaction history</p>
        </div>
       </div>
      </div>
     </div>
-   </main><!-- Success Modal -->
+   </main><!-- Success Card -->
+   <div id="success-card" class="hidden fixed inset-0 z-50 flex items-center justify-center p-4 modal-backdrop bg-black/60">
+    <div class="modal-content gradient-border rounded-3xl p-8 max-w-md w-full glow-effect">
+     <div class="text-center">
+      <div class="w-20 h-20 mx-auto mb-6 rounded-full bg-gradient-to-br from-green-400 to-emerald-600 flex items-center justify-center glow-effect">
+       <svg class="w-10 h-10 text-white" fill="none" viewbox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7" />
+       </svg>
+      </div>
+      <h3 class="text-2xl font-display font-bold text-white mb-3">✨ Payment Link Created!</h3>
+      <p class="text-gray-400 mb-6">Your deposit was successful. Share this link with the recipient.</p>
+      
+      <div class="mb-6 p-4 rounded-xl bg-gray-900/50 border border-purple-500/30">
+       <label class="block text-sm font-medium text-gray-300 mb-2">Link ID</label>
+       <div class="text-lg font-mono font-bold text-purple-300 break-all" id="success-link-id">--</div>
+      </div>
+      
+      <div class="mb-6">
+       <label class="block text-sm font-medium text-gray-300 mb-2">Share Link (Auto-selected)</label>
+       <div class="flex gap-2">
+        <input type="text" id="success-link-url" readonly class="flex-1 px-4 py-3 bg-gray-900/50 border border-cyan-500/30 rounded-xl text-white font-mono text-sm" value="">
+        <button id="copy-success-link-btn" class="px-4 py-3 rounded-xl bg-cyan-600 hover:bg-cyan-700 text-white transition-colors font-medium">
+         Copy
+        </button>
+       </div>
+      </div>
+      
+      <button id="close-success-card" class="w-full py-3 rounded-xl bg-gradient-to-r from-purple-600 to-blue-600 hover:from-purple-700 hover:to-blue-700 text-white font-medium transition-all">
+       Done
+      </button>
+     </div>
+    </div>
+   </div><!-- Success Modal -->
    <div id="success-modal" class="hidden fixed inset-0 z-50 flex items-center justify-center p-4 modal-backdrop bg-black/60">
     <div class="modal-content gradient-border rounded-3xl p-8 max-w-md w-full glow-effect">
      <div class="text-center">

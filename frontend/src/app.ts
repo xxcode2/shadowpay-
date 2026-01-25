@@ -103,7 +103,105 @@ export class App {
         this.claim()
       })
 
+    // ✅ Success card buttons
+    document.getElementById('close-success-card')
+      ?.addEventListener('click', () => {
+        document.getElementById('success-card')?.classList.add('hidden')
+      })
+
+    document.getElementById('copy-success-link-btn')
+      ?.addEventListener('click', () => {
+        const linkUrlEl = document.getElementById('success-link-url') as HTMLInputElement
+        if (linkUrlEl && linkUrlEl.value) {
+          navigator.clipboard.writeText(linkUrlEl.value)
+          this.setStatus('✅ Link copied to clipboard!')
+        }
+      })
+
+    // ✅ History button
+    document.getElementById('fetch-history-btn')
+      ?.addEventListener('click', () => {
+        this.fetchHistory()
+      })
+
     if (import.meta.env.DEV) console.log('✅ All events bound')
+  }
+
+  // ================= HISTORY =================
+  private async fetchHistory() {
+    if (!this.walletAddress) {
+      return this.setStatus('❌ Connect wallet first to view history')
+    }
+
+    try {
+      this.showLoadingModal('Loading history...')
+      
+      const BACKEND_URL = import.meta.env.VITE_BACKEND_URL || 'https://shadowpay-backend-production.up.railway.app'
+      const res = await fetch(`${BACKEND_URL}/api/history/${this.walletAddress}`)
+      
+      if (!res.ok) {
+        throw new Error('Failed to fetch history')
+      }
+      
+      const { sent, received } = await res.json()
+      this.renderHistory(sent, received)
+      
+      this.hideLoadingModal()
+      this.setStatus(`✅ History loaded: ${sent.length} sent, ${received.length} received`)
+    } catch (err: any) {
+      this.hideLoadingModal()
+      if (import.meta.env.DEV) console.error('History error:', err)
+      this.setStatus(`❌ Error loading history: ${err.message}`)
+    }
+  }
+
+  private renderHistory(sent: any[], received: any[]) {
+    const historyContainer = document.getElementById('history-container')
+    if (!historyContainer) return
+
+    const sentHtml = sent.map(item => `
+      <div class="border rounded-lg p-4 mb-3 bg-white shadow-sm">
+        <div class="flex justify-between items-start">
+          <div>
+            <div class="font-medium">📤 Sent: ${item.amount} SOL</div>
+            <div class="text-sm text-gray-500">Link: ${item.linkId.slice(0, 8)}...</div>
+            <div class="text-xs text-gray-400 mt-1">${new Date(item.createdAt).toLocaleString()}</div>
+          </div>
+          <span class="px-2 py-1 text-xs font-medium rounded-full ${
+            item.claimed ? 'bg-green-100 text-green-800' : 'bg-yellow-100 text-yellow-800'
+          }">
+            ${item.claimed ? 'Claimed' : 'Pending'}
+          </span>
+        </div>
+      </div>
+    `).join('')
+
+    const receivedHtml = received.map(item => `
+      <div class="border rounded-lg p-4 mb-3 bg-white shadow-sm">
+        <div class="flex justify-between items-start">
+          <div>
+            <div class="font-medium">📥 Received: ${item.amount} SOL</div>
+            <div class="text-sm text-gray-500">Link: ${item.linkId.slice(0, 8)}...</div>
+            <div class="text-xs text-gray-400 mt-1">${new Date(item.claimedAt).toLocaleString()}</div>
+          </div>
+          <span class="px-2 py-1 text-xs font-medium rounded-full bg-blue-100 text-blue-800">
+            Completed
+          </span>
+        </div>
+      </div>
+    `).join('')
+
+    historyContainer.innerHTML = `
+      <div class="mb-6">
+        <h3 class="text-lg font-bold mb-3">📤 Sent Links</h3>
+        ${sent.length > 0 ? sentHtml : '<p class="text-gray-500">No sent links yet</p>'}
+      </div>
+      
+      <div>
+        <h3 class="text-lg font-bold mb-3">📥 Received Links</h3>
+        ${received.length > 0 ? receivedHtml : '<p class="text-gray-500">No received links yet</p>'}
+      </div>
+    `
   }
 
   // ================= MODE =================
@@ -173,7 +271,14 @@ export class App {
 
     const input = document.getElementById('amount-input') as HTMLInputElement
     const amount = Number(input.value)
-    if (!amount || amount <= 0) return this.setStatus('❌ Invalid amount (must be > 0)')
+    
+    // ✅ Enforce minimum 0.01 SOL (Privacy Cash requirement)
+    if (!amount || amount <= 0) {
+      return this.setStatus('❌ Invalid amount (must be > 0)')
+    }
+    if (amount < 0.01) {
+      return this.setStatus('❌ Minimum deposit is 0.01 SOL (Privacy Cash requirement)')
+    }
 
     try {
       this.showLoadingModal('Creating link…')
@@ -186,17 +291,35 @@ export class App {
       })
 
       const linkUrl = `${window.location.origin}?link=${linkId}`
-      ;(document.getElementById('generated-link') as HTMLInputElement).value = linkUrl
 
       this.hideLoadingModal()
-      this.showSuccessModal()
-      this.setStatus(`✅ Link ready: ${linkId}`)
+      this.showSuccessWithLinkId(linkId, linkUrl)
+      this.setStatus(`✅ Link ready! Copy the URL below to share.`)
       input.value = ''
     } catch (err: any) {
       if (import.meta.env.DEV) console.error('❌ Create link error:', err)
       this.hideLoadingModal()
       const errMsg = err?.message || 'Unknown error'
       this.setStatus(`❌ Error: ${errMsg}`)
+    }
+  }
+
+  // ✅ Show success card with link ID
+  private showSuccessWithLinkId(linkId: string, linkUrl: string) {
+    const successCard = document.getElementById('success-card')
+    if (successCard) {
+      const linkIdEl = successCard.querySelector('#success-link-id')
+      const linkUrlEl = successCard.querySelector('#success-link-url') as HTMLInputElement
+      
+      if (linkIdEl) linkIdEl.textContent = linkId
+      if (linkUrlEl) linkUrlEl.value = linkUrl
+      
+      successCard.classList.remove('hidden')
+      
+      if (linkUrlEl) {
+        linkUrlEl.focus()
+        linkUrlEl.select()
+      }
     }
   }
 
