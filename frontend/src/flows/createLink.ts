@@ -14,11 +14,9 @@ export interface SigningWallet {
 export async function createLink({
   amountSOL,
   wallet,
-  memo,
 }: {
   amountSOL: number
   wallet: SigningWallet
-  memo?: string
 }): Promise<{ linkId: string; depositTx: string }> {
   const BACKEND_URL =
     import.meta.env.VITE_BACKEND_URL ||
@@ -33,7 +31,6 @@ export async function createLink({
       body: JSON.stringify({
         amount: amountSOL,
         assetType: 'SOL',
-        memo: memo || undefined, // ✅ Include memo if provided
       }),
     })
 

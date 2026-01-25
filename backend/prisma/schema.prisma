@@ -16,7 +16,6 @@ model PaymentLink {
   amount      Float
   lamports    BigInt              // ✅ SOURCE OF TRUTH: stored in lamports (no rounding)
   assetType   String   // "SOL", "USDC", "USDT"
-  memo        String?              // ✅ Optional memo for payment context (max 100 chars)
 
   // Status
   claimed     Boolean  @default(false)

@@ -59,8 +59,7 @@ export async function executeClaimLink(input: {
         if (errorMsg.includes('no valid deposit')) {
           errorMsg = 'Deposit still processing. Please wait 1-2 minutes and try again.'
         } else if (errorMsg.includes('already claimed')) {
-          // ✅ THROW SPECIFIC ERROR MARKER FOR ALREADY CLAIMED
-          throw new Error('LINK_ALREADY_CLAIMED')
+          errorMsg = 'This link has already been claimed!'
         } else if (errorMsg.includes('not found')) {
           errorMsg = 'This link does not exist. Please check the link ID.'
         } else if (errorMsg.includes('Invalid Solana')) {

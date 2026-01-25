@@ -23,7 +23,6 @@ router.get('/:id', async (req: Request<{ id: string }>, res: Response) => {
       id: link.id,
       amount: link.amount,
       assetType: link.assetType,
-      memo: link.memo || null, // ✅ Include memo in response
       claimed: link.claimed,
       claimedBy: link.claimedBy || null,
       createdAt: link.createdAt,
@@ -66,7 +65,6 @@ router.get('/:id/status', async (req: Request<{ id: string }>, res: Response) =>
       id: link.id,
       amount: link.amount,
       amountReceived,
-      memo: link.memo || null, // ✅ Include memo in status response
       claimed: link.claimed,
       claimedBy: link.claimedBy || null,
       depositTx: link.depositTx,
