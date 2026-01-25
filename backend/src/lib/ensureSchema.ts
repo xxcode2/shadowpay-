@@ -1,6 +1,8 @@
 /**
  * Checks if lamports column exists, if not runs migration
  * This is a safety net for production deployments
+ * 
+ * Uses separate SQL statements to avoid "multiple commands" error
  */
 import { PrismaClient } from '@prisma/client'
 
@@ -19,12 +21,18 @@ export async function ensureDbSchema() {
     if (err.message.includes('does not exist') || err.message.includes('lamports')) {
       console.log('⚠️  Database schema is outdated, running migrations...')
       try {
-        // Run migration
-        await prisma.$executeRawUnsafe(`
-          ALTER TABLE "payment_links" ADD COLUMN IF NOT EXISTS "lamports" BIGINT;
-          ALTER TABLE "transactions" ADD COLUMN IF NOT EXISTS "lamports" BIGINT;
-        `)
-        console.log('✅ Database schema updated')
+        // Execute each ALTER TABLE separately - PostgreSQL doesn't allow multiple statements in prepared statement
+        console.log('  → Adding lamports column to payment_links...')
+        await prisma.$executeRawUnsafe(
+          `ALTER TABLE "payment_links" ADD COLUMN IF NOT EXISTS "lamports" BIGINT`
+        )
+        
+        console.log('  → Adding lamports column to transactions...')
+        await prisma.$executeRawUnsafe(
+          `ALTER TABLE "transactions" ADD COLUMN IF NOT EXISTS "lamports" BIGINT`
+        )
+        
+        console.log('✅ Database schema updated successfully')
         return true
       } catch (migErr: any) {
         console.error('❌ Failed to update schema:', migErr.message)
