@@ -88,20 +88,27 @@ export class App {
 
   // ================= WALLET =================
   private async connectWallet() {
-    if (!window.solana) {
-      alert('Please install Phantom wallet')
-      return
+    try {
+      if (!window.solana) {
+        alert('❌ Phantom wallet not found. Please install it: https://phantom.app')
+        return
+      }
+
+      console.log('🔐 Connecting to Phantom...')
+      const res = await window.solana.connect()
+      this.walletAddress = res.publicKey.toString()
+      console.log('✅ Connected:', this.walletAddress)
+
+      document.getElementById('connect-wallet-btn')?.classList.add('hidden')
+      document.getElementById('wallet-connected')?.classList.remove('hidden')
+      document.getElementById('wallet-address')!.textContent =
+        `${this.walletAddress.slice(0, 4)}...${this.walletAddress.slice(-4)}`
+
+      this.setStatus('✅ Wallet connected')
+    } catch (err: any) {
+      console.error('❌ Wallet connection failed:', err.message)
+      this.setStatus(`❌ Connection failed: ${err.message}`)
     }
-
-    const res = await window.solana.connect()
-    this.walletAddress = res.publicKey.toString()
-
-    document.getElementById('connect-wallet-btn')?.classList.add('hidden')
-    document.getElementById('wallet-connected')?.classList.remove('hidden')
-    document.getElementById('wallet-address')!.textContent =
-      `${this.walletAddress.slice(0, 4)}...${this.walletAddress.slice(-4)}`
-
-    this.setStatus('✅ Wallet connected')
   }
 
   private disconnectWallet() {
@@ -124,14 +131,15 @@ export class App {
   // ================= CREATE LINK =================
   private async createLink(e: Event) {
     e.preventDefault()
-    if (!this.walletAddress) return alert('Connect wallet first')
+    if (!this.walletAddress) return alert('❌ Connect wallet first')
 
     const input = document.getElementById('amount-input') as HTMLInputElement
     const amount = Number(input.value)
-    if (!amount || amount <= 0) return this.setStatus('❌ Invalid amount')
+    if (!amount || amount <= 0) return this.setStatus('❌ Invalid amount (must be > 0)')
 
     try {
       this.showLoadingModal('Creating link…')
+      console.log(`📝 Creating link for ${amount} SOL...`)
 
       // Use the complete createLink flow (backend + real deposit + record)
       const { linkId, depositTx } = await createLink({
@@ -146,10 +154,11 @@ export class App {
       this.showSuccessModal()
       this.setStatus(`✅ Link ready: ${linkId}`)
       input.value = ''
-    } catch (err) {
-      console.error(err)
+    } catch (err: any) {
+      console.error('❌ Create link error:', err)
       this.hideLoadingModal()
-      this.setStatus('❌ Failed to create link')
+      const errMsg = err?.message || 'Unknown error'
+      this.setStatus(`❌ Error: ${errMsg}`)
     }
   }
 
@@ -197,10 +206,13 @@ export class App {
 
   // ================= CLAIM =================
   private async claim() {
-    if (!window.currentLinkId || !this.walletAddress) return alert('No link selected')
+    if (!window.currentLinkId || !this.walletAddress) {
+      return alert('❌ No link selected or wallet not connected')
+    }
 
     try {
       this.showLoadingModal('Withdrawing...')
+      console.log(`💸 Claiming link ${window.currentLinkId}...`)
 
       // Import executeClaimLink dynamically
       const { executeClaimLink } = await import('./flows/claimLinkFlow.js')
@@ -212,10 +224,11 @@ export class App {
 
       this.hideLoadingModal()
       this.setStatus('✅ Withdrawal complete')
-    } catch (err) {
-      console.error(err)
+    } catch (err: any) {
+      console.error('❌ Claim error:', err)
       this.hideLoadingModal()
-      this.setStatus('❌ Withdrawal failed')
+      const errMsg = err?.message || 'Unknown error'
+      this.setStatus(`❌ Error: ${errMsg}`)
     }
   }
 
