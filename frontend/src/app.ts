@@ -281,10 +281,30 @@ export class App {
     }
 
     try {
-      this.showLoadingModal('Creating link…')
-      if (import.meta.env.DEV) console.log(`📝 Creating link for ${amount} SOL...`)
+      // Calculate fees upfront and show to user
+      const PRIVACY_CASH_BASE_FEE = 0.006 // SOL
+      const PRIVACY_CASH_PROTOCOL_FEE = amount * 0.0035 // 0.35%
+      const NETWORK_FEE = 0.001 // SOL (estimate)
+      const TOTAL_FEE = PRIVACY_CASH_BASE_FEE + PRIVACY_CASH_PROTOCOL_FEE + NETWORK_FEE
+      const TOTAL_COST = amount + TOTAL_FEE
 
-      // Use the complete createLink flow (backend + real deposit + record)
+      if (import.meta.env.DEV) {
+        console.log(`💰 Fee Breakdown for ${amount} SOL:`)
+        console.log(`   Base fee: ${PRIVACY_CASH_BASE_FEE} SOL`)
+        console.log(`   Protocol fee (0.35%): ${PRIVACY_CASH_PROTOCOL_FEE.toFixed(6)} SOL`)
+        console.log(`   Network fee: ${NETWORK_FEE} SOL`)
+        console.log(`   Total cost: ${TOTAL_COST.toFixed(6)} SOL`)
+      }
+
+      // Show cost breakdown to user
+      this.setStatus(
+        `💳 You will authorize: ${TOTAL_COST.toFixed(6)} SOL` +
+        `\n  Amount to send: ${amount} SOL` +
+        `\n  Fees: ${TOTAL_FEE.toFixed(6)} SOL`
+      )
+
+      this.showLoadingModal('Creating link and requesting authorization…')
+
       const { linkId, depositTx } = await createLink({
         amountSOL: amount,
         wallet: this.getSigningWallet(),
@@ -294,7 +314,12 @@ export class App {
 
       this.hideLoadingModal()
       this.showSuccessWithLinkId(linkId, linkUrl)
-      this.setStatus(`✅ Link ready! Copy the URL below to share.`)
+      this.setStatus(
+        `✅ Link created! Authorization approved.` +
+        `\n📤 You sent: ${amount} SOL to Privacy Cash pool` +
+        `\n💰 Recipient will receive: ~${(amount - PRIVACY_CASH_BASE_FEE).toFixed(6)} SOL after withdrawal` +
+        `\n\n📋 Share this link with recipient:` 
+      )
       input.value = ''
     } catch (err: any) {
       if (import.meta.env.DEV) console.error('❌ Create link error:', err)
