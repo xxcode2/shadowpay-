@@ -7,7 +7,7 @@
     "dev": "node --import tsx src/server.ts",
     "build": "prisma generate && tsc",
     "fix-db": "node fix-db.js",
-    "start": "npx prisma migrate deploy && npm run fix-db && node dist/server.js"
+    "start": "npm run fix-db && node dist/server.js"
   },
   "dependencies": {
     "@prisma/client": "^5.13.0",

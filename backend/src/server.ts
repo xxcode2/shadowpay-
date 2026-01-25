@@ -1,6 +1,7 @@
 import express from 'express'
 import cors from 'cors'
 import dotenv from 'dotenv'
+import { ensureDbSchema } from './lib/ensureSchema.js'
 
 dotenv.config()
 
@@ -67,20 +68,36 @@ app.use((err: any, _req: express.Request, res: express.Response, _next: express.
   }
 })
 
-// ✅ STEP 7: LISTEN
-const PORT = Number(process.env.PORT)
+// ✅ STEP 7: ENSURE DATABASE SCHEMA - Run before listening
+async function startServer() {
+  try {
+    await ensureDbSchema()
+  } catch (err: any) {
+    console.error('⚠️  Schema check failed:', err.message)
+    // Continue anyway - schema might already exist
+  }
 
-if (!PORT) {
-  console.error('❌ PORT env not set')
-  process.exit(1)
+  // ✅ STEP 8: LISTEN
+  const PORT = Number(process.env.PORT)
+
+  if (!PORT) {
+    console.error('❌ PORT env not set')
+    process.exit(1)
+  }
+
+  const server = app.listen(PORT, '0.0.0.0', () => {
+    console.log(`✅ Backend listening on port ${PORT}`)
+  })
+
+  server.on('error', (error: any) => {
+    console.error('❌ Server error:', error.message)
+    process.exit(1)
+  })
 }
 
-const server = app.listen(PORT, '0.0.0.0', () => {
-  console.log(`✅ Backend listening on port ${PORT}`)
-})
-
-server.on('error', (error: any) => {
-  console.error('❌ Server error:', error.message)
+// Start server
+startServer().catch((err) => {
+  console.error('❌ Failed to start server:', err)
   process.exit(1)
 })
 
