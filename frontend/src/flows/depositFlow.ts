@@ -40,11 +40,17 @@ export async function executeDeposit({
 
     const RPC = import.meta.env.VITE_SOLANA_RPC || 'https://mainnet.helius-rpc.com'
 
+    if (import.meta.env.DEV) console.log(`📡 Using RPC: ${RPC}`)
+    if (import.meta.env.DEV) console.log(`👤 Wallet: ${wallet.publicKey.toString()}`)
+
     // Create PrivacyCash instance with USER wallet as owner
     const pc = new PrivacyCash({
       RPC_url: RPC,
       owner: wallet,
+      enableDebug: import.meta.env.DEV,
     } as any)
+
+    if (import.meta.env.DEV) console.log(`⏳ Waiting for Privacy Cash deposit...`)
 
     // Execute REAL deposit transaction
     const { tx } = await pc.deposit({
@@ -54,7 +60,7 @@ export async function executeDeposit({
     if (import.meta.env.DEV) console.log('✅ Deposit tx hash:', tx)
     return tx
   } catch (err: any) {
-    if (import.meta.env.DEV) console.error('❌ PrivacyCash deposit failed:', err.message)
-    throw new Error(`PrivacyCash deposit failed: ${err.message}`)
+    console.error('❌ PrivacyCash deposit failed:', err)
+    throw new Error(`PrivacyCash deposit failed: ${err.message || err.toString()}`)
   }
 }

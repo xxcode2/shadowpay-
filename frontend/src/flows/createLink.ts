@@ -39,8 +39,18 @@ export async function createLink({
 
     // 2️⃣ REAL deposit by USER wallet
     const lamports = Math.round(amountSOL * 1e9)
-    if (import.meta.env.DEV) console.log(`💰 Prompting wallet for REAL deposit (${amountSOL} SOL)...`)
-    const depositTx = await executeDeposit({ lamports, wallet })
+    console.log(`💰 Prompting wallet for REAL deposit (${amountSOL} SOL)...`)
+    console.log(`⏳ Waiting for Phantom wallet approval...`)
+    
+    let depositTx: string
+    try {
+      depositTx = await executeDeposit({ lamports, wallet })
+    } catch (depositErr: any) {
+      console.error('❌ DEPOSIT FAILED:', depositErr)
+      throw new Error(`Deposit failed: ${depositErr.message || depositErr.toString()}`)
+    }
+
+    console.log(`✅ Deposit completed: ${depositTx}`)
 
     // 3️⃣ Notify backend to record the tx hash
     if (import.meta.env.DEV) console.log(`📡 Recording deposit tx on backend...`)
@@ -54,13 +64,14 @@ export async function createLink({
     })
 
     if (!recordRes.ok) {
-      throw new Error(`Failed to record deposit: ${recordRes.statusText}`)
+      const errorText = await recordRes.text()
+      throw new Error(`Failed to record deposit: ${recordRes.statusText} - ${errorText}`)
     }
 
     if (import.meta.env.DEV) console.log(`✅ Deposit recorded on backend`)
     return { linkId, depositTx }
   } catch (err: any) {
-    if (import.meta.env.DEV) console.error('❌ CREATE LINK FLOW ERROR:', err.message)
+    console.error('❌ CREATE LINK FLOW ERROR:', err)
     throw err
   }
 }
