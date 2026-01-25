@@ -50,12 +50,21 @@ export async function createLink({
     let signature: Uint8Array
     try {
       signature = await wallet.signMessage(message)
+
+      // ✅ VALIDATE SIGNATURE FORMAT
+      if (!signature || signature.length !== 64) {
+        console.error('❌ Invalid signature length from wallet:', signature?.length)
+        throw new Error(`Invalid signature format: expected 64 bytes, got ${signature?.length}`)
+      }
     } catch (signErr: any) {
       console.error('❌ USER REJECTED SIGNATURE')
       throw new Error(`Signature cancelled by user`)
     }
 
-    if (import.meta.env.DEV) console.log(`✅ Authorization signed`)
+    if (import.meta.env.DEV) {
+      console.log(`✅ Authorization signed`)
+      console.log(`   Signature length: ${signature.length} bytes`)
+    }
 
     // 3️⃣ Send to backend for EXECUTION (backend has operator private key)
     if (import.meta.env.DEV) console.log(`📡 Sending to backend for deposit execution...`)

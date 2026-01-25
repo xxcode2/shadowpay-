@@ -82,21 +82,49 @@ router.post('/', async (req: Request<{}, {}, any>, res: Response) => {
     // ✅ VERIFY SIGNATURE (user authorization)
     if (process.env.NODE_ENV !== 'development') {
       try {
+        // 🔍 Validate signature format BEFORE verification
+        if (!Array.isArray(signature) || signature.length !== 64) {
+          console.error('❌ Invalid signature size:', signature.length)
+          return res.status(400).json({
+            error: 'Signature verification failed: bad signature size',
+            expectedSize: 64,
+            receivedSize: signature.length,
+          })
+        }
+
+        // ✅ Create the exact same message as frontend
         const message = new TextEncoder().encode(
           `Authorize payment of ${amount} SOL for link ${linkId}`
         )
+
+        // ✅ Convert signature array to Uint8Array
+        const signatureUint8 = Uint8Array.from(signature)
+
+        if (process.env.NODE_ENV === 'development') {
+          console.log('🔍 Signature verification details:')
+          console.log('   Message:', message)
+          console.log('   Signature length:', signatureUint8.length)
+          console.log('   Public key:', publicKey)
+        }
+
+        // ✅ Verify signature using nacl
         const isValid = nacl.sign.detached.verify(
           message,
-          new Uint8Array(signature),
+          signatureUint8,
           new PublicKey(publicKey).toBytes()
         )
 
         if (!isValid) {
-          return res.status(401).json({ error: 'Invalid signature' })
+          console.error('❌ Signature verification failed - invalid signature')
+          return res.status(401).json({
+            error: 'Invalid signature - message verification failed',
+          })
         }
       } catch (sigErr: any) {
-        console.error('❌ Signature verification failed:', sigErr.message)
-        return res.status(401).json({ error: `Signature verification failed: ${sigErr.message}` })
+        console.error('❌ Signature verification error:', sigErr.message)
+        return res.status(401).json({
+          error: `Signature verification failed: ${sigErr.message}`,
+        })
       }
     }
 
