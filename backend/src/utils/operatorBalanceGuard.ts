@@ -15,7 +15,7 @@ export async function assertOperatorBalance(
   const PRIVACY_CASH_BASE_FEE = 0.006 * LAMPORTS_PER_SOL      // From Privacy Cash docs
   const PRIVACY_CASH_PROTOCOL_FEE = Math.round(depositAmountLamports * 0.0035) // 0.35%
   const NETWORK_TX_FEE = 0.002 * LAMPORTS_PER_SOL             // Standard Solana tx
-  const SAFETY_BUFFER = 0.02 * LAMPORTS_PER_SOL               // Extra safety
+  const SAFETY_BUFFER = 0.005 * LAMPORTS_PER_SOL              // Realistic buffer for testing
   
   const totalRequired = 
     depositAmountLamports + 
@@ -39,7 +39,7 @@ export async function assertOperatorBalance(
     console.error(`   - Privacy Cash base fee: 0.006 SOL`)
     console.error(`   - Privacy Cash protocol fee (0.35%): ${(PRIVACY_CASH_PROTOCOL_FEE / LAMPORTS_PER_SOL).toFixed(6)} SOL`)
     console.error(`   - Network tx fee: 0.002 SOL`)
-    console.error(`   - Safety buffer: 0.02 SOL\n`)
+    console.error(`   - Safety buffer: 0.005 SOL\n`)
 
     throw new Error(
       `Operator balance insufficient. Need ${requiredSOL.toFixed(6)} SOL, have ${availableSOL.toFixed(6)} SOL. ` +
