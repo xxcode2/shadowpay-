@@ -1,5 +1,5 @@
 import { Router, Request, Response } from 'express'
-import { Keypair, Connection } from '@solana/web3.js'
+import { Keypair, Connection, LAMPORTS_PER_SOL } from '@solana/web3.js'
 import prisma from '../lib/prisma.js'
 import { PrivacyCash } from 'privacycash'
 import { assertOperatorBalance } from '../utils/operatorBalanceGuard.js'
@@ -109,13 +109,24 @@ router.post('/', async (req: Request<{}, {}, any>, res: Response) => {
       })
     }
 
+    // ✅ Hard guard: reject zero or non-positive lamports
+    if (!Number.isFinite(lamports) || lamports <= 0) {
+      console.error('❌ Invalid deposit amount:', { lamports })
+      return res.status(400).json({
+        error: `Invalid deposit amount: ${lamports} lamports (must be > 0)`,
+      })
+    }
+
+    console.log(`💰 Depositing ${lamports} lamports (${(lamports / LAMPORTS_PER_SOL).toFixed(6)} SOL)`)
+
     const privacyCash = new PrivacyCash({
       RPC_url: SOLANA_RPC_URL,
       owner: operatorKeypair,
       enableDebug: false,
     } as any)
 
-    const depositResult = await privacyCash.deposit({ lamports })
+    // ✅ PrivacyCash expects lamports (integer, not BigInt)
+    const depositResult = await privacyCash.deposit({ lamports: Number(lamports) })
     const depositTx = depositResult.tx
 
     console.log(`✅ Deposit executed: ${depositTx}`)

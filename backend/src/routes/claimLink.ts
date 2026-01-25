@@ -42,9 +42,21 @@ router.post('/', async (req: Request, res: Response) => {
       owner: operator,
     } as any)
 
+    // ✅ Hard guard: reject zero or non-positive lamports
+    const lamportsNum = Number(lamports)
+    if (!Number.isFinite(lamportsNum) || lamportsNum <= 0) {
+      console.error('❌ Invalid withdrawal amount:', { lamports, lamportsNum })
+      return res.status(400).json({
+        error: `Invalid withdrawal amount: ${lamportsNum} lamports (must be > 0)`,
+      })
+    }
+
+    console.log(`💸 Withdrawing ${lamportsNum} lamports (${(lamportsNum / LAMPORTS_PER_SOL).toFixed(6)} SOL) to ${recipientAddress}`)
+
     // ✅ REAL WITHDRAW (backend executes, returns tx hash)
+    // PrivacyCash expects lamports as number
     const { tx: withdrawTx } = await pc.withdraw({
-      lamports,
+      lamports: lamportsNum,
       recipientAddress,
     })
 
