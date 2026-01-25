@@ -32,10 +32,10 @@ router.post('/', async (req: Request, res: Response) => {
     const connection = new Connection(RPC)
 
     // ✅ SOURCE OF TRUTH: lamports from DB (no rounding)
-    const lamports = link.lamports
+    const lamports = Number(link.lamports)
 
     // ✅ BALANCE GUARD (before withdraw execution)
-    await assertOperatorBalance(connection, operator.publicKey, Number(lamports))
+    await assertOperatorBalance(connection, operator.publicKey, lamports)
 
     const pc = new PrivacyCash({
       RPC_url: RPC,

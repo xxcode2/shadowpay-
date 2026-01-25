@@ -75,7 +75,7 @@ router.post('/', async (req: Request<{}, {}, any>, res: Response) => {
         type: 'withdraw',
         linkId,
         transactionHash: withdrawTx,
-        amount: link.amount,
+        lamports: link.lamports,
         assetType: link.assetType,
         toAddress: recipientAddress,
         status: 'confirmed',
