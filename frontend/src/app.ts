@@ -311,18 +311,25 @@ export class App {
       const OPERATOR_FEE = 0.006 // SOL
       const RECIPIENT_AMOUNT = amount - OPERATOR_FEE
 
+      // ✅ CLEAR MESSAGE: YOU WILL PAY THIS
       this.setStatus(
-        `💳 YOU WILL PAY: ${TOTAL_COST.toFixed(6)} SOL` +
-        `\n  📤 Amount sent: ${amount} SOL` +
-        `\n  💰 Fees: ${TOTAL_FEE.toFixed(6)} SOL` +
-        `\n\n📥 RECIPIENT GETS: ${Math.max(RECIPIENT_AMOUNT, 0).toFixed(6)} SOL` +
-        `\n  (after 0.006 SOL ShadowPay fee)`
+        `💰 PAYMENT SUMMARY\n\n` +
+        `💳 YOU WILL PAY: ${amount.toFixed(6)} SOL\n` +
+        `📥 Recipient gets: ${Math.max(RECIPIENT_AMOUNT, 0).toFixed(6)} SOL\n` +
+        `💼 ShadowPay fee: ${OPERATOR_FEE} SOL\n\n` +
+        `⏳ Phantom popup will open next...\n` +
+        `✅ Click "APPROVE" to complete payment`
       )
 
-      this.showLoadingModal('🔐 Requesting wallet authorization...')
+      this.showLoadingModal('� Initiating payment...')
 
-      // ✅ Show user guidance before signature request
-      this.setStatus('⏳ Waiting for your approval in wallet popup...')
+      // ✅ Show user clear guidance about Phantom popup
+      this.setStatus(
+        `⏳ Phantom popup opening...\n\n` +
+        `✅ A Phantom wallet popup will appear\n` +
+        `💳 Click "APPROVE" to send ${amount} SOL\n\n` +
+        `🔒 Your wallet, your control`
+      )
 
       const { linkId, depositTx } = await createLink({
         amountSOL: amount,

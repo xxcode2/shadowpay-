@@ -1,10 +1,13 @@
 /**
  * ✅ CORRECT ARCHITECTURE:
  * 1. Create link metadata on backend
- * 2. User SIGNS authorization message (NO private key needed)
- * 3. Send signature to backend
- * 4. Backend EXECUTES deposit with operator private key
+ * 2. User deposits their own SOL directly (triggers Phantom popup!)
+ * 3. Send depositTx to backend for recording
+ * 4. Link is ready to claim
  */
+
+import { executeRealDeposit } from './depositFlow.js'
+import { LAMPORTS_PER_SOL } from '@solana/web3.js'
 
 export interface SigningWallet {
   publicKey: { toString(): string }
@@ -41,103 +44,34 @@ export async function createLink({
     const { linkId } = await createRes.json()
     if (import.meta.env.DEV) console.log(`✅ Link created: ${linkId}`)
 
-    // 2️⃣ User SIGNS authorization message (authorization only, no private key)
-    if (import.meta.env.DEV) console.log(`🔐 Requesting signature from wallet...`)
-    const message = new TextEncoder().encode(
-      `Authorize payment of ${amountSOL} SOL for link ${linkId}`
-    )
+    // 2️⃣ ✅ USER DIRECTLY PAYS FROM WALLET - This triggers Phantom popup!
+    if (import.meta.env.DEV) console.log(`🔐 Requesting payment approval from wallet...`)
+    const lamports = Math.round(amountSOL * LAMPORTS_PER_SOL)
+    const { tx: depositTx } = await executeRealDeposit({ lamports, wallet })
 
-    let signature: Uint8Array
-    try {
-      const signResult = await wallet.signMessage(message)
+    if (import.meta.env.DEV) console.log(`✅ User paid ${amountSOL} SOL directly! Transaction: ${depositTx}`)
 
-      // ✅ HANDLE MULTIPLE SIGNATURE FORMAT RESPONSES
-      if (signResult instanceof Uint8Array) {
-        // Format: Uint8Array directly (most common)
-        signature = signResult
-      } else if (typeof signResult === 'object' && signResult !== null) {
-        // Try to access signature property
-        const result = signResult as Record<string, any>
-        if (result.signature instanceof Uint8Array) {
-          // Format: { signature: Uint8Array }
-          signature = result.signature
-        } else if (result.buffer instanceof ArrayBuffer) {
-          // Format: Buffer or array-like
-          signature = new Uint8Array(result.buffer)
-        } else {
-          console.error('❌ Unsupported signature format:', typeof signResult, signResult)
-          throw new Error('Unsupported signature format from wallet')
-        }
-      } else {
-        console.error('❌ Unsupported signature format:', typeof signResult, signResult)
-        throw new Error('Unsupported signature format from wallet')
-      }
-
-      if (!signature || signature.length === 0) {
-        console.error('❌ Invalid signature length from wallet:', signature?.length)
-        throw new Error(`Invalid signature format: expected 64 bytes, got ${signature?.length || 0}`)
-      }
-
-      if (signature.length !== 64) {
-        console.error('❌ Invalid signature size:', signature.length)
-        throw new Error(`Invalid signature format: expected 64 bytes, got ${signature.length}`)
-      }
-
-      if (import.meta.env.DEV) {
-        console.log(`✅ Signature obtained successfully`)
-        console.log(`   Signature length: ${signature.length} bytes`)
-      }
-    } catch (signErr: any) {
-      const errMsg = signErr?.message || 'Unknown error'
-      console.error('❌ SIGNATURE ERROR:', errMsg)
-
-      // ✅ DETECT USER REJECTION
-      if (
-        errMsg.toLowerCase().includes('user rejected') ||
-        errMsg.toLowerCase().includes('user denied') ||
-        errMsg.toLowerCase().includes('cancelled')
-      ) {
-        throw new Error(
-          'You cancelled the signature request. Please try again and click "Approve" in your wallet popup.'
-        )
-      }
-
-      if (errMsg.includes('Unsupported signature format')) {
-        throw new Error(
-          'Wallet signature format not supported. Try refreshing the page or using a different wallet.'
-        )
-      }
-
-      throw new Error(`Failed to sign message: ${errMsg}`)
-    }
-
-    if (import.meta.env.DEV) console.log(`✅ Authorization signed`)
-
-    // 3️⃣ Send to backend for EXECUTION (backend has operator private key)
-    if (import.meta.env.DEV) console.log(`📡 Sending to backend for deposit execution...`)
-    const depositRes = await fetch(`${BACKEND_URL}/api/deposit`, {
+    // 3️⃣ Record depositTx on backend (ONLY for recording, not execution)
+    if (import.meta.env.DEV) console.log(`📝 Recording deposit transaction on backend...`)
+    const recordRes = await fetch(`${BACKEND_URL}/api/deposit`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
         linkId,
+        depositTx,
         amount: amountSOL,
-        signature: Array.from(signature), // Convert Uint8Array to array
         publicKey: wallet.publicKey.toString(),
       }),
     })
 
-    if (!depositRes.ok) {
-      const errorText = await depositRes.text()
-      throw new Error(`Backend deposit failed: ${depositRes.statusText} - ${errorText}`)
+    if (!recordRes.ok) {
+      throw new Error(`Failed to record deposit: ${recordRes.statusText}`)
     }
 
-    const depositResult = await depositRes.json()
-    const depositTx = depositResult.depositTx
-
-    if (import.meta.env.DEV) console.log(`✅ Backend executed deposit: ${depositTx}`)
+    if (import.meta.env.DEV) console.log(`✅ Deposit recorded on backend`)
     return { linkId, depositTx }
   } catch (err: any) {
-    console.error('❌ CREATE LINK FLOW ERROR:', err)
+    console.error('❌ CREATE LINK FLOW ERROR:', err.message || err)
     throw err
   }
 }
