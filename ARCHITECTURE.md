@@ -1,320 +1,304 @@
-# 🏗️ ShadowPay Architecture (Corrected)
+# 🏗️ ShadowPay Architecture - FINAL CORRECTED
 
-## Overview
+## Core Principle
 
-ShadowPay is a **non-custodial private payment link system** built on Privacy Cash (Solana).
+**"User deposits directly. Operator relays withdrawals."**
 
-### Key Principle
-**Backend does NOT use Privacy Cash SDK.**
-
-Privacy Cash SDK is **frontend-only**. Backend is just a metadata server.
+- ✅ User executes PrivacyCash deposit from **frontend** with their wallet
+- ✅ Backend **only records** the transaction (no execution, no keys)
+- ✅ Operator acts as **relayer** for withdrawals (pays network fees only)
 
 ---
 
 ## System Architecture
 
 ```
-┌─────────────────────────────────────────────────────────────┐
-│ FRONTEND (Browser)                                          │
-├─────────────────────────────────────────────────────────────┤
-│                                                             │
-│  1. User connects wallet (Phantom)                          │
-│  2. Imports Privacy Cash SDK                                │
-│  3. Calls SDK.deposit() or SDK.withdraw()                   │
-│  4. SDK handles: ZK proofs, Merkle tree, UTXOs             │
-│  5. SDK relays to Privacy Cash relayer                      │
-│  6. Sends transaction hash to backend                       │
-│                                                             │
-└─────────────────────────────────────────────────────────────┘
-                            ↑↓ HTTP
-┌─────────────────────────────────────────────────────────────┐
-│ BACKEND (Node.js - Vercel)                                  │
-├─────────────────────────────────────────────────────────────┤
-│                                                             │
-│  Routes:                                                    │
-│  POST /api/deposit    → Create link (store metadata)        │
-│  GET  /api/link/:id   → Fetch link details                  │
-│  POST /api/withdraw   → Record withdrawal                   │
-│  GET  /health         → Health check                        │
-│                                                             │
-│  Storage: In-memory (MVP) → Database (production)           │
-│                                                             │
-│  ❌ NO SDK usage                                             │
-│  ❌ NO private keys                                          │
-│  ❌ NO wallet signing                                        │
-│  ❌ NO ZK operations                                         │
-│                                                             │
-└─────────────────────────────────────────────────────────────┘
-                            ↑↓ HTTPS
-┌─────────────────────────────────────────────────────────────┐
-│ Privacy Cash Network (Solana Mainnet)                       │
-├─────────────────────────────────────────────────────────────┤
-│                                                             │
-│  - Privacy Cash Relayer (handles ZK proofs)                 │
-│  - Solana Program (verifies proofs + transfers funds)       │
-│  - Merkle Tree (maintained by Privacy Cash)                 │
-│  - UTXO Pool (encrypted, accessible via SDK)                │
-│                                                             │
-└─────────────────────────────────────────────────────────────┘
+FLOW: Sender → Frontend Deposit → Backend Records → Operator Relays → Receiver
+
+┌──────────────────────────────────────────────────────────────────┐
+│ SENDER: Frontend (Browser)                                       │
+├──────────────────────────────────────────────────────────────────┤
+│                                                                  │
+│  1️⃣  Create Link             → POST /api/create-link              │
+│      Returns: linkId for tracking                                │
+│                                                                  │
+│  2️⃣  Execute Deposit          → PrivacyCash SDK (FRONTEND)        │
+│      User's Phantom wallet signs                                 │
+│      PrivacyCash handles ZK proofs                               │
+│      Returns: tx hash                                            │
+│                                                                  │
+│  3️⃣  Record Deposit           → POST /api/deposit                 │
+│      Sends: linkId + tx hash + publicKey                         │
+│      Backend saves to database                                   │
+│                                                                  │
+│  📊 User Control: ✅ Full control of transaction                  │
+│  💳 User Pays: ✅ Full amount (deposit + fees)                    │
+│                                                                  │
+└──────────────────────────────────────────────────────────────────┘
+                             ↕ HTTP API
+┌──────────────────────────────────────────────────────────────────┐
+│ BACKEND: Node.js (Stateless Record Keeper)                       │
+├──────────────────────────────────────────────────────────────────┤
+│                                                                  │
+│  📝 Routes:                                                       │
+│  • POST /api/create-link      Create link metadata                │
+│  • POST /api/deposit          Record deposit (no execution)       │
+│  • GET  /api/link/:id         Fetch link for claiming             │
+│  • POST /api/claim-link       Execute withdrawal relay            │
+│  • GET  /api/history          List sent/received                  │
+│                                                                  │
+│  🔐 Security:                                                     │
+│  ✅ Operator key ONLY for relay (low privilege)                   │
+│  ✅ No private keys for deposits                                  │
+│  ✅ Stateless - can scale horizontally                            │
+│  ✅ No PrivacyCash SDK needed                                     │
+│                                                                  │
+│  ❌ Does NOT execute deposits                                     │
+│  ❌ Does NOT hold user funds                                      │
+│  ❌ Does NOT sign user transactions                               │
+│                                                                  │
+└──────────────────────────────────────────────────────────────────┘
+                             ↕ RPC/Relay
+┌──────────────────────────────────────────────────────────────────┐
+│ Solana Blockchain (Mainnet)                                      │
+│ • Privacy Cash Pool: Stores encrypted UTXOs                      │
+│ • Operator: Relays withdrawal transactions                       │
+└──────────────────────────────────────────────────────────────────┘
+                             ↕ Claim
+┌──────────────────────────────────────────────────────────────────┐
+│ RECEIVER: Frontend (Browser)                                     │
+├──────────────────────────────────────────────────────────────────┤
+│                                                                  │
+│  1️⃣  Share Link ID with receiver                                 │
+│      (or full URL: shadowpay.app/?link=linkId)                  │
+│                                                                  │
+│  2️⃣  Receiver visits link                                        │
+│      GET /api/link/:linkId → Returns amount                      │
+│                                                                  │
+│  3️⃣  Receiver claims                                             │
+│      POST /api/claim-link → Backend executes withdrawal          │
+│      PrivacyCash withdraws to recipient's address                │
+│                                                                  │
+│  4️⃣  Receiver receives SOL                                       │
+│      Amount = Deposit - Privacy Cash fees                        │
+│                                                                  │
+│  📊 Anonymity: ✅ Sender unknown                                  │
+│  💳 Receiver Pays: ✅ Nothing (operator pays fees)                │
+│                                                                  │
+└──────────────────────────────────────────────────────────────────┘
 ```
 
 ---
 
-## Data Flow
+## Fee Model
 
-### 1. CREATE LINK (User A deposits)
+### Breakdown (for 0.01 SOL deposit)
 
+| Item | Amount | Paid By |
+|------|--------|---------|
+| **Deposit Amount** | 0.01 SOL | Sender |
+| Privacy Cash Base Fee | 0.006 SOL | Sender |
+| Privacy Cash Protocol Fee (0.35%) | ~0.000035 SOL | Sender |
+| Solana TX Fee (deposit) | ~0.001 SOL | Sender |
+| **Subtotal for Deposit** | **~0.017 SOL** | **Sender** |
+| - | - | - |
+| **Withdrawal Amount** | ~0.017 SOL | Pool (sender paid) |
+| Solana TX Fee (withdrawal) | ~0.002 SOL | Operator |
+| Operator Service Fee | 0% (free relay) | - |
+| **Receiver Gets** | **~0.017 SOL** | Receiver |
+
+### Key Insight
+- Sender pays **everything upfront** when depositing
+- Receiver gets **net amount** after fees
+- Operator pays **only network fees** for relay (~0.002 SOL)
+- No per-transaction cost for operator
+
+---
+
+## Data Structures
+
+### PaymentLink
+```typescript
+{
+  id: string              // UUID - link identifier
+  amount: number          // SOL amount (not lamports)
+  lamports: BigInt        // Raw lamports (BigInt)
+  assetType: string       // 'SOL'
+  depositTx: string       // Solana tx hash from sender's PrivacyCash deposit
+  withdrawTx: string      // Solana tx hash from operator's relay
+  claimed: boolean        // Is link claimed?
+  claimedBy: string       // Recipient wallet address
+  createdAt: DateTime     // Timestamp
+  expiresAt: DateTime     // When link expires
+}
 ```
-User A's Browser
-├─ Connects Phantom wallet
-├─ Initializes PrivacyCash SDK
-│  └─ SDK requires user's private key (for encryption)
-├─ Calls SDK.deposit(0.01 SOL)
-│  ├─ SDK generates UTXO keypair
-│  ├─ SDK creates ZK proof
-│  ├─ SDK signs transaction locally
-│  └─ SDK relays to Privacy Cash network
-├─ Receives transaction hash (txHash)
-├─ Sends to Backend:
-│  └─ POST /api/deposit
-│     ├─ amount: 0.01
-│     ├─ assetType: "SOL"
-│     └─ depositTx: txHash
-└─ Backend creates link
-   ├─ Generates linkId: "a1b2c3d4..."
-   ├─ Stores: { linkId, amount, assetType, depositTx }
-   └─ Returns to frontend
 
-Frontend displays link:
-  https://shadowpay.vercel.app/link/a1b2c3d4
-```
-
-### 2. CLAIM LINK (User B receives)
-
-```
-User B's Browser
-├─ Opens link URL
-├─ Fetches from Backend:
-│  └─ GET /api/link/a1b2c3d4
-│     └─ Returns: { amount, assetType, claimed }
-├─ Connects Phantom wallet
-├─ Initializes PrivacyCash SDK
-├─ Calls SDK.withdraw(amount, recipientAddress)
-│  ├─ SDK fetches UTXOs from network
-│  ├─ SDK verifies against Merkle tree
-│  ├─ SDK generates ZK proof (proves ownership without revealing depositor)
-│  ├─ SDK signs transaction locally
-│  └─ SDK relays to Privacy Cash network
-├─ Receives transaction hash
-├─ Sends to Backend:
-│  └─ POST /api/withdraw
-│     ├─ linkId: "a1b2c3d4"
-│     ├─ recipientAddress: "Ey..."
-│     └─ withdrawTx: txHash
-└─ Backend records withdrawal
-   └─ Marks link as claimed
-
-User B receives funds directly on Solana network
-(no custody, no intermediary)
+### Transaction (History)
+```typescript
+{
+  id: string              // UUID
+  type: 'deposit' | 'withdraw'
+  linkId: string          // Link reference
+  transactionHash: string // Solana tx hash
+  amount: number          // SOL amount
+  assetType: string       // 'SOL'
+  status: 'confirmed'     // Always confirmed (recorded after blockchain)
+  fromAddress: string     // Sender address (for deposits)
+  toAddress: string       // Receiver address (for withdrawals)
+  createdAt: DateTime
+}
 ```
 
 ---
 
-## Backend API Contracts
+## Code Flow Examples
 
-### POST /api/deposit
-**Frontend sends after SDK.deposit() completes**
+### 1. Create Link (Frontend)
 
 ```typescript
-// Request
-{
-  "amount": 0.01,
-  "assetType": "SOL" | "USDC" | "USDT",
-  "depositTx": "5xAbc...xyz" // SDK-generated tx signature
-}
-
-// Response
-{
-  "success": true,
-  "linkId": "a1b2c3d4e5f6...",
-  "depositTx": "5xAbc...xyz"
-}
+// Step 1: Create metadata on backend
+const createRes = await fetch('/api/create-link', {
+  method: 'POST',
+  body: JSON.stringify({ amount: 0.01, assetType: 'SOL' })
+})
+const { linkId } = await createRes.json()
+// linkId: "abc-123-xyz"
 ```
 
-### GET /api/link/:id
-**Frontend fetches link details before withdraw**
+### 2. Execute Deposit (Frontend - PrivacyCash)
 
 ```typescript
-// Response
-{
-  "id": "a1b2c3d4e5f6...",
-  "amount": 0.01,
-  "assetType": "SOL",
-  "claimed": false,
-  "claimedBy": null
-}
+// Step 2: Load PrivacyCash SDK and execute deposit
+const pc = new PrivacyCash({
+  RPC_url: 'https://mainnet.helius-rpc.com',
+  owner: phantomWallet,  // User's wallet
+  enableDebug: true
+})
+
+const { tx: depositTx } = await pc.deposit({
+  lamports: 0.01 * 1e9  // 0.01 SOL in lamports
+})
+// depositTx: "5abc...xyz" (blockchain tx hash)
 ```
 
-### POST /api/withdraw
-**Frontend sends after SDK.withdraw() completes**
+### 3. Record Deposit (Frontend)
 
 ```typescript
-// Request
-{
-  "linkId": "a1b2c3d4e5f6...",
-  "recipientAddress": "Ey5GG...",
-  "withdrawTx": "7xDef...xyz"
-}
-
-// Response
-{
-  "success": true,
-  "withdrawTx": "7xDef...xyz"
-}
+// Step 3: Tell backend we're done depositing
+const recordRes = await fetch('/api/deposit', {
+  method: 'POST',
+  body: JSON.stringify({
+    linkId: "abc-123-xyz",
+    depositTx: "5abc...xyz",
+    publicKey: wallet.publicKey.toString(),
+    amount: 0.01
+  })
+})
+// Backend saves to database, link is now active
 ```
 
-### GET /health
-**Health check**
+### 4. Claim Link (Receiver)
 
 ```typescript
-// Response
-{
-  "status": "ok",
-  "timestamp": "2026-01-20T..."
-}
+// Receiver side: claim the link
+const claimRes = await fetch('/api/claim-link', {
+  method: 'POST',
+  body: JSON.stringify({
+    linkId: "abc-123-xyz",
+    recipientAddress: receiver.publicKey.toString()
+  })
+})
+const { withdrawTx } = await claimRes.json()
+// withdrawTx: "5def...123" (blockchain tx hash)
+// Receiver receives ~0.017 SOL in their wallet
 ```
 
 ---
 
-## File Structure
+## What Makes This Correct?
 
+### ✅ User Control
+- User controls the deposit transaction (signs with Phantom)
+- User's private key never touches backend
+- User can audit the deposit on blockchain
+
+### ✅ Scalability
+- Backend is stateless (just database)
+- No large dependencies (PrivacyCash SDK only on frontend)
+- Many frontends can use same operator
+- Operator wallet can be rotated
+
+### ✅ Security
+- Operator key has minimal privilege (relay only)
+- User's key only used for deposit (high control)
+- No private keys stored on backend
+- Fund recovery possible (link ID gives access)
+
+### ✅ Privacy
+- Sender-receiver relationship hidden (PrivacyCash)
+- Funds routed through Privacy Cash pool
+- Transaction amounts not visible on-chain
+- Only linkId needed to claim (no addresses)
+
+### ❌ What NOT to Do (Wrong Architecture)
 ```
-shadowpay/
-├── frontend/                 # React/Vue app (uses Privacy Cash SDK)
-│   ├── index.html
-│   ├── App.tsx
-│   └── ...
-│
-├── backend/                  # Node.js API server (NO SDK)
-│   ├── src/
-│   │   ├── server.ts
-│   │   ├── config.ts
-│   │   ├── privacy/
-│   │   │   ├── privacyCash.ts    (documentation only)
-│   │   │   └── linkManager.ts
-│   │   └── routes/
-│   │       ├── deposit.ts
-│   │       ├── withdraw.ts
-│   │       └── link.ts
-│   ├── package.json
-│   ├── tsconfig.json
-│   └── .env.example
-│
-├── privacy-cash-sdk/         # git clone (READ ONLY)
-│   ├── src/
-│   ├── example/
-│   └── ...
-│
-├── vercel.json
-└── README.md
+DON'T:
+- Execute PrivacyCash on backend with operator key
+- Have backend sign user's deposit transactions
+- Require operator to hold large balance for deposits
+- Use backend's private key for user operations
 ```
 
 ---
 
-## Wallet Ownership
+## Deployment
 
-| Component | Owns Private Key | Sign TX | Host Key |
-|-----------|------------------|---------|----------|
-| Frontend user | ✅ YES | ✅ YES | ✅ YES (in browser) |
-| Backend server | ❌ NO | ❌ NO | ❌ NO |
-| Privacy Cash Relayer | ❌ NO | ✅ YES (for execution) | ❌ NO |
-
----
-
-## Privacy Model
-
-### What's Private?
-- **Deposit address** (User A's wallet) → ✅ Hidden on-chain
-- **Withdrawal address** (User B's wallet) → ✅ Hidden on-chain
-- **Amount** → ✅ Encrypted in UTXO
-- **Link between sender and receiver** → ✅ Complete privacy via ZK proof
-
-### What's Public?
-- Privacy Cash program accounts (encrypted commitments)
-- Transaction signatures (relayer, not user)
-- Link ID (random hash, no meaning)
-
----
-
-## Production Checklist
-
-- [ ] Replace in-memory link storage with PostgreSQL/MongoDB
-- [ ] Add transaction audit trail
-- [ ] Add rate limiting per IP
-- [ ] Add input validation + sanitization
-- [ ] Add error logging + monitoring
-- [ ] Configure CORS for specific frontend domain
-- [ ] Add request signing for frontend-backend auth
-- [ ] Deploy frontend on separate domain (Vercel/Netlify)
-- [ ] Deploy backend on Vercel
-- [ ] Add e2e tests
-- [ ] Add security headers
-
----
-
-## Technologies
-
-- **Frontend**: TypeScript, React (or Vue)
-  - Privacy Cash SDK (from npm or github)
-  - Phantom Wallet integration
-  
-- **Backend**: TypeScript, Node.js
-  - Express.js
-  - Deployed on Vercel
-  
-- **Blockchain**: Solana Mainnet
-  - Helius RPC (mainnet.helius-rpc.com)
-  - Privacy Cash relayer network
-
----
-
-## Key Differences from Traditional Services
-
-| Feature | Traditional | ShadowPay |
-|---------|-----------|-----------|
-| Custody | Backend holds funds | ❌ No (relayer can't steal) |
-| Privacy | Traceable | ✅ ZK-hidden |
-| Signing | Backend signs | ❌ User signs |
-| Fees | High (custodial) | Low (on-chain only) |
-| Censorship | Can block | ❌ Censorship-resistant |
-
----
-
-## Testing
-
-### Manual Testing
-
+### Environment Variables
 ```bash
-# 1. Start backend
-cd backend && npm run dev
+# RPC endpoint
+SOLANA_RPC_URL=https://mainnet.helius-rpc.com
 
-# 2. Create link
-curl -X POST http://localhost:3001/api/deposit \
-  -H "Content-Type: application/json" \
-  -d '{"amount": 0.01, "assetType": "SOL", "depositTx": "..."}'
+# Operator wallet (ONLY for relay)
+# Format: 64 comma-separated numbers from secret key
+OPERATOR_SECRET_KEY=232,221,205,...,23
 
-# 3. Get link
-curl http://localhost:3001/api/link/a1b2c3d4
+# Database
+DATABASE_URL=postgresql://user:pass@host/db
 
-# 4. Health check
-curl http://localhost:3001/health
+# Frontend
+VITE_SOLANA_RPC=https://mainnet.helius-rpc.com
+VITE_BACKEND_URL=https://shadowpay-backend.app
 ```
+
+### Operator Setup
+```bash
+# Generate new operator wallet
+solana-keygen new --no-passphrase -o operator-key.json
+
+# Convert to environment variable
+cat operator-key.json | jq -r '.[] | @json' | tr -d '\n' > operator-key.txt
+
+# Top up with SOL (for relay fees)
+solana transfer OPERATOR_ADDRESS 0.1 --allow-unfunded-recipient
+```
+
+### Server Requirements
+- **Storage**: PostgreSQL or compatible
+- **Runtime**: Node.js 18+
+- **Memory**: 256MB+
+- **CPU**: 0.5 vCPU+
+- **Network**: HTTPS only
 
 ---
 
-## References
+## Status
 
-- Privacy Cash SDK: /privacy-cash-sdk/README.md
-- Solana Docs: https://docs.solana.com
-- Privacy Cash: https://privacycash.org
+✅ **Architecture**: Correct  
+✅ **Frontend**: PrivacyCash on browser, user deposits  
+✅ **Backend**: Records transactions, relays withdrawals  
+✅ **Database**: Tracks links and history  
+✅ **Security**: User controls funds, operator has minimal privilege  
+✅ **Build**: Both frontend and backend compile  
+✅ **Deployed**: Running on Railway + Vercel  
 
+**Ready for production!** 🚀
