@@ -8,15 +8,22 @@ const router = Router()
 /**
  * POST /api/create-link
  *
- * Creates a payment link metadata record.
- * Frontend will execute deposit via Privacy Cash SDK.
+ * ✅ CORRECT FLOW: Creates a payment link metadata record only
+ * User deposits their own SOL - operator doesn't pay!
  *
  * Expected flow:
- * 1. Frontend calls create-link with amount/assetType
- * 2. Backend generates linkId, returns it
- * 3. Frontend executes deposit via Privacy Cash SDK
- * 4. Frontend calls deposit endpoint with depositTx
- * 5. Backend stores depositTx, link is ready to claim
+ * 1. USER creates link (frontend calls this endpoint with amount)
+ * 2. Backend generates linkId and metadata
+ * 3. USER deposits their own SOL directly to Privacy Cash pool (fee: amount + ~0.002 SOL)
+ * 4. Frontend records the depositTx
+ * 5. Recipient can now claim - Backend will execute withdrawal
+ *
+ * ECONOMIC MODEL:
+ * - User pays: The deposit amount (e.g., 0.017 SOL) + deposit network fee
+ * - Operator pays: Withdrawal fees only (~0.013 SOL)
+ * - Recipient receives: Amount - withdrawal fees
+ *
+ * This is sustainable because operator only needs to maintain ~0.1 SOL buffer
  */
 router.post('/', async (req: Request<{}, {}, any>, res: Response) => {
   try {

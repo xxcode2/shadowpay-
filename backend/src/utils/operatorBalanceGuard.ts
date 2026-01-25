@@ -1,53 +1,44 @@
 import { Connection, PublicKey, LAMPORTS_PER_SOL } from '@solana/web3.js'
 
 /**
- * STRICT: Validate operator wallet balance BEFORE deposit
- * Privacy Cash deposits involve significant fees
+ * ✅ CORRECT BALANCE CHECK: Only verify operator has enough for WITHDRAWAL FEES
+ * 
+ * The user deposits their own SOL - operator doesn't pay the deposit amount!
+ * Operator only needs buffer for withdrawal transaction fees.
  */
 export async function assertOperatorBalance(
   connection: Connection,
   operator: PublicKey,
-  depositAmountLamports: number
+  requiredFeeLamports: number  // ONLY the fee amount needed
 ): Promise<void> {
   const balanceLamports = await connection.getBalance(operator)
   
-  // Fee calculation based on Privacy Cash docs + actual Solana costs
-  const PRIVACY_CASH_BASE_FEE = 0.006 * LAMPORTS_PER_SOL      // From Privacy Cash docs
-  const PRIVACY_CASH_PROTOCOL_FEE = Math.round(depositAmountLamports * 0.0035) // 0.35%
-  const NETWORK_TX_FEE = 0.002 * LAMPORTS_PER_SOL             // Standard Solana tx
-  const SAFETY_BUFFER = 0.005 * LAMPORTS_PER_SOL              // Realistic buffer for testing
+  // ✅ Minimum buffer for withdrawal - operator only pays fees, not the deposit
+  const MIN_WITHDRAWAL_BUFFER = requiredFeeLamports
+  const SAFETY_MARGIN = 0.005 * LAMPORTS_PER_SOL  // Small safety margin
   
-  const totalRequired = 
-    depositAmountLamports + 
-    PRIVACY_CASH_BASE_FEE + 
-    PRIVACY_CASH_PROTOCOL_FEE + 
-    NETWORK_TX_FEE + 
-    SAFETY_BUFFER
+  const totalRequired = MIN_WITHDRAWAL_BUFFER + SAFETY_MARGIN
 
   if (balanceLamports < totalRequired) {
     const requiredSOL = totalRequired / LAMPORTS_PER_SOL
     const availableSOL = balanceLamports / LAMPORTS_PER_SOL
     const shortfallSOL = (totalRequired - balanceLamports) / LAMPORTS_PER_SOL
     
-    console.error(`\n❌ OPERATOR BALANCE INSUFFICIENT`)
+    console.error(`\n❌ OPERATOR BALANCE INSUFFICIENT FOR WITHDRAWAL FEES`)
     console.error(`   Operator: ${operator.toString()}`)
     console.error(`   Available: ${availableSOL.toFixed(6)} SOL`)
-    console.error(`   Required: ${requiredSOL.toFixed(6)} SOL`)
+    console.error(`   Required (fees only): ${requiredSOL.toFixed(6)} SOL`)
     console.error(`   Shortfall: ${shortfallSOL.toFixed(6)} SOL\n`)
-    console.error(`Fee Breakdown:`)
-    console.error(`   - Deposit amount: ${(depositAmountLamports / LAMPORTS_PER_SOL).toFixed(6)} SOL`)
-    console.error(`   - Privacy Cash base fee: 0.006 SOL`)
-    console.error(`   - Privacy Cash protocol fee (0.35%): ${(PRIVACY_CASH_PROTOCOL_FEE / LAMPORTS_PER_SOL).toFixed(6)} SOL`)
-    console.error(`   - Network tx fee: 0.002 SOL`)
-    console.error(`   - Safety buffer: 0.005 SOL\n`)
+    console.error(`⚠️  NOTE: User pays the deposit amount - operator only pays withdrawal fees!\n`)
 
     throw new Error(
-      `Operator balance insufficient. Need ${requiredSOL.toFixed(6)} SOL, have ${availableSOL.toFixed(6)} SOL. ` +
+      `Operator balance insufficient for withdrawal fees. ` +
+      `Need ${requiredSOL.toFixed(6)} SOL, have ${availableSOL.toFixed(6)} SOL. ` +
       `Top up with at least ${shortfallSOL.toFixed(6)} SOL`
     )
   }
 
-  console.log(`✅ Operator balance check passed`)
+  console.log(`✅ Operator balance check passed (withdrawal fees only)`)
   console.log(`   Available: ${(balanceLamports / LAMPORTS_PER_SOL).toFixed(6)} SOL`)
   console.log(`   Required: ${(totalRequired / LAMPORTS_PER_SOL).toFixed(6)} SOL`)
   console.log(`   Buffer: ${((balanceLamports - totalRequired) / LAMPORTS_PER_SOL).toFixed(6)} SOL`)

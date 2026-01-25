@@ -38,19 +38,20 @@ function getOperator(): Keypair {
 /**
  * POST /api/claim-link
  *
- * REAL PrivacyCash withdrawal - Operator acts as RELAYER
- *
+ * ✅ CORRECT ARCHITECTURE:
+ * 
  * Flow:
- * 1. Frontend sends linkId + recipientAddress
- * 2. Backend verifies link + deposit exists
- * 3. Backend checks operator has fee buffer (0.01 SOL)
- * 4. Backend executes REAL PrivacyCash.withdraw() as RELAYER
- * 5. Backend records withdrawal transaction atomically
- *
- * CRITICAL:
- * - Operator is RELAYER only (pays network fees, not withdrawal amount)
- * - PrivacyCash handles the actual fund transfer (encrypted circuit proof)
- * - Operator balance guard checks FEE safety only, not withdrawal amount
+ * 1. User creates link - they will deposit their own SOL to Privacy Cash pool
+ * 2. User deposits their SOL directly to Privacy Cash (they pay the amount)
+ * 3. Recipient claims link - Backend executes withdrawal as RELAYER
+ * 4. Operator pays withdrawal fees only (0.01-0.02 SOL), NOT the deposit amount
+ * 
+ * Economic model:
+ * - User pays: Amount + deposit network fee (e.g., 0.017 SOL + 0.002 SOL)
+ * - Operator pays: Withdrawal fees only (base + protocol + network = ~0.013 SOL)
+ * - Recipient receives: Amount - withdrawal fees (e.g., 0.004 SOL)
+ * 
+ * CRITICAL: Operator is RELAYER only - does NOT pay the deposit amount!
  */
 router.post('/', async (req: Request, res: Response) => {
   try {
@@ -125,13 +126,23 @@ router.post('/', async (req: Request, res: Response) => {
     const operator = getOperator()
     const connection = new Connection(RPC)
 
-    // 🔒 BALANCE GUARD: Check operator has fee buffer only (NOT withdrawal amount)
-    // PrivacyCash handles the actual fund transfer, operator only pays network fees
-    await assertOperatorBalance(
-      connection,
-      operator.publicKey,
-      0.01 * LAMPORTS_PER_SOL  // FEE safety buffer only
-    )
+    // 🔒 BALANCE GUARD: Calculate withdrawal fees only (user paid the deposit!)
+    // Withdrawal fees include:
+    // - Privacy Cash base fee: 0.006 SOL
+    // - Privacy Cash protocol fee: 0.35%
+    // - Network tx fee: ~0.002 SOL
+    const WITHDRAWAL_BASE_FEE = 0.006 * LAMPORTS_PER_SOL
+    const WITHDRAWAL_PROTOCOL_FEE = Math.round(Number(link.lamports) * 0.0035)
+    const NETWORK_TX_FEE = 0.002 * LAMPORTS_PER_SOL
+    const totalWithdrawalFees = WITHDRAWAL_BASE_FEE + WITHDRAWAL_PROTOCOL_FEE + NETWORK_TX_FEE
+
+    console.log(`💰 Withdrawal fee breakdown:`)
+    console.log(`   - Base fee: 0.006 SOL`)
+    console.log(`   - Protocol fee (0.35%): ${(WITHDRAWAL_PROTOCOL_FEE / LAMPORTS_PER_SOL).toFixed(6)} SOL`)
+    console.log(`   - Network tx fee: 0.002 SOL`)
+    console.log(`   - Total fees: ${(totalWithdrawalFees / LAMPORTS_PER_SOL).toFixed(6)} SOL`)
+
+    await assertOperatorBalance(connection, operator.publicKey, totalWithdrawalFees)
 
     console.log(`🚀 Executing REAL PrivacyCash withdrawal for link ${linkId}`)
     console.log(`📤 Operator (relayer): ${operator.publicKey.toString()}`)
