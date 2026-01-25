@@ -43,10 +43,19 @@ export async function executeDeposit({
     if (import.meta.env.DEV) console.log(`📡 Using RPC: ${RPC}`)
     if (import.meta.env.DEV) console.log(`👤 Wallet: ${wallet.publicKey.toString()}`)
 
-    // Create PrivacyCash instance with USER wallet as owner
+    // ✅ Create wallet adapter wrapper for PrivacyCash
+    // PrivacyCash SDK needs a Keypair-like object with publicKey and signing methods
+    const walletAdapter = {
+      publicKey: wallet.publicKey,
+      signMessage: wallet.signMessage,
+      signTransaction: wallet.signTransaction,
+      signAllTransactions: wallet.signAllTransactions,
+    } as any
+
+    // Create PrivacyCash instance with wallet adapter
     const pc = new PrivacyCash({
       RPC_url: RPC,
-      owner: wallet,
+      owner: walletAdapter,
       enableDebug: import.meta.env.DEV,
     } as any)
 
