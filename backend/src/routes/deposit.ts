@@ -8,12 +8,39 @@ const router = Router()
 
 const RPC = process.env.SOLANA_RPC_URL || 'https://mainnet.helius-rpc.com'
 
-function getOperator() {
+function getOperator(): number[] {
   const secretKeyStr = process.env.OPERATOR_SECRET_KEY
-  if (!secretKeyStr) throw new Error('OPERATOR_SECRET_KEY not set')
-  
-  const secretKeyArray = JSON.parse(secretKeyStr)
-  return secretKeyArray
+  if (!secretKeyStr) {
+    throw new Error('OPERATOR_SECRET_KEY not set in environment variables')
+  }
+
+  try {
+    // ✅ Handle comma-separated format (no brackets)
+    if (secretKeyStr.startsWith('[') && secretKeyStr.endsWith(']')) {
+      // Format: [1,2,3,...,64]
+      return JSON.parse(secretKeyStr)
+    } else {
+      // Format: 1,2,3,...,64 (comma-separated, as stored in Railway)
+      const keyArray = secretKeyStr
+        .split(',')
+        .map(num => parseInt(num.trim(), 10))
+        .filter(num => !isNaN(num))
+      
+      if (keyArray.length !== 64) {
+        throw new Error(`Invalid key length: ${keyArray.length} (expected 64)`)
+      }
+      
+      return keyArray
+    }
+  } catch (err) {
+    console.error('❌ Failed to parse OPERATOR_SECRET_KEY:', err)
+    console.error('Raw value (first 50 chars):', secretKeyStr.substring(0, 50) + '...')
+    
+    throw new Error(
+      'Invalid OPERATOR_SECRET_KEY format. Expected 64 comma-separated numbers or JSON array. ' +
+      (secretKeyStr.startsWith('[') ? 'Detected: JSON format' : 'Detected: comma-separated format')
+    )
+  }
 }
 
 /**

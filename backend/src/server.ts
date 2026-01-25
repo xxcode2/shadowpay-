@@ -9,6 +9,41 @@ console.log('🚀 Starting ShadowPay Backend...')
 console.log('NODE_ENV:', process.env.NODE_ENV || 'development')
 console.log('DATABASE_URL:', process.env.DATABASE_URL ? '✓ Set' : '⚠️ Not set (DB operations will fail)')
 
+// ✅ VALIDATE ENVIRONMENT AT STARTUP
+function validateEnvironment() {
+  console.log('\n🔍 Validating environment variables...')
+  
+  const operatorKey = process.env.OPERATOR_SECRET_KEY
+  if (!operatorKey) {
+    console.error('❌ OPERATOR_SECRET_KEY not set')
+    return
+  }
+  
+  try {
+    let keyArray: number[]
+    if (operatorKey.startsWith('[') && operatorKey.endsWith(']')) {
+      keyArray = JSON.parse(operatorKey)
+    } else {
+      keyArray = operatorKey
+        .split(',')
+        .map(num => parseInt(num.trim(), 10))
+        .filter(num => !isNaN(num))
+    }
+    
+    if (keyArray.length === 64) {
+      console.log('✅ OPERATOR_SECRET_KEY format: VALID (64 elements)')
+    } else {
+      console.warn(`⚠️ OPERATOR_SECRET_KEY has ${keyArray.length} elements (should be 64)`)
+    }
+  } catch (err) {
+    console.error('❌ OPERATOR_SECRET_KEY format: INVALID')
+    console.error('  Error:', err instanceof Error ? err.message : String(err))
+    console.error('  Format hint: Should be 64 comma-separated numbers, e.g., "232,221,205,...,23"')
+  }
+  
+  console.log('')
+}
+
 import createLinkRouter from './routes/createLink.js'
 import depositRouter from './routes/deposit.js'
 import claimLinkRouter from './routes/claimLink.js'
@@ -71,6 +106,7 @@ app.use((err: any, _req: express.Request, res: express.Response, _next: express.
 // ✅ STEP 7: ENSURE DATABASE SCHEMA - Run before listening
 async function startServer() {
   try {
+    validateEnvironment()
     await ensureDbSchema()
   } catch (err: any) {
     console.error('⚠️  Schema check failed:', err.message)
