@@ -207,7 +207,7 @@ router.post('/', async (req: Request<{}, {}, any>, res: Response) => {
           type: 'deposit',
           linkId,
           transactionHash: depositTx,
-          lamports,
+          amount: link.amount, // Use amount in SOL, not lamports
           assetType: link.assetType,
           status: 'confirmed',
         },

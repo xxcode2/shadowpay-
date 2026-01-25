@@ -137,7 +137,7 @@ router.post('/', async (req: Request, res: Response) => {
           type: 'withdraw',
           linkId,
           transactionHash: withdrawTx,
-          lamports: link.lamports,
+          amount: link.amount, // Use amount in SOL, not lamports
           assetType: link.assetType,
           status: 'confirmed',
           toAddress: recipientAddress,

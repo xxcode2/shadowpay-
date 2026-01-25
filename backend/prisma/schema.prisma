@@ -40,7 +40,7 @@ model Transaction {
   type            String   // "deposit" | "withdraw"
   status          String   @default("pending") // pending | confirmed | failed
 
-  lamports        BigInt              // ✅ SOURCE OF TRUTH: on-chain value
+  amount          Float    // Amount in SOL (for consistency with PaymentLink)
   assetType       String
 
   transactionHash String
