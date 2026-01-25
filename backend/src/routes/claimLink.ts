@@ -1,5 +1,5 @@
 import { Router, Request, Response } from 'express'
-import { Connection, Keypair, LAMPORTS_PER_SOL } from '@solana/web3.js'
+import { Connection, Keypair, LAMPORTS_PER_SOL, PublicKey } from '@solana/web3.js'
 import prisma from '../lib/prisma.js'
 import { PrivacyCash } from 'privacycash'
 import { assertOperatorBalance } from '../utils/operatorBalanceGuard.js'
@@ -56,30 +56,69 @@ router.post('/', async (req: Request, res: Response) => {
   try {
     const { linkId, recipientAddress } = req.body
 
-    // ✅ Validation
+    // ✅ COMPREHENSIVE VALIDATION
     if (!linkId || typeof linkId !== 'string') {
-      return res.status(400).json({ error: 'linkId required' })
+      console.error('❌ Missing or invalid linkId')
+      return res.status(400).json({
+        error: 'Invalid or missing linkId',
+        details: 'linkId must be a non-empty string',
+      })
     }
 
     if (!recipientAddress || typeof recipientAddress !== 'string') {
-      return res.status(400).json({ error: 'recipientAddress required' })
+      console.error('❌ Missing or invalid recipientAddress')
+      return res.status(400).json({
+        error: 'Invalid or missing recipientAddress',
+        details: 'recipientAddress must be a valid Solana address',
+      })
     }
 
-    // ✅ Find link
+    // ✅ VALIDATE SOLANA ADDRESS FORMAT
+    let validPublicKey
+    try {
+      validPublicKey = new PublicKey(recipientAddress)
+    } catch (keyErr: any) {
+      console.error('❌ Invalid Solana address:', keyErr.message)
+      return res.status(400).json({
+        error: 'Invalid Solana address format',
+        details: keyErr.message,
+      })
+    }
+
+    // ✅ FIND LINK
     const link = await prisma.paymentLink.findUnique({
       where: { id: linkId },
     })
 
     if (!link) {
-      return res.status(404).json({ error: 'Link not found' })
+      console.error(`❌ Link not found: ${linkId}`)
+      return res.status(404).json({
+        error: 'Link not found',
+        details: `No link found with ID: ${linkId}`,
+      })
     }
 
-    if (!link.depositTx || link.depositTx === '') {
-      return res.status(400).json({ error: 'Link has no deposit' })
+    // ✅ CHECK DEPOSIT STATUS (CRITICAL)
+    if (!link.depositTx || link.depositTx.trim() === '') {
+      console.error(`❌ Link ${linkId} has no valid deposit transaction`)
+      return res.status(400).json({
+        error: 'Link has no valid deposit',
+        details: 'Please wait for deposit to confirm or create a new link',
+        linkStatus: {
+          amount: link.amount,
+          claimed: link.claimed,
+          hasDepositTx: !!link.depositTx,
+        },
+      })
     }
 
+    // ✅ CHECK CLAIM STATUS
     if (link.claimed) {
-      return res.status(400).json({ error: 'Link already claimed' })
+      console.error(`❌ Link ${linkId} already claimed by ${link.claimedBy}`)
+      return res.status(400).json({
+        error: 'Link already claimed',
+        details: `This link was claimed by ${link.claimedBy || 'unknown address'}`,
+      })
     }
 
     // ✅ Get operator keypair
@@ -154,9 +193,10 @@ router.post('/', async (req: Request, res: Response) => {
       message: 'Withdrawal completed successfully',
     })
   } catch (err: any) {
-    console.error('❌ CLAIM ERROR:', err.message)
+    console.error('❌ CLAIM ERROR:', err.message || err.toString())
     return res.status(500).json({
       error: err.message || 'Withdrawal failed',
+      details: process.env.NODE_ENV === 'development' ? err.toString() : undefined,
     })
   }
 })
