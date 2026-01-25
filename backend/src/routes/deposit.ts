@@ -1,6 +1,6 @@
 import { Router, Request, Response } from 'express'
 import { LAMPORTS_PER_SOL, PublicKey } from '@solana/web3.js'
-import * as nacl from 'tweetnacl'
+import nacl from 'tweetnacl'
 import prisma from '../lib/prisma.js'
 import { PrivacyCash } from 'privacycash'
 
@@ -74,17 +74,22 @@ router.post('/', async (req: Request<{}, {}, any>, res: Response) => {
 
     // ✅ Verify signature (optional but recommended)
     if (process.env.NODE_ENV !== 'development') {
-      const message = new TextEncoder().encode(
-        `Authorize deposit of ${amount} SOL for link ${linkId}`
-      )
-      const isValid = nacl.sign.detached.verify(
-        message,
-        new Uint8Array(signature),
-        new PublicKey(publicKey).toBytes()
-      )
+      try {
+        const message = new TextEncoder().encode(
+          `Authorize deposit of ${amount} SOL for link ${linkId}`
+        )
+        const isValid = nacl.sign.detached.verify(
+          message,
+          new Uint8Array(signature),
+          new PublicKey(publicKey).toBytes()
+        )
 
-      if (!isValid) {
-        return res.status(401).json({ error: 'Invalid signature' })
+        if (!isValid) {
+          return res.status(401).json({ error: 'Invalid signature' })
+        }
+      } catch (sigErr: any) {
+        console.error('❌ Signature verification failed:', sigErr.message)
+        return res.status(401).json({ error: `Signature verification failed: ${sigErr.message}` })
       }
     }
 
@@ -98,52 +103,64 @@ router.post('/', async (req: Request<{}, {}, any>, res: Response) => {
     const operator = getOperator()
     const lamports = Math.round(amount * LAMPORTS_PER_SOL)
 
-    const pc = new PrivacyCash({
-      RPC_url: RPC,
-      owner: operator,
-      enableDebug: process.env.NODE_ENV === 'development',
-    } as any)
+    try {
+      const pc = new PrivacyCash({
+        RPC_url: RPC,
+        owner: operator,
+        enableDebug: process.env.NODE_ENV === 'development',
+      } as any)
 
-    const depositResult = await pc.deposit({ lamports })
-    const depositTx = depositResult.tx
+      if (process.env.NODE_ENV === 'development') {
+        console.log(`🏦 [DEPOSIT] Executing PrivacyCash deposit: ${lamports} lamports`)
+      }
 
-    if (process.env.NODE_ENV === 'development') {
-      console.log(`✅ [DEPOSIT] Deposit successful: ${depositTx}`)
-    }
+      const depositResult = await pc.deposit({ lamports })
+      const depositTx = depositResult.tx
 
-    // ✅ Record deposit in database
-    await prisma.paymentLink.update({
-      where: { id: linkId },
-      data: {
-        depositTx,
-      },
-    })
+      if (process.env.NODE_ENV === 'development') {
+        console.log(`✅ [DEPOSIT] Deposit successful: ${depositTx}`)
+      }
 
-    // ✅ Create transaction record
-    await prisma.transaction.create({
-      data: {
-        type: 'deposit',
+      // ✅ Record deposit in database
+      await prisma.paymentLink.update({
+        where: { id: linkId },
+        data: {
+          depositTx,
+        },
+      })
+
+      // ✅ Create transaction record
+      await prisma.transaction.create({
+        data: {
+          type: 'deposit',
+          linkId,
+          transactionHash: depositTx,
+          lamports,
+          assetType: link.assetType,
+          status: 'confirmed',
+        },
+      })
+
+      console.log(`✅ Deposit executed and recorded: ${depositTx}`)
+
+      return res.status(200).json({
+        success: true,
         linkId,
-        transactionHash: depositTx,
-        lamports,
-        assetType: link.assetType,
-        status: 'confirmed',
-      },
-    })
-
-    console.log(`✅ Deposit executed and recorded: ${depositTx}`)
-
-    return res.status(200).json({
-      success: true,
-      linkId,
-      depositTx,
-      message: 'Deposit executed successfully. Ready to claim.',
-    })
+        depositTx,
+        message: 'Deposit executed successfully. Ready to claim.',
+      })
+    } catch (depositErr: any) {
+      console.error('❌ PrivacyCash deposit error:', depositErr.message)
+      return res.status(500).json({
+        error: `Deposit failed: ${depositErr.message || depositErr.toString()}`,
+      })
+    }
   } catch (error) {
-    console.error('❌ Deposit execution error:', error)
+    console.error('❌ Deposit request error:', error)
     return res.status(500).json({
       error: error instanceof Error ? error.message : 'Failed to execute deposit',
     })
+
   }
 })
 
