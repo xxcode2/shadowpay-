@@ -1,12 +1,16 @@
-import { executeDeposit, SigningWallet } from './depositFlow'
-
 /**
- * Complete flow: Create link + Real deposit by USER
+ * CORRECT ARCHITECTURE: Frontend signs for authorization, Backend executes with operator
  * 
  * 1. Create link metadata on backend
- * 2. User executes REAL PrivacyCash deposit via Phantom
- * 3. Notify backend to record the tx hash
+ * 2. User signs authorization message with Phantom (no PrivacyCash SDK in browser)
+ * 3. Send authorization signature to backend
+ * 4. Backend executes REAL PrivacyCash deposit with OPERATOR wallet
  */
+export interface SigningWallet {
+  publicKey: { toString(): string }
+  signMessage(message: Uint8Array): Promise<Uint8Array>
+}
+
 export async function createLink({
   amountSOL,
   wallet,
@@ -37,38 +41,44 @@ export async function createLink({
     const { linkId } = await createRes.json()
     if (import.meta.env.DEV) console.log(`✅ Link created: ${linkId}`)
 
-    // 2️⃣ REAL deposit by USER wallet
-    const lamports = Math.round(amountSOL * 1e9)
-    console.log(`💰 Prompting wallet for REAL deposit (${amountSOL} SOL)...`)
-    console.log(`⏳ Waiting for Phantom wallet approval...`)
+    // 2️⃣ User signs authorization message with Phantom
+    console.log(`🔐 Signing authorization message...`)
+    const message = new TextEncoder().encode(
+      `Authorize deposit of ${amountSOL} SOL for link ${linkId}`
+    )
     
-    let depositTx: string
+    let signature: Uint8Array
     try {
-      depositTx = await executeDeposit({ lamports, wallet })
-    } catch (depositErr: any) {
-      console.error('❌ DEPOSIT FAILED:', depositErr)
-      throw new Error(`Deposit failed: ${depositErr.message || depositErr.toString()}`)
+      signature = await wallet.signMessage(message)
+    } catch (signErr: any) {
+      console.error('❌ USER REJECTED SIGNATURE')
+      throw new Error(`Signature cancelled by user`)
     }
 
-    console.log(`✅ Deposit completed: ${depositTx}`)
+    console.log(`✅ Authorization signed`)
 
-    // 3️⃣ Notify backend to record the tx hash
-    if (import.meta.env.DEV) console.log(`📡 Recording deposit tx on backend...`)
-    const recordRes = await fetch(`${BACKEND_URL}/api/deposit`, {
+    // 3️⃣ Send authorization to backend (backend executes real deposit with operator)
+    if (import.meta.env.DEV) console.log(`📡 Sending authorization to backend...`)
+    const depositRes = await fetch(`${BACKEND_URL}/api/deposit`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ 
-        linkId, 
-        depositTx 
+        linkId,
+        signature: Array.from(signature), // Convert Uint8Array to array
+        publicKey: wallet.publicKey.toString(),
+        amount: amountSOL,
       }),
     })
 
-    if (!recordRes.ok) {
-      const errorText = await recordRes.text()
-      throw new Error(`Failed to record deposit: ${recordRes.statusText} - ${errorText}`)
+    if (!depositRes.ok) {
+      const errorText = await depositRes.text()
+      throw new Error(`Backend deposit failed: ${depositRes.statusText} - ${errorText}`)
     }
 
-    if (import.meta.env.DEV) console.log(`✅ Deposit recorded on backend`)
+    const depositResult = await depositRes.json()
+    const depositTx = depositResult.depositTx
+
+    console.log(`✅ Backend executed deposit: ${depositTx}`)
     return { linkId, depositTx }
   } catch (err: any) {
     console.error('❌ CREATE LINK FLOW ERROR:', err)
