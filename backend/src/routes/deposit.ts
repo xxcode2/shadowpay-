@@ -1,14 +1,15 @@
 import { Router, Request, Response } from 'express'
-import { LAMPORTS_PER_SOL, PublicKey } from '@solana/web3.js'
+import { LAMPORTS_PER_SOL, PublicKey, Connection, Keypair } from '@solana/web3.js'
 import nacl from 'tweetnacl'
 import prisma from '../lib/prisma.js'
 import { PrivacyCash } from 'privacycash'
+import { assertOperatorBalance } from '../utils/operatorBalanceGuard.js'
 
 const router = Router()
 
 const RPC = process.env.SOLANA_RPC_URL || 'https://mainnet.helius-rpc.com'
 
-function getOperator(): number[] {
+function getOperator(): Keypair {
   const secretKeyStr = process.env.OPERATOR_SECRET_KEY
   if (!secretKeyStr) {
     throw new Error('OPERATOR_SECRET_KEY not set in environment variables')
@@ -16,29 +17,31 @@ function getOperator(): number[] {
 
   try {
     // ✅ Handle comma-separated format (no brackets)
+    let keyArray: number[]
     if (secretKeyStr.startsWith('[') && secretKeyStr.endsWith(']')) {
       // Format: [1,2,3,...,64]
-      return JSON.parse(secretKeyStr)
+      keyArray = JSON.parse(secretKeyStr)
     } else {
       // Format: 1,2,3,...,64 (comma-separated, as stored in Railway)
-      const keyArray = secretKeyStr
+      keyArray = secretKeyStr
         .split(',')
         .map(num => parseInt(num.trim(), 10))
         .filter(num => !isNaN(num))
-      
-      if (keyArray.length !== 64) {
-        throw new Error(`Invalid key length: ${keyArray.length} (expected 64)`)
-      }
-      
-      return keyArray
     }
+    
+    if (keyArray.length !== 64) {
+      throw new Error(`Invalid key length: ${keyArray.length} (expected 64)`)
+    }
+    
+    // ✅ Create proper Keypair from secret key array
+    const secretKey = Uint8Array.from(keyArray)
+    return Keypair.fromSecretKey(secretKey)
   } catch (err) {
     console.error('❌ Failed to parse OPERATOR_SECRET_KEY:', err)
     console.error('Raw value (first 50 chars):', secretKeyStr.substring(0, 50) + '...')
     
     throw new Error(
-      'Invalid OPERATOR_SECRET_KEY format. Expected 64 comma-separated numbers or JSON array. ' +
-      (secretKeyStr.startsWith('[') ? 'Detected: JSON format' : 'Detected: comma-separated format')
+      'Invalid OPERATOR_SECRET_KEY format. Expected 64 comma-separated numbers or JSON array.'
     )
   }
 }
@@ -123,22 +126,40 @@ router.post('/', async (req: Request<{}, {}, any>, res: Response) => {
       }
     }
 
-    // ✅ Execute REAL PrivacyCash deposit with OPERATOR wallet
-    if (process.env.NODE_ENV === 'development') {
-      console.log(`🔐 [DEPOSIT] Executing PrivacyCash deposit for link: ${linkId}`)
-      console.log(`   Amount: ${amount} SOL (${Math.round(amount * 1e9)} lamports)`)
-      console.log(`   User: ${publicKey}`)
-    }
-
+    // ✅ Get operator and validate balance BEFORE attempting deposit
     const operator = getOperator()
     const lamports = Math.round(amount * LAMPORTS_PER_SOL)
+    
+    if (process.env.NODE_ENV === 'development') {
+      console.log(`🔐 [DEPOSIT] Validating operator balance for: ${lamports} lamports`)
+    }
+
+    // Check operator balance before proceeding
+    try {
+      const connection = new Connection(RPC)
+      await assertOperatorBalance(connection, operator.publicKey, lamports)
+    } catch (balanceErr: any) {
+      console.error('❌ Balance check failed:', balanceErr.message)
+      return res.status(400).json({
+        error: 'Operator wallet underfunded',
+        details: balanceErr.message,
+        solution: 'Top up operator wallet with sufficient SOL'
+      })
+    }
 
     try {
+      if (process.env.NODE_ENV === 'development') {
+        console.log(`🏦 [DEPOSIT] Executing PrivacyCash deposit for link: ${linkId}`)
+        console.log(`   Amount: ${amount} SOL (${lamports} lamports)`)
+        console.log(`   User: ${publicKey}`)
+      }
+
       const pc = new PrivacyCash({
         RPC_url: RPC,
         owner: operator,
         enableDebug: process.env.NODE_ENV === 'development',
       } as any)
+
 
       if (process.env.NODE_ENV === 'development') {
         console.log(`🏦 [DEPOSIT] Executing PrivacyCash deposit: ${lamports} lamports`)
