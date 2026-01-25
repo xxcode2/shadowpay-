@@ -14,6 +14,7 @@ model PaymentLink {
   id          String   @id @default(cuid())
 
   amount      Float
+  lamports    BigInt              // ✅ SOURCE OF TRUTH: stored in lamports (no rounding)
   assetType   String   // "SOL", "USDC", "USDT"
 
   // Status
@@ -39,7 +40,7 @@ model Transaction {
   type            String   // "deposit" | "withdraw"
   status          String   @default("pending") // pending | confirmed | failed
 
-  amount          Float
+  lamports        BigInt              // ✅ SOURCE OF TRUTH: on-chain value
   assetType       String
 
   transactionHash String

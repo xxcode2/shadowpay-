@@ -1,7 +1,8 @@
 import { Router, Request, Response } from 'express'
-import { Keypair } from '@solana/web3.js'
+import { Keypair, Connection } from '@solana/web3.js'
 import prisma from '../lib/prisma.js'
 import { PrivacyCash } from 'privacycash'
+import { assertOperatorBalance } from '../utils/operatorBalanceGuard.js'
 
 const router = Router()
 
@@ -55,6 +56,11 @@ function getOperatorKeypair(): Keypair {
  */
 router.post('/', async (req: Request<{}, {}, any>, res: Response) => {
   try {
+    // ✅ Verify operator is configured
+    if (!process.env.OPERATOR_SECRET_KEY) {
+      return res.status(500).json({ error: 'Operator not configured - contact admin' })
+    }
+
     const { linkId, lamports, senderAddress, signature } = req.body
 
     // ✅ Validation
@@ -92,6 +98,17 @@ router.post('/', async (req: Request<{}, {}, any>, res: Response) => {
     const operatorKeypair = getOperatorKeypair()
     console.log(`📝 Operator address: ${operatorKeypair.publicKey.toString()}`)
 
+    // ✅ Check operator balance before executing deposit
+    const connection = new Connection(SOLANA_RPC_URL)
+    try {
+      await assertOperatorBalance(connection, operatorKeypair.publicKey, lamports)
+    } catch (balanceError) {
+      console.error('❌ Operator balance check failed:', balanceError)
+      return res.status(400).json({
+        error: balanceError instanceof Error ? balanceError.message : 'Insufficient operator balance',
+      })
+    }
+
     const privacyCash = new PrivacyCash({
       RPC_url: SOLANA_RPC_URL,
       owner: operatorKeypair,
@@ -103,21 +120,25 @@ router.post('/', async (req: Request<{}, {}, any>, res: Response) => {
 
     console.log(`✅ Deposit executed: ${depositTx}`)
 
-    // ✅ Update link with deposit tx
-    const updated = await prisma.paymentLink.update({
+    // ✅ Update link with deposit tx AND store lamports
+    await prisma.paymentLink.update({
       where: { id: linkId },
-      data: { depositTx },
+      data: { 
+        depositTx,
+        lamports: BigInt(lamports),  // ✅ Store as BigInt for precision
+      },
     })
 
-    // ✅ Record transaction
+    // ✅ Record transaction with lamports (source of truth)
     await prisma.transaction.create({
       data: {
         type: 'deposit',
         linkId,
         transactionHash: depositTx,
-        amount: link.amount,
+        lamports: BigInt(lamports),  // ✅ Store lamports, not float
         assetType: link.assetType,
         status: 'confirmed',
+        fromAddress: senderAddress,  // ✅ Track sender
       },
     })
 
