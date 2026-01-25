@@ -4,6 +4,7 @@ import nacl from 'tweetnacl'
 import prisma from '../lib/prisma.js'
 import { PrivacyCash } from 'privacycash'
 import { assertOperatorBalance } from '../utils/operatorBalanceGuard.js'
+import { validateOperatorAccount } from '../utils/walletValidator.js'
 
 const router = Router()
 
@@ -126,17 +127,37 @@ router.post('/', async (req: Request<{}, {}, any>, res: Response) => {
       }
     }
 
-    // ✅ Get operator and validate balance BEFORE attempting deposit
+    // ✅ Get operator and validate account BEFORE attempting deposit
     const operator = getOperator()
     const lamports = Math.round(amount * LAMPORTS_PER_SOL)
+    const connection = new Connection(RPC)
     
     if (process.env.NODE_ENV === 'development') {
-      console.log(`🔐 [DEPOSIT] Validating operator balance for: ${lamports} lamports`)
+      console.log(`🔐 [DEPOSIT] Validating operator wallet for: ${lamports} lamports`)
+    }
+
+    // ✅ CRITICAL: Check that operator wallet is CLEAN (no data)
+    const accountValidation = await validateOperatorAccount(connection, operator.publicKey)
+    if (!accountValidation.isValid) {
+      console.error('❌ Operator account validation failed:', accountValidation.reason)
+      return res.status(400).json({
+        error: 'Operator wallet configuration error',
+        details: accountValidation.reason,
+        action: 'Create a NEW clean SOL wallet: solana-keygen new --no-passphrase -o operator-key.json'
+      })
+    }
+
+    if (process.env.NODE_ENV === 'development') {
+      console.log(`✅ Operator wallet is CLEAN (no associated data)`)
+    }
+
+    // ✅ Check balance
+    if (process.env.NODE_ENV === 'development') {
+      console.log(`💰 [DEPOSIT] Checking operator balance...`)
     }
 
     // Check operator balance before proceeding
     try {
-      const connection = new Connection(RPC)
       await assertOperatorBalance(connection, operator.publicKey, lamports)
     } catch (balanceErr: any) {
       console.error('❌ Balance check failed:', balanceErr.message)
