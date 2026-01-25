@@ -10,7 +10,7 @@ console.log('NODE_ENV:', process.env.NODE_ENV || 'development')
 console.log('DATABASE_URL:', process.env.DATABASE_URL ? '✓ Set' : '⚠️ Not set (DB operations will fail)')
 
 // ✅ VALIDATE ENVIRONMENT AT STARTUP
-function validateEnvironment() {
+async function validateEnvironment() {
   console.log('\n🔍 Validating environment variables...')
   
   const operatorKey = process.env.OPERATOR_SECRET_KEY
@@ -32,6 +32,19 @@ function validateEnvironment() {
     
     if (keyArray.length === 64) {
       console.log('✅ OPERATOR_SECRET_KEY format: VALID (64 elements)')
+      
+      // ✅ SHOW OPERATOR PUBLIC KEY (for topping up)
+      try {
+        const { Keypair } = await import('@solana/web3.js')
+        const secretKey = Uint8Array.from(keyArray)
+        const operatorKeypair = Keypair.fromSecretKey(secretKey)
+        console.log(`\n💰 OPERATOR WALLET PUBLIC KEY:`)
+        console.log(`   ${operatorKeypair.publicKey.toString()}\n`)
+        console.log(`⚠️  SEND SOL TO THIS ADDRESS TO TOP UP OPERATOR WALLET`)
+        console.log(`    Recommended: 0.1 SOL minimum for testing\n`)
+      } catch (err) {
+        console.error('Could not derive public key:', err)
+      }
     } else {
       console.warn(`⚠️ OPERATOR_SECRET_KEY has ${keyArray.length} elements (should be 64)`)
     }
@@ -106,7 +119,7 @@ app.use((err: any, _req: express.Request, res: express.Response, _next: express.
 // ✅ STEP 7: ENSURE DATABASE SCHEMA - Run before listening
 async function startServer() {
   try {
-    validateEnvironment()
+    await validateEnvironment()
     await ensureDbSchema()
   } catch (err: any) {
     console.error('⚠️  Schema check failed:', err.message)
