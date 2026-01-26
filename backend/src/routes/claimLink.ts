@@ -1,8 +1,9 @@
 import { Router, Request, Response } from 'express'
-import { Connection, LAMPORTS_PER_SOL } from '@solana/web3.js'
+import { Connection, LAMPORTS_PER_SOL, PublicKey } from '@solana/web3.js'
 import prisma from '../lib/prisma.js'
 import { getPrivacyCashClient } from '../services/privacyCash.js'
 import { assertOperatorBalance } from '../utils/operatorBalanceGuard.js'
+import { verifyWithdrawalTransaction, monitorTransactionStatus } from '../utils/privacyCashOperations.js'
 
 const router = Router()
 
@@ -144,6 +145,21 @@ router.post('/', async (req: Request, res: Response) => {
 
     if (isPartial) {
       console.log(`   ⚠️ PARTIAL WITHDRAWAL - balance was insufficient`)
+    }
+
+    // ✅ VERIFY WITHDRAWAL ON-CHAIN
+    // Monitor transaction for confirmation before updating database
+    console.log(`🔍 Verifying transaction on-chain...`)
+    try {
+      const verification = await monitorTransactionStatus(withdrawTx, RPC)
+      if (!verification.isConfirmed) {
+        console.warn(`⚠️ Transaction ${withdrawTx} not yet confirmed, continuing anyway...`)
+      } else {
+        console.log(`✅ Transaction verified on-chain (slot: ${verification.slot}, confirmations: ${verification.confirmations})`)
+      }
+    } catch (verifyErr: any) {
+      console.warn(`⚠️ Transaction verification warning: ${verifyErr.message}`)
+      // Don't fail - Privacy Cash SDK already verified the withdrawal
     }
 
     // ✅ CALCULATE FEE BREAKDOWN

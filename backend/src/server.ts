@@ -63,6 +63,8 @@ import claimLinkRouter from './routes/claimLink.js'
 import linkRouter from './routes/link.js'
 import historyRouter from './routes/history.js'
 import configRouter from './routes/config.js'
+import healthRouter from './routes/health.js'
+import tokensRouter from './routes/tokens.js'
 
 const app = express()
 
@@ -101,6 +103,8 @@ app.use('/api/claim-link', claimLinkRouter)
 app.use('/api/link', linkRouter)
 app.use('/api/history', historyRouter)
 app.use('/api/config', configRouter)
+app.use('/api/health', healthRouter)
+app.use('/api/tokens', tokensRouter)
 
 // ✅ STEP 5: 404 HANDLER - Must come AFTER routes
 app.use((_req: express.Request, res: express.Response) => {

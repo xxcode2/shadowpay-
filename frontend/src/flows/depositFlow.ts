@@ -1,6 +1,18 @@
 import { PublicKey, LAMPORTS_PER_SOL } from '@solana/web3.js'
 import { PrivacyCash } from 'privacycash'
 import { CONFIG } from '../config'
+import {
+  validateDepositAmount,
+  validateSolanaAddress,
+  formatLamportsToSOL,
+  initializePrivacyCashClient,
+  mapPrivacyCashError,
+  assessDepositPrivacy,
+  buildDepositDetails,
+  createDepositErrorContext,
+  getExplorerUrl,
+  estimateTransactionFees,
+} from '../utils/privacyCashUtils'
 
 /**
  * ✅ IMPLEMENTASI PRIVACY CASH SDK SESUAI DOKUMENTASI RESMI
@@ -9,41 +21,115 @@ import { CONFIG } from '../config'
  * ✅ User signature request untuk derivasi encryption key
  * ✅ Encryption dan privacy-preserving protocol
  * ✅ Direct deposit ke Privacy Cash shielded pool
+ * ✅ Comprehensive validation dan error handling
  * 
  * Dokumentasi: https://privacycash.mintlify.app/sdk/overview-copied-1
  */
 
-export async function executeRealDeposit({
-  lamports,
-  wallet,
-  linkId,
-}: {
+export interface DepositResult {
+  tx: string
+  amountSOL: string
+  amountLamports: number
+  explorerUrl: string
+  message: string
+}
+
+export interface DepositRequest {
   lamports: number
   wallet: any
   linkId: string
-}): Promise<{ tx: string }> {
+  skipPrivacyWarning?: boolean
+}
+
+/**
+ * Validate deposit request before execution
+ */
+export function validateDepositRequest(request: DepositRequest): {
+  isValid: boolean
+  errors: string[]
+  warnings: string[]
+} {
+  const errors: string[] = []
+  const warnings: string[] = []
+
+  // Validate lamports
+  const amountValidation = validateDepositAmount(request.lamports)
+  if (!amountValidation.isValid) {
+    errors.push(amountValidation.error || 'Invalid amount')
+  } else if (amountValidation.error && !amountValidation.isValid) {
+    warnings.push(amountValidation.error)
+  }
+
+  // Validate wallet
+  if (!request.wallet) {
+    errors.push('Wallet is required')
+  }
+
+  // Validate linkId
+  if (!request.linkId || typeof request.linkId !== 'string') {
+    errors.push('Valid linkId is required')
+  }
+
+  // Privacy assessment
+  if (!request.skipPrivacyWarning) {
+    const privacyAssessment = assessDepositPrivacy(request.lamports)
+    if (!privacyAssessment.isPrivacySafe) {
+      warnings.push(...privacyAssessment.recommendations)
+    }
+  }
+
+  return {
+    isValid: errors.length === 0,
+    errors,
+    warnings,
+  }
+}
+
+/**
+ * Execute deposit with comprehensive validation and error handling
+ */
+export async function executeRealDeposit(
+  request: DepositRequest
+): Promise<DepositResult> {
+  const startTime = Date.now()
+  
   try {
-    const amountSOL = (lamports / LAMPORTS_PER_SOL).toFixed(6)
-    console.log(`🚀 Executing REAL deposit of ${amountSOL} SOL to Privacy Cash pool`)
-    console.log(`   📋 User akan sign offchain message untuk encryption key`)
+    // ✅ VALIDATE REQUEST
+    console.log('🔍 Validating deposit request...')
+    const validation = validateDepositRequest(request)
+
+    if (!validation.isValid) {
+      throw new Error(`Validation failed: ${validation.errors.join(', ')}`)
+    }
+
+    if (validation.warnings.length > 0) {
+      console.warn('⚠️ Privacy warnings:', validation.warnings)
+    }
+
+    const { lamports, wallet, linkId } = request
+    const amountSOL = formatLamportsToSOL(lamports)
+
+    console.log(`🚀 Executing deposit of ${amountSOL} SOL to Privacy Cash pool`)
+    console.log(`   📋 Payment Link: ${linkId}`)
+    console.log(`   💰 Amount: ${amountSOL} SOL (${lamports} lamports)`)
+    console.log(`   📊 Estimated Fees:`)
+    const fees = estimateTransactionFees()
+    console.log(`      - Network Fee: ${fees.networkFee} SOL`)
+    console.log(`      - Protocol Fee: ${fees.protocolFee} SOL`)
     console.log(`   ⭐ Phantom popup: "Sign message: Privacy Money account sign in"`)
 
     // ✅ INITIALIZE PRIVACYCASH SDK
-    // SDK akan handle:
-    // 1. Request user signature untuk encrypt data
-    // 2. Derive encryption key dari signature
-    // 3. Create shielded transaction
-    // 4. Submit to Privacy Cash pool
     console.log('🚀 Initializing Privacy Cash SDK...')
     const RPC_URL = CONFIG.SOLANA_RPC_URL || 'https://mainnet.helius-rpc.com'
 
-    const pc = new PrivacyCash({
-      RPC_url: RPC_URL,
-      owner: wallet, // Wallet adapter atau Keypair
-      enableDebug: import.meta.env.DEV,
-    } as any)
+    const pc = initializePrivacyCashClient(
+      RPC_URL,
+      wallet,
+      import.meta.env.DEV
+    )
 
     console.log('✅ Privacy Cash SDK initialized')
+    console.log('   🔐 Waiting for wallet signature...')
 
     // ✅ EXECUTE DEPOSIT
     // SDK akan:
@@ -51,16 +137,17 @@ export async function executeRealDeposit({
     // 2. Derive encryption key dari signature
     // 3. Create shielded deposit transaction
     // 4. Submit to blockchain
-    console.log(`⏳ Executing deposit (${amountSOL} SOL)...`)
+    console.log(`⏳ Creating deposit transaction (${amountSOL} SOL)...`)
     console.log(`   💬 Check Phantom popup for signature request`)
 
     const { tx } = await pc.deposit({ lamports })
 
-    console.log(`✅ Deposit successful! Transaction: ${tx}`)
+    console.log(`✅ Deposit transaction confirmed! Transaction: ${tx}`)
     console.log(`   ${amountSOL} SOL transferred to Privacy Cash shielded pool`)
+    console.log(`   ⏱️ Transaction created in ${Date.now() - startTime}ms`)
 
     // ✅ RECORD DEPOSIT DI BACKEND (HANYA RECORD, BUKAN EKSEKUSI)
-    console.log(`📤 Notifying backend about deposit...`)
+    console.log(`📤 Recording deposit in backend...`)
     const BACKEND_URL =
       import.meta.env.VITE_BACKEND_URL ||
       'https://shadowpay-backend-production.up.railway.app'
@@ -83,20 +170,42 @@ export async function executeRealDeposit({
       throw new Error(`Backend recording error: ${errorData.error || recordRes.statusText}`)
     }
 
-    console.log(`✅ Backend notified successfully`)
-    return { tx }
+    console.log(`✅ Deposit recorded successfully in backend`)
+    console.log(`   📝 Link: ${linkId}`)
+    console.log(`   💾 Transaction Hash: ${tx}`)
+    console.log(`   ⏱️ Total time: ${Date.now() - startTime}ms`)
+
+    const explorerUrl = getExplorerUrl(tx)
+    console.log(`   🔗 View on Explorer: ${explorerUrl}`)
+
+    return {
+      tx,
+      amountSOL,
+      amountLamports: lamports,
+      explorerUrl,
+      message: `✅ Deposit successful! ${amountSOL} SOL has been transferred to your Privacy Cash shielded pool.`,
+    }
   } catch (err: any) {
-    console.error('❌ PrivacyCash deposit failed:', err)
+    console.error('❌ Deposit failed:', err)
 
-    // ✅ USER-FRIENDLY ERROR MESSAGES
-    if (err.message?.toLowerCase().includes('user rejected')) {
-      throw new Error('❌ Signature cancelled. Please approve the Phantom popup to continue.')
-    }
+    // ✅ CREATE ERROR CONTEXT
+    const errorContext = createDepositErrorContext(err, {
+      lamports: request.lamports,
+      wallet: request.wallet?.publicKey?.toString(),
+      linkId: request.linkId,
+      rpcUrl: CONFIG.SOLANA_RPC_URL,
+    })
 
-    if (err.message?.toLowerCase().includes('insufficient')) {
-      throw new Error('❌ Insufficient balance. Please check your wallet balance.')
-    }
+    console.error('📋 Error Context:', errorContext)
 
-    throw new Error(`❌ Deposit failed: ${err.message || 'Unknown error'}`)
+    // ✅ MAP ERROR TO USER-FRIENDLY MESSAGE
+    const userMessage = mapPrivacyCashError(err)
+
+    // Create detailed error for throwing
+    const depositError = new Error(userMessage)
+    ;(depositError as any).context = errorContext
+    ;(depositError as any).originalError = err
+
+    throw depositError
   }
 }
