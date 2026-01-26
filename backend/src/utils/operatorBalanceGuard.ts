@@ -35,12 +35,14 @@ export async function assertOperatorBalance(
       return
     }
     
+    const operatorAddress = publicKey.toString()
     throw new Error(
-      `Operator balance insufficient!\n` +
-      `Required: ${requiredSOL.toFixed(6)} SOL\n` +
-      `Available: ${availableSOL.toFixed(6)} SOL\n` +
-      `Shortfall: ${shortfallSOL.toFixed(6)} SOL\n` +
-      `Environment: ${process.env.NODE_ENV || 'production'}`
+      `No enough balance to withdraw. ` +
+      `Operator (relayer) wallet insufficient balance: ` +
+      `Available ${availableSOL.toFixed(6)} SOL, ` +
+      `need ${requiredSOL.toFixed(6)} SOL ` +
+      `(shortfall: ${shortfallSOL.toFixed(6)} SOL). ` +
+      `Please send SOL to operator wallet: ${operatorAddress}`
     )
   }
 }
