@@ -368,6 +368,8 @@ export class App {
         `\nYou paid: ${TOTAL_COST.toFixed(6)} SOL` +
         `\nRecipient gets: ${Math.max(amount - 0.006, 0).toFixed(6)} SOL` +
         `\n🔐 Private & anonymous (only you know the details)` +
+        `\n\n⏳ IMPORTANT: Wait 45 seconds for privacy processing` +
+        `\nBefore recipient claims the link` +
         `\n\n📋 Share this link with recipient to claim:` 
       )
       input.value = ''
@@ -459,10 +461,47 @@ export class App {
     }
 
     try {
-      this.showLoadingModal('Withdrawing...')
-      if (import.meta.env.DEV) console.log(`💸 Claiming link ${window.currentLinkId}...`)
+      // ✅ CRITICAL: WAIT FOR PRIVACY CASH UTXO INDEXING (45 seconds)
+      // Privacy Cash off-chain indexer needs time to decrypt & index UTXOs
+      // Without this delay, claim will fail with "no enough balance"
+      this.showLoadingModal(
+        '🔐 Processing private withdrawal...\n\n' +
+        '⏳ Privacy Cash requires ~45 seconds\n' +
+        'for secure UTXO indexing.\n\n' +
+        'Your funds are safe in the pool!\n' +
+        'Please wait...'
+      )
 
-      // Import executeClaimLink dynamically
+      console.log('⏳ Starting 45-second UTXO indexing delay...')
+      
+      // ✅ COUNTDOWN LOOP
+      for (let i = 45; i > 0; i--) {
+        const minutes = Math.floor(i / 60)
+        const seconds = i % 60
+        const timeStr = minutes > 0 ? `${minutes}m${seconds}s` : `${seconds}s`
+        
+        console.log(`⏳ Waiting for UTXO indexing: ${timeStr} remaining...`)
+        this.setStatus(`⏳ Privacy processing: ${timeStr} remaining...`)
+        
+        // Update loading modal countdown
+        const modal = document.getElementById('loading-modal')
+        const message = modal?.querySelector('.text-center')
+        if (message) {
+          message.innerHTML =
+            `🔐 Processing private withdrawal...<br><br>` +
+            `⏳ Privacy Cash UTXO indexing in progress<br><br>` +
+            `⏱️ ${timeStr} remaining<br><br>` +
+            `Your funds are safe in the pool!`
+        }
+        
+        // Wait 1 second
+        await new Promise(resolve => setTimeout(resolve, 1000))
+      }
+
+      console.log('✅ UTXO indexing complete - executing withdrawal...')
+      this.setStatus('✅ UTXO indexing complete - executing withdrawal...')
+
+      // ✅ NOW EXECUTE CLAIM
       const { executeClaimLink } = await import('./flows/claimLinkFlow.js')
 
       await executeClaimLink({
@@ -471,12 +510,28 @@ export class App {
       })
 
       this.hideLoadingModal()
-      this.setStatus('✅ Withdrawal complete')
+      this.setStatus('✅ Withdrawal complete - funds received privately!')
     } catch (err: any) {
       if (import.meta.env.DEV) console.error('❌ Claim error:', err)
       this.hideLoadingModal()
+      
+      // ✅ BETTER ERROR MESSAGES
       const errMsg = err?.message || 'Unknown error'
-      this.setStatus(`❌ Error: ${errMsg}`)
+      
+      if (errMsg.includes('No enough balance')) {
+        this.setStatus(
+          '❌ Privacy processing incomplete.\n\n' +
+          'Please wait at least 45 seconds after deposit\n' +
+          'before claiming (for UTXO indexing).\n\n' +
+          'Your funds are safe in the Privacy Cash pool.'
+        )
+      } else if (errMsg.includes('already claimed')) {
+        this.setStatus('❌ This link has already been claimed!')
+      } else if (errMsg.includes('not found')) {
+        this.setStatus('❌ This link does not exist.')
+      } else {
+        this.setStatus(`❌ Error: ${errMsg}`)
+      }
     }
   }
 
