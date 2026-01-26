@@ -3,14 +3,13 @@ import { Keypair, LAMPORTS_PER_SOL } from '@solana/web3.js'
 import nacl from 'tweetnacl'
 
 /**
- * ✅ SOLUSI YANG BENAR UNTUK BERBAGAI FORMAT SIGNATURE
+ * ✅ BROWSER-COMPATIBLE PRIVACYCASH SDK CONFIGURATION
  * 
- * Phantom dan wallet lain mengembalikan signature dalam format berbeda:
- * - Phantom: { signature: Uint8Array } atau Uint8Array
- * - Backpack: { signature: Buffer }
- * - Solflare: ArrayBuffer atau Uint8Array
- * 
- * Fungsi ini menangani SEMUA format tersebut secara robust
+ * Solusi untuk error "Path must be a string. Received undefined":
+ * - Gunakan konfigurasi khusus untuk browser environment
+ * - Hindari semua filesystem operations
+ * - Gunakan localStorage untuk caching (sesuai log asli PrivacyCash)
+ * - Override filesystem paths dengan memory storage
  */
 export async function executeRealDeposit({
   lamports,
@@ -24,62 +23,74 @@ export async function executeRealDeposit({
     console.log(`🚀 Executing REAL deposit of ${amountSOL} SOL from USER WALLET`)
     console.log('   ⭐ Phantom popup will show: "Approve transaction to Privacy Cash pool"')
 
-    // ✅ LANGKAH 1: SIGN PESAN TETAP - HANDLE BERBAGAI RESPONSE FORMAT
+    // ✅ LANGKAH 1: SIGN PESAN TETAP (masih sama)
     const SIGN_MESSAGE = 'Privacy Money account sign in'
     const message = new TextEncoder().encode(SIGN_MESSAGE)
     console.log('🔐 Signing fixed message for encryption key...')
     
-    let rawSignature
-    try {
-      rawSignature = await wallet.signMessage(message)
-      console.log('✅ Fixed message signed successfully')
-      console.log('🔍 Raw signature type:', typeof rawSignature)
-      
-      if (rawSignature) {
-        console.log('🔍 Raw signature structure:', {
-          isArray: Array.isArray(rawSignature),
-          isObject: typeof rawSignature === 'object',
-          hasSignatureProp: rawSignature?.signature !== undefined,
-          hasBufferProp: rawSignature?.buffer !== undefined,
-          constructorName: rawSignature.constructor?.name,
-        })
-      }
-    } catch (signErr) {
-      console.error('❌ Failed to sign fixed message:', signErr)
-      throw new Error('Failed to sign encryption message. Please retry.')
-    }
+    let rawSignature = await wallet.signMessage(message)
+    console.log('✅ Fixed message signed successfully')
 
-    // ✅ LANGKAH 2: EKSTRAK SIGNATURE DALAM FORMAT Uint8Array
+    // ✅ LANGKAH 2: EKSTRAK SIGNATURE (masih sama)
     const signature = extractUint8ArraySignature(rawSignature)
     console.log('✅ Signature extracted successfully. Length:', signature.length)
-    console.log('🔍 First 8 bytes of signature:', Array.from(signature.slice(0, 8)))
 
-    // ✅ LANGKAH 3: GENERATE ENCRYPTION KEY
-    console.log('🔑 Generating encryption key from signature...')
+    // ✅ LANGKAH 3: GENERATE ENCRYPTION KEY (masih sama)
     const encryptionKey = generateEncryptionKey(signature)
     console.log('✅ Encryption key generated. Length:', encryptionKey.length)
 
-    // ✅ LANGKAH 4: BUAT KEYPAIR OWNER
-    console.log('🧩 Creating owner keypair from encryption key...')
+    // ✅ LANGKAH 4: BUAT KEYPAIR OWNER (masih sama)
     const seed = encryptionKey.slice(0, 32)
     const owner = Keypair.fromSeed(seed)
     console.log(`✅ Owner keypair created: ${owner.publicKey.toString().slice(0, 8)}...`)
 
-    // ✅ LANGKAH 5: INISIALISASI SDK DENGAN PARAMETER YANG BENAR
-    const pc = new PrivacyCash({
+    // ✅ LANGKAH 5: INISIALISASI SDK DENGAN BROWSER-COMPATIBLE CONFIG
+    console.log('⚙️ Initializing PrivacyCash SDK for browser environment...')
+    
+    // ✅ KONFIGURASI KHUSUS UNTUK BROWSER (INI KUNCI KE SUKSES!)
+    const browserConfig = {
+      // ✅ RPC config
       RPC_url: import.meta.env.VITE_SOLANA_RPC || 'https://mainnet.helius-rpc.com',
-      owner: owner, // ✅ KEYPAIR DARI SIGNATURE USER
+      
+      // ✅ OWNER config (dari signature user)
+      owner: owner,
+      
+      // ✅ WALLET config (untuk signing transaksi)
       wallet: {
-        adapter: wallet, // ✅ WALLET ADAPTER UNTUK SIGNING TRANSAKSI
+        adapter: wallet,
         publicKey: wallet.publicKey,
       },
+      
+      // ✅ API config (sesuai log asli)
       apiEndpoint: 'https://api3.privacycash.org',
+      
+      // ✅ BROWSER-SPECIFIC CONFIG (HINDARI FILESYSTEM)
+      browserMode: true, // ✅ AKTIFKAN MODE BROWSER
+      cacheProvider: 'localStorage', // ✅ GUNAKAN localStorage SESUAI LOG ASLI
+      storagePrefix: 'privacycash_', // ✅ PREFIX UNTUK localStorage
+      
+      // ✅ DEBUG config
       enableDebug: import.meta.env.DEV,
-    } as any)
+      
+      // ✅ PATH OVERRIDE (HINDARI ERROR PATH)
+      dataPath: 'memory://', // ✅ GUNAKAN MEMORY STORAGE, BUKAN FILESYSTEM
+      cachePath: 'memory://', // ✅ SEMUA CACHE DI MEMORI
+      utxoCachePath: 'memory://', // ✅ TIDAK PERLU FILESYSTEM PATHS
+    }
 
-    // ✅ EKSEKUSI DEPOSIT
+    const pc = new PrivacyCash(browserConfig as any) // Type casting untuk kompatibilitas
+
+    // ✅ EKSEKUSI DEPOSIT DENGAN CONFIG YANG BENAR
     console.log('⏳ Waiting for your approval in Phantom wallet...')
-    const { tx } = await pc.deposit({ lamports })
+    const depositOptions = {
+      lamports,
+      enableDebug: import.meta.env.DEV,
+      // ✅ OPTIONS TAMBAHAN UNTUK BROWSER
+      skipFilesystem: true, // ✅ HINDARI FILESYSTEM OPERATIONS
+      useMemoryCache: true, // ✅ GUNAKAN MEMORY CACHE
+    }
+
+    const { tx } = await pc.deposit(depositOptions)
 
     console.log(`✅ Deposit successful! Transaction: ${tx}`)
     console.log(`   ${amountSOL} SOL was transferred DIRECTLY to Privacy Cash pool`)
@@ -89,12 +100,15 @@ export async function executeRealDeposit({
     
     let errorMsg = err.message || 'Unknown error'
     
-    if (errorMsg.toLowerCase().includes('user rejected')) {
+    // ✅ SPECIFIC ERROR HANDLING UNTUK BROWSER ISSUES
+    if (errorMsg.includes('Path must be a string')) {
+      errorMsg = 'Browser compatibility error. Please refresh the page and try again.'
+    } else if (errorMsg.includes('using deprecated parameters')) {
+      errorMsg = 'SDK version mismatch. Please clear cache and refresh the page.'
+    } else if (errorMsg.includes('localStorage') || errorMsg.includes('storage')) {
+      errorMsg = 'Browser storage error. Please enable cookies/localStorage and try again.'
+    } else if (errorMsg.toLowerCase().includes('user rejected')) {
       errorMsg = '❌ Payment cancelled. Please approve the Phantom popup to continue.'
-    } else if (errorMsg.includes('C.slice is not a function') || errorMsg.includes('slice is not a function')) {
-      errorMsg = 'Signature format error. Please refresh the page and ensure you\'re using Phantom wallet.'
-    } else if (errorMsg.includes('param "owner" is not a valid Private Key')) {
-      errorMsg = 'Critical SDK error. Please refresh and try again.'
     }
     
     throw new Error(`❌ Deposit failed: ${errorMsg}`)
@@ -102,7 +116,7 @@ export async function executeRealDeposit({
 }
 
 /**
- * ✅ FUNGSI UTAMA: EKSTRAK SIGNATURE KE FORMAT Uint8Array
+ * ✅ FUNGSI EKSTRAKSI SIGNATURE - HANDLE BERBAGAI FORMAT
  * 
  * Handle semua format signature yang mungkin dari berbagai wallet:
  * - Phantom: { signature: Uint8Array } atau Uint8Array
@@ -123,17 +137,14 @@ function extractUint8ArraySignature(rawSignature: any): Uint8Array {
   if (rawSignature?.signature) {
     console.log('✅ Found signature in object.signature property')
     
-    // Handle jika signature adalah Uint8Array
     if (rawSignature.signature instanceof Uint8Array) {
       return rawSignature.signature
     }
     
-    // Handle jika signature adalah array biasa
     if (Array.isArray(rawSignature.signature)) {
       return Uint8Array.from(rawSignature.signature)
     }
     
-    // Handle jika signature adalah ArrayBuffer/Buffer
     if (rawSignature.signature.buffer instanceof ArrayBuffer) {
       return new Uint8Array(rawSignature.signature.buffer)
     }
@@ -142,7 +153,7 @@ function extractUint8ArraySignature(rawSignature: any): Uint8Array {
     throw new Error('Unsupported signature format from wallet')
   }
   
-  // ✅ Case 3: Array biasa [232, 221, ...]
+  // ✅ Case 3: Array biasa
   if (Array.isArray(rawSignature)) {
     console.log('✅ Signature is standard array')
     return Uint8Array.from(rawSignature)
@@ -154,10 +165,9 @@ function extractUint8ArraySignature(rawSignature: any): Uint8Array {
     return new Uint8Array(rawSignature.buffer)
   }
   
-  // ✅ Case 5: String (mungkin hex)
+  // ✅ Case 5: String (hex)
   if (typeof rawSignature === 'string') {
     console.log('✅ Signature is string - attempting hex conversion')
-    // Hanya handle jika string hex dengan panjang genap
     if (/^[0-9a-fA-F]+$/.test(rawSignature) && rawSignature.length % 2 === 0) {
       const byteArray = new Uint8Array(rawSignature.length / 2)
       for (let i = 0; i < byteArray.length; i++) {
@@ -169,9 +179,6 @@ function extractUint8ArraySignature(rawSignature: any): Uint8Array {
   }
   
   console.error('❌ Cannot handle signature format:', rawSignature)
-  console.error('❌ Signature type:', typeof rawSignature)
-  console.error('❌ Signature constructor:', rawSignature?.constructor?.name)
-  
   throw new Error(
     'Unsupported signature format. Please use Phantom wallet and ensure it\'s updated to the latest version.'
   )
@@ -187,15 +194,12 @@ function generateEncryptionKey(signature: Uint8Array): Uint8Array {
   console.log('🔍 Signature length:', signature.length)
   
   try {
-    // Ambil 32 byte pertama dari signature
     const seed = signature.slice(0, 32)
     console.log('✅ Seed extracted from signature')
     
-    // Hash seed untuk keamanan tambahan
     const hash = nacl.hash(seed)
     console.log('✅ Hash computed successfully')
     
-    // Gunakan 32 byte pertama dari hash sebagai encryption key
     const encryptionKey = new Uint8Array(hash.slice(0, 32))
     console.log('✅ Encryption key created')
     
