@@ -229,17 +229,27 @@ export class App {
 
   // ================= WALLET =================
   private async connectWallet() {
+    // ✅ CHECK IF PHANTOM IS INSTALLED
     if (!window.solana || !window.solana.isPhantom) {
-      alert('❌ Phantom wallet not found. Please install it: https://phantom.app')
+      console.error('❌ Phantom wallet not found')
+      alert('❌ Phantom wallet not found.\n\n📥 Please install it:\nhttps://phantom.app')
       return
     }
 
     try {
       if (import.meta.env.DEV) console.log('🔐 Connecting to Phantom...')
+      
+      // ✅ REQUEST CONNECTION
       const res = await window.solana.connect({ onlyIfTrusted: false })
+      
+      if (!res || !res.publicKey) {
+        throw new Error('No public key returned from wallet')
+      }
+      
       this.walletAddress = res.publicKey.toString()
       if (import.meta.env.DEV) console.log('✅ Connected:', this.walletAddress)
 
+      // ✅ UPDATE UI
       document.getElementById('connect-wallet-btn')?.classList.add('hidden')
       document.getElementById('wallet-connected')?.classList.remove('hidden')
       document.getElementById('wallet-address')!.textContent =
@@ -247,8 +257,20 @@ export class App {
 
       this.setStatus('✅ Wallet connected — Ready to create link')
     } catch (err: any) {
-      console.warn('Wallet connect cancelled')
-      this.setStatus('⚠️ Wallet connection cancelled — Click "Connect Wallet" to try again')
+      console.error('❌ Wallet connection error:', err.message || err)
+      
+      // ✅ PROVIDE HELPFUL ERROR MESSAGES
+      const errorMsg = err.message || err.toString()
+      
+      if (errorMsg.includes('User rejected')) {
+        this.setStatus('⚠️ You rejected the connection. Click again to try.')
+      } else if (errorMsg.includes('not found') || errorMsg.includes('isPhantom')) {
+        this.setStatus('❌ Phantom wallet not installed. Install from phantom.app')
+      } else if (errorMsg.includes('network')) {
+        this.setStatus('❌ Network error. Check your Solana RPC connection.')
+      } else {
+        this.setStatus(`⚠️ Connection failed: ${errorMsg}`)
+      }
     }
   }
 
