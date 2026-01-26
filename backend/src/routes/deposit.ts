@@ -82,28 +82,53 @@ router.post('/', async (req: Request<{}, {}, any>, res: Response) => {
       return res.status(400).json({ error: 'Deposit already recorded' })
     }
 
-    // ✅ Verify signature (optional tapi recommended)
+    // ✅ Verify signature with robust handling
     const message = new TextEncoder().encode(
       `Authorize deposit of ${amount} SOL to Privacy Cash pool for link ${linkId}`
     )
     
     try {
+      // ✅ Konversi signature ke format yang benar
+      const signatureArray = signature.map((byte: any) => 
+        typeof byte === 'string' ? parseInt(byte, 10) : byte
+      )
+      
+      const signatureUint8 = Uint8Array.from(signatureArray)
+      
+      // ✅ Validasi ukuran signature
+      if (signatureUint8.length !== 64) {
+        console.error('❌ Signature size validation failed:', signatureUint8.length)
+        return res.status(400).json({
+          error: 'Invalid signature size',
+          expected: 64,
+          received: signatureUint8.length
+        })
+      }
+      
+      // ✅ Verifikasi signature
       const isValid = nacl.sign.detached.verify(
         message,
-        new Uint8Array(signature),
+        signatureUint8,
         new PublicKey(publicKey).toBytes()
       )
+      
       if (!isValid) {
+        console.error('❌ Signature verification failed - invalid signature')
         return res.status(401).json({ error: 'Invalid signature' })
       }
-      console.log('✅ Signature verified successfully')
+      
+      console.log('✅ Signature verification passed')
     } catch (verifyErr: any) {
-      // In development, log warning but require signature verification in production
+      console.error('❌ Signature verification error:', verifyErr.message)
+      
+      // ✅ MODE DEVELOPMENT: Skip verifikasi jika di development
       if (process.env.NODE_ENV === 'development') {
-        console.warn('⚠️ [DEV MODE] Signature verification failed but continuing:', verifyErr.message)
-        // In dev, we allow it to continue to allow testing without proper signing
+        console.warn('⚠️ Signature verification skipped in development mode')
       } else {
-        return res.status(401).json({ error: `Signature verification failed: ${verifyErr.message}` })
+        return res.status(401).json({ 
+          error: 'Signature verification failed',
+          details: verifyErr.message
+        })
       }
     }
 

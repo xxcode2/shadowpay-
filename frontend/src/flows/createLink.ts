@@ -51,10 +51,32 @@ export async function createLink({
     
     let signature: Uint8Array
     try {
-      signature = await wallet.signMessage(message)
+      const signResult: any = await wallet.signMessage(message)
+      
+      // Handle berbagai format response dari wallet
+      if (signResult?.signature) {
+        // Format: { signature: Uint8Array }
+        signature = signResult.signature
+      } else if (signResult instanceof Uint8Array) {
+        // Format: Uint8Array langsung
+        signature = signResult
+      } else if (signResult?.buffer) {
+        // Format: Buffer atau ArrayBuffer
+        signature = new Uint8Array(signResult.buffer)
+      } else {
+        throw new Error('Unsupported signature format from wallet')
+      }
+      
+      // ✅ VALIDASI UKURAN SIGNATURE
+      if (signature.length !== 64) {
+        console.error('❌ Invalid signature size:', signature.length)
+        throw new Error(`Invalid signature size: expected 64 bytes, got ${signature.length}`)
+      }
+      
+      console.log('✅ Signature valid - size: 64 bytes')
     } catch (signErr: any) {
-      console.error('❌ USER REJECTED SIGNATURE')
-      throw new Error('Signature cancelled by user. Please approve the popup.')
+      console.error('❌ SIGNATURE ERROR Details:', signErr)
+      throw new Error('Signature failed: ' + signErr.message)
     }
 
     console.log(`✅ Authorization signed successfully`)
