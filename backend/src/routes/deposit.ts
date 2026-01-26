@@ -63,19 +63,28 @@ router.post('/', async (req: Request<{}, {}, any>, res: Response) => {
     const connection = new Connection(RPC_URL, 'confirmed')
 
     // Get operator keypair (for signing transaction as fee payer)
-    const operatorPrivateKey = process.env.OPERATOR_PRIVATE_KEY
-    if (!operatorPrivateKey) {
-      console.error('❌ OPERATOR_PRIVATE_KEY not configured in environment')
+    const operatorSecretKey = process.env.OPERATOR_SECRET_KEY || process.env.OPERATOR_PRIVATE_KEY
+    if (!operatorSecretKey) {
+      console.error('❌ OPERATOR_SECRET_KEY or OPERATOR_PRIVATE_KEY not configured in environment')
       return res.status(500).json({ error: 'Server misconfiguration: operator not available' })
     }
 
     let operatorKeypair: Keypair
     try {
-      const secretKey = JSON.parse(operatorPrivateKey)
-      operatorKeypair = Keypair.fromSecretKey(new Uint8Array(secretKey))
+      // Handle both formats: comma-separated string or JSON array
+      let secretKeyArray: number[]
+      if (typeof operatorSecretKey === 'string' && operatorSecretKey.includes(',')) {
+        // Format: "202,253,170,66,..."
+        secretKeyArray = operatorSecretKey.split(',').map(n => parseInt(n.trim(), 10))
+      } else {
+        // Format: "[202,253,170,66,...]" or JSON array
+        secretKeyArray = JSON.parse(operatorSecretKey)
+      }
+      operatorKeypair = Keypair.fromSecretKey(new Uint8Array(secretKeyArray))
+      console.log(`✅ Operator keypair loaded: ${operatorKeypair.publicKey.toString().slice(0, 8)}...`)
     } catch (err) {
       console.error('❌ Failed to parse operator keypair:', err)
-      return res.status(500).json({ error: 'Server misconfiguration: invalid operator key' })
+      return res.status(500).json({ error: 'Server misconfiguration: invalid operator key format' })
     }
 
     // Get Privacy Cash pool address from config
