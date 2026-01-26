@@ -1,12 +1,17 @@
 /**
  * ✅ CORRECT ARCHITECTURE SESUAI PRIVACY CASH DOCUMENTATION:
  * 1. Create link metadata on backend
- * 2. User signs authorization message (NO PrivacyCash SDK on frontend!)
- * 3. Backend executes REAL deposit dengan PrivacyCash SDK + operator private key
+ * 2. ✅ USER EXECUTES DEPOSIT DIRECTLY VIA FRONTEND (PrivacyCash SDK + Phantom popup)
+ * 3. Backend ONLY records transaction hash (no execution)
  * 4. Link ready to claim
+ * 
+ * KEY DIFFERENCE FROM OLD CODE:
+ * - OLD: User sign message → Backend execute → Operator wallet pays
+ * - NEW: User execute deposit directly → Phantom popup → User pays directly
  */
 
 import { LAMPORTS_PER_SOL } from '@solana/web3.js'
+import { executeRealDeposit } from './depositFlow'
 
 export interface SigningWallet {
   publicKey: { toString(): string }
@@ -43,64 +48,34 @@ export async function createLink({
     const { linkId } = await createRes.json()
     console.log(`✅ Link created: ${linkId}`)
 
-    // 2️⃣ User signs authorization message (HANYA SIGN, TIDAK ADA EXECUTION!)
-    console.log(`🔐 Signing authorization message for ${amountSOL} SOL deposit...`)
-    const message = new TextEncoder().encode(
-      `Authorize deposit of ${amountSOL} SOL to Privacy Cash pool for link ${linkId}`
-    )
+    // 2️⃣ ✅ USER LANGSUNG BAYAR KE PRIVACY CASH POOL
+    // ✅ INI YANG AKAN MUNCULKAN POPUP PHANTOM UNTUK APPROVAL TRANSAKSI
+    console.log(`💰 Processing payment...`)
+    console.log(`   You will see Phantom popup: "Approve transaction: ${amountSOL} SOL to Privacy Cash pool"`)
+    const lamports = Math.round(amountSOL * LAMPORTS_PER_SOL)
+    const { tx: depositTx } = await executeRealDeposit({ lamports, wallet: wallet as any })
     
-    let signature: Uint8Array
-    try {
-      const signResult: any = await wallet.signMessage(message)
-      
-      // Handle berbagai format response dari wallet
-      if (signResult?.signature) {
-        // Format: { signature: Uint8Array }
-        signature = signResult.signature
-      } else if (signResult instanceof Uint8Array) {
-        // Format: Uint8Array langsung
-        signature = signResult
-      } else if (signResult?.buffer) {
-        // Format: Buffer atau ArrayBuffer
-        signature = new Uint8Array(signResult.buffer)
-      } else {
-        throw new Error('Unsupported signature format from wallet')
-      }
-      
-      // ✅ VALIDASI UKURAN SIGNATURE
-      if (signature.length !== 64) {
-        console.error('❌ Invalid signature size:', signature.length)
-        throw new Error(`Invalid signature size: expected 64 bytes, got ${signature.length}`)
-      }
-      
-      console.log('✅ Signature valid - size: 64 bytes')
-    } catch (signErr: any) {
-      console.error('❌ SIGNATURE ERROR Details:', signErr)
-      throw new Error('Signature failed: ' + signErr.message)
-    }
+    console.log(`✅ User paid ${amountSOL} SOL directly to Privacy Cash pool`)
 
-    console.log(`✅ Authorization signed successfully`)
-
-    // 3️⃣ Send to backend for REAL deposit execution (PrivacyCash SDK di backend)
-    console.log(`📤 Sending authorization to backend for deposit execution...`)
-    const depositRes = await fetch(`${BACKEND_URL}/api/deposit`, {
+    // 3️⃣ ✅ KIRIM HASIL KE BACKEND HANYA UNTUK RECORD
+    console.log(`📤 Recording transaction on backend...`)
+    const recordRes = await fetch(`${BACKEND_URL}/api/deposit`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ 
         linkId,
-        signature: Array.from(signature), // Convert Uint8Array to array
-        publicKey: wallet.publicKey.toString(),
+        depositTx, // HANYA RECORD TX HASH, BUKAN EKSEKUSI
         amount: amountSOL,
+        publicKey: wallet.publicKey.toString()
       }),
     })
 
-    if (!depositRes.ok) {
-      const errorText = await depositRes.text()
-      throw new Error(`Deposit failed: ${errorText || depositRes.statusText}`)
+    if (!recordRes.ok) {
+      const errorText = await recordRes.text()
+      throw new Error(`Failed to record deposit: ${errorText || recordRes.statusText}`)
     }
 
-    const { depositTx } = await depositRes.json()
-    console.log(`✅ Deposit executed successfully: ${depositTx}`)
+    console.log(`✅ Link ready! Transaction recorded: ${depositTx}`)
     return { linkId, depositTx }
   } catch (err: any) {
     console.error('❌ CREATE LINK ERROR:', err.message || err.toString())

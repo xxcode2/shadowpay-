@@ -1,25 +1,46 @@
-/**
- * ⚠️ DEPRECATED: This file is no longer used!
- * 
- * OLD (BROKEN) ARCHITECTURE:
- * - Frontend menggunakan PrivacyCash SDK directly
- * - Frontend pass wallet object ke PrivacyCash constructor
- * - ERROR: "param 'owner' is not a valid Private Key or Keypair"
- * - Alasan: Wallet object dari Phantom bukan Keypair!
- * 
- * NEW (CORRECT) ARCHITECTURE:
- * - Frontend hanya sign message (gunakan wallet.signMessage())
- * - Backend execute PrivacyCash SDK dengan operator private key
- * - PrivacyCash SDK hanya dijalankan di backend dengan Keypair yang valid
- * 
- * File ini disimpan untuk referensi historis saja.
- * Jangan gunakan lagi!
- */
+import { PrivacyCash } from 'privacycash'
+import { LAMPORTS_PER_SOL } from '@solana/web3.js'
 
-export async function executeRealDeposit() {
-  throw new Error(
-    'executeRealDeposit() is DEPRECATED and no longer supported.\n' +
-    'The PrivacyCash SDK must ONLY run on backend with operator private key.\n' +
-    'Frontend should only sign messages using wallet.signMessage()'
-  )
+/**
+ * ✅ REAL DEPOSIT EXECUTION SESUAI DOKUMENTASI PRIVACY CASH
+ * 
+ * Frontend HARUS menjalankan PrivacyCash SDK untuk deposit
+ * User akan melihat popup Phantom: "Approve transaction: 0.01 SOL to Privacy Cash pool"
+ * Dana MASUK LANGSUNG ke smart contract, bukan ke operator wallet
+ */
+export async function executeRealDeposit({
+  lamports,
+  wallet,
+}: {
+  lamports: number
+  wallet: any // Wallet adapter dari Phantom
+}): Promise<{ tx: string }> {
+  try {
+    const amountSOL = (lamports / LAMPORTS_PER_SOL).toFixed(6)
+    console.log(`🚀 Executing REAL deposit of ${amountSOL} SOL from USER WALLET`)
+    console.log('   ⭐ Phantom popup will show: "Approve transaction to Privacy Cash pool"')
+
+    // ✅ INITIALIZE PrivacyCash SDK di FRONTEND
+    const pc = new PrivacyCash({
+      RPC_url: import.meta.env.VITE_SOLANA_RPC || 'https://mainnet.helius-rpc.com',
+      owner: wallet, // USER WALLET - bukan operator!
+      enableDebug: import.meta.env.DEV,
+    } as any)
+
+    // ✅ USER LANGSUNG BAYAR KE SMART CONTRACT (TRIGGERS PHANTOM POPUP!)
+    console.log('⏳ Waiting for your approval in Phantom wallet...')
+    const { tx } = await pc.deposit({ lamports })
+
+    console.log(`✅ Deposit successful! Transaction: ${tx}`)
+    console.log(`   ${amountSOL} SOL was transferred DIRECTLY to Privacy Cash pool`)
+    return { tx }
+  } catch (err: any) {
+    console.error('❌ PrivacyCash deposit failed:', err)
+    
+    if (err.message?.toLowerCase().includes('user rejected')) {
+      throw new Error('❌ Payment cancelled. Please approve the Phantom popup to continue.')
+    }
+    
+    throw new Error(`❌ Deposit failed: ${err.message || 'Unknown error'}`)
+  }
 }
