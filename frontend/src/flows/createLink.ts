@@ -1,13 +1,15 @@
 /**
- * ✅ CORRECT ARCHITECTURE SESUAI PRIVACY CASH DOCUMENTATION:
+ * ✅ CORRECT ARCHITECTURE WITH BACKEND EXECUTION:
  * 1. Create link metadata on backend
- * 2. ✅ USER EXECUTES DEPOSIT DIRECTLY VIA FRONTEND (PrivacyCash SDK + Phantom popup)
- * 3. Backend ONLY records transaction hash (no execution)
- * 4. Link ready to claim
+ * 2. User signs authorization message (NOT transaction)
+ * 3. Frontend sends authorization + amount to backend
+ * 4. Backend executes transfer with authenticated RPC
+ * 5. Backend records transaction hash
  * 
- * KEY DIFFERENCE FROM OLD CODE:
- * - OLD: User sign message → Backend execute → Operator wallet pays
- * - NEW: User execute deposit directly → Phantom popup → User pays directly
+ * Benefits:
+ * - Backend has RPC API key (safe in env variables)
+ * - Frontend doesn't need direct RPC access
+ * - Clear separation of concerns
  */
 
 import { LAMPORTS_PER_SOL } from '@solana/web3.js'
@@ -48,32 +50,21 @@ export async function createLink({
     const { linkId } = await createRes.json()
     console.log(`✅ Link created: ${linkId}`)
 
-    // 2️⃣ ✅ USER LANGSUNG BAYAR KE PRIVACY CASH POOL
-    // ✅ INI YANG AKAN MUNCULKAN POPUP PHANTOM UNTUK APPROVAL TRANSAKSI
+    // 2️⃣ USER SIGNS AUTHORIZATION + BACKEND EXECUTES DEPOSIT
     console.log(`💰 Processing payment...`)
-    console.log(`   You will see Phantom popup: "Approve transaction: ${amountSOL} SOL to Privacy Cash pool"`)
+    console.log(`   You will see Phantom popup: "Authorize ${amountSOL} SOL deposit to Privacy Cash pool"`)
     const lamports = Math.round(amountSOL * LAMPORTS_PER_SOL)
-    const { tx: depositTx } = await executeRealDeposit({ lamports, wallet: wallet as any })
     
-    console.log(`✅ User paid ${amountSOL} SOL directly to Privacy Cash pool`)
-
-    // 3️⃣ ✅ KIRIM HASIL KE BACKEND HANYA UNTUK RECORD
-    console.log(`📤 Recording transaction on backend...`)
-    const recordRes = await fetch(`${BACKEND_URL}/api/deposit`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ 
-        linkId,
-        depositTx, // HANYA RECORD TX HASH, BUKAN EKSEKUSI
-        amount: amountSOL,
-        publicKey: wallet.publicKey.toString()
-      }),
+    // Frontend: Sign authorization message + send to backend
+    // Backend: Execute transfer with authenticated RPC + record transaction
+    const { tx: depositTx } = await executeRealDeposit({ 
+      lamports, 
+      wallet: wallet as any,
+      linkId
     })
-
-    if (!recordRes.ok) {
-      const errorText = await recordRes.text()
-      throw new Error(`Failed to record deposit: ${errorText || recordRes.statusText}`)
-    }
+    
+    console.log(`✅ Deposit executed by backend: ${depositTx}`)
+    console.log(`✅ ${amountSOL} SOL transferred to Privacy Cash pool`)
 
     console.log(`✅ Link ready! Transaction recorded: ${depositTx}`)
     return { linkId, depositTx }

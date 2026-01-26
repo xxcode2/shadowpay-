@@ -1,5 +1,5 @@
 import { Router, Request, Response } from 'express'
-import { PublicKey, Connection, SystemProgram, Transaction, LAMPORTS_PER_SOL } from '@solana/web3.js'
+import { PublicKey, Connection, SystemProgram, Transaction, LAMPORTS_PER_SOL, Keypair } from '@solana/web3.js'
 import prisma from '../lib/prisma.js'
 
 const router = Router()
@@ -9,15 +9,14 @@ const router = Router()
  *
  * ✅ CORRECT ARCHITECTURE:
  * 1. Frontend sends: user's authorization signature + amount + publicKey
- * 2. Backend verifies: signature is valid
- * 3. Backend executes: transfer transaction with authenticated RPC
+ * 2. Backend verifies: user's public key exists and has sufficient balance
+ * 3. Backend executes: transfer transaction with OPERATOR keypair as fee payer
  * 4. Backend records: transaction hash in database
  * 
- * Why backend executes:
- * - Backend has authenticated RPC endpoint (with API key from env)
- * - Frontend doesn't have API key (security)
- * - User's signature proves they authorized it
- * - Transaction goes directly to Privacy Cash pool
+ * Why operator pays transaction fee:
+ * - User's funds go directly to Privacy Cash pool
+ * - Operator covers minimal fee (~0.00025 SOL) for the transaction
+ * - Sustainable because withdrawal fees pay for this
  */
 router.post('/', async (req: Request<{}, {}, any>, res: Response) => {
   try {
@@ -63,10 +62,29 @@ router.post('/', async (req: Request<{}, {}, any>, res: Response) => {
     const RPC_URL = process.env.SOLANA_RPC_URL || 'https://mainnet.helius-rpc.com/?api-key=c455719c-354b-4a44-98d4-27f8a18aa79c'
     const connection = new Connection(RPC_URL, 'confirmed')
 
+    // Get operator keypair (for signing transaction as fee payer)
+    const operatorPrivateKey = process.env.OPERATOR_PRIVATE_KEY
+    if (!operatorPrivateKey) {
+      console.error('❌ OPERATOR_PRIVATE_KEY not configured in environment')
+      return res.status(500).json({ error: 'Server misconfiguration: operator not available' })
+    }
+
+    let operatorKeypair: Keypair
+    try {
+      const secretKey = JSON.parse(operatorPrivateKey)
+      operatorKeypair = Keypair.fromSecretKey(new Uint8Array(secretKey))
+    } catch (err) {
+      console.error('❌ Failed to parse operator keypair:', err)
+      return res.status(500).json({ error: 'Server misconfiguration: invalid operator key' })
+    }
+
     // Get Privacy Cash pool address from config
     const PRIVACY_CASH_POOL = process.env.PRIVACY_CASH_POOL || '9fhQBbumKEFuXtMBDw8AaQyAjCorLGJQiS3skWZdQyQD'
 
     // Create transfer transaction
+    // ✅ FROM: User (publicKey)
+    // ✅ TO: Privacy Cash pool
+    // ✅ PAYER: Operator (covers transaction fee)
     const transaction = new Transaction().add(
       SystemProgram.transfer({
         fromPubkey: new PublicKey(publicKey),
@@ -78,20 +96,15 @@ router.post('/', async (req: Request<{}, {}, any>, res: Response) => {
     // Get recent blockhash
     const { blockhash } = await connection.getLatestBlockhash()
     transaction.recentBlockhash = blockhash
-    transaction.feePayer = new PublicKey(publicKey)
+    transaction.feePayer = operatorKeypair.publicKey // ✅ Operator pays fee
 
-    // ✅ NOTE: We don't sign the transaction on backend!
-    // The frontend already signed it (via the authorization message)
-    // The blockchain validates that the user's wallet is the payer
-    // We just submit the transaction structure
-
-    // For now, we need the frontend to sign the actual transaction
-    // OR we can use a relayer keypair (operator keypair) to pay fees
-    // For MVP: Use operator keypair as fee payer and record it
+    // ✅ SIGN WITH OPERATOR KEYPAIR (can sign on behalf to cover fee)
+    transaction.sign(operatorKeypair)
 
     console.log(`📤 Sending transfer transaction: ${publicKey} → ${PRIVACY_CASH_POOL}`)
+    console.log(`   Fee payer: ${operatorKeypair.publicKey.toString()}`)
     
-    // Serialize transaction for submission
+    // Serialize and send signed transaction
     const txHash = await connection.sendRawTransaction(transaction.serialize())
     
     // Wait for confirmation
@@ -140,6 +153,8 @@ router.post('/', async (req: Request<{}, {}, any>, res: Response) => {
     let errorMsg = err.message || 'Unknown error'
     if (errorMsg.includes('403') || errorMsg.includes('Access forbidden')) {
       errorMsg = 'RPC authentication failed. Backend RPC endpoint not properly configured.'
+    } else if (errorMsg.includes('Insufficient lamports')) {
+      errorMsg = 'Operator wallet has insufficient balance for transaction fee.'
     }
     
     return res.status(500).json({
