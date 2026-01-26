@@ -158,9 +158,13 @@ router.post('/', async (req: Request, res: Response) => {
     const PRIVACY_CASH_PROGRAM_RAW = process.env.PRIVACY_CASH_PROGRAM || '9fhQBBumKEFuXtMBDw8AaQyAjCorLGJQlS3skWZdQyQD'
     const PRIVACY_CASH_PROGRAM = PRIVACY_CASH_PROGRAM_RAW.trim() // Remove leading/trailing spaces
     
-    // Validate base58 format (Solana addresses are 32-44 base58 chars)
-    if (!/^[1-9A-HJ-NP-Za-km-z]{32,44}$/.test(PRIVACY_CASH_PROGRAM)) {
-      throw new Error(`Invalid Privacy Cash program address format: '${PRIVACY_CASH_PROGRAM}' - contains non-base58 characters`)
+    // Validate base58 format (Solana base58: 1-9, A-Z except I,O, a-z except l,o)
+    // Solana addresses are 32-44 base58 characters
+    const BASE58_ALPHABET = '123456789ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz'
+    const isValidBase58 = (str: string) => str.length >= 32 && str.length <= 44 && [...str].every(c => BASE58_ALPHABET.includes(c))
+    
+    if (!isValidBase58(PRIVACY_CASH_PROGRAM)) {
+      throw new Error(`Invalid Privacy Cash program address: '${PRIVACY_CASH_PROGRAM}' (length: ${PRIVACY_CASH_PROGRAM.length}) - must be 32-44 valid base58 chars`)
     }
     
     console.log(`🔐 Using Privacy Cash Program: ${PRIVACY_CASH_PROGRAM} (length: ${PRIVACY_CASH_PROGRAM.length})`)
