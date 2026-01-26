@@ -122,6 +122,8 @@ export async function executeRealDeposit(
     console.log('🚀 Initializing Privacy Cash SDK...')
     const RPC_URL = CONFIG.SOLANA_RPC_URL || 'https://mainnet.helius-rpc.com'
 
+    // The SDK will use the wallet's public key for initialization
+    // and will request signatures from the wallet when needed
     const pc = initializePrivacyCashClient(
       RPC_URL,
       wallet,
@@ -129,6 +131,7 @@ export async function executeRealDeposit(
     )
 
     console.log('✅ Privacy Cash SDK initialized')
+    console.log(`   📍 Using public key: ${wallet.publicKey?.toString() || 'unknown'}`)
     console.log('   🔐 Waiting for wallet signature...')
 
     // ✅ EXECUTE DEPOSIT

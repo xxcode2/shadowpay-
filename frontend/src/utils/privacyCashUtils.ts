@@ -113,7 +113,7 @@ export function parseSOLToLamports(sol: number): number {
 /**
  * Initialize Privacy Cash SDK client
  * @param rpcUrl Solana RPC endpoint URL
- * @param wallet Wallet adapter or keypair
+ * @param wallet Wallet adapter with publicKey
  * @param enableDebug Enable debug logging
  * @returns PrivacyCash SDK instance
  */
@@ -130,9 +130,13 @@ export function initializePrivacyCashClient(
     throw new Error('Wallet is required to initialize Privacy Cash SDK')
   }
 
+  // PrivacyCash SDK on browser expects the public key string
+  // The SDK handles the actual signing through the wallet adapter
+  const publicKeyString = wallet.publicKey?.toString?.() || wallet.toString?.() || wallet
+
   return new PrivacyCash({
     RPC_url: rpcUrl,
-    owner: wallet,
+    owner: publicKeyString,
     enableDebug,
   } as any)
 }
