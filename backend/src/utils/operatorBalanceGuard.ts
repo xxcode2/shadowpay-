@@ -1,49 +1,47 @@
 import { Connection, PublicKey, LAMPORTS_PER_SOL } from '@solana/web3.js'
 
 /**
- * ✅ CORRECT BALANCE CHECK: Only verify operator has enough for WITHDRAWAL FEES
- * 
- * Business model: Operator earns commission, doesn't subsidize payments!
- * - Sender deposits their own SOL (not operator's money)
- * - Operator only needs buffer for withdrawal transaction costs
- * - Operator earns 0.006 SOL fee per successful withdrawal
- * - System is sustainable and profitable!
+ * Dynamic safety buffer based on environment
+ * Development: Minimal buffer for testing
+ * Production: Conservative buffer for safety
  */
+function getSafetyBuffer(): number {
+  if (process.env.NODE_ENV === 'development') {
+    return 0.005 * LAMPORTS_PER_SOL // 0.005 SOL untuk development
+  } else {
+    return 0.02 * LAMPORTS_PER_SOL // 0.02 SOL untuk production
+  }
+}
+
 export async function assertOperatorBalance(
   connection: Connection,
-  operator: PublicKey,
-  requiredFeeLamports: number  // ONLY the fee amount needed
+  publicKey: PublicKey,
+  requiredLamports: number
 ): Promise<void> {
-  const balanceLamports = await connection.getBalance(operator)
+  const balance = await connection.getBalance(publicKey)
   
-  // ✅ Minimum buffer for withdrawal - operator only pays fees, not the deposit
-  const MIN_WITHDRAWAL_BUFFER = requiredFeeLamports
-  const SAFETY_MARGIN = 0.005 * LAMPORTS_PER_SOL  // Small safety margin
-  
-  const totalRequired = MIN_WITHDRAWAL_BUFFER + SAFETY_MARGIN
+  // Calculate realistic required amount
+  const SAFETY_BUFFER = getSafetyBuffer()
+  const totalRequired = requiredLamports + SAFETY_BUFFER
 
-  if (balanceLamports < totalRequired) {
+  if (balance < totalRequired) {
     const requiredSOL = totalRequired / LAMPORTS_PER_SOL
-    const availableSOL = balanceLamports / LAMPORTS_PER_SOL
-    const shortfallSOL = (totalRequired - balanceLamports) / LAMPORTS_PER_SOL
+    const availableSOL = balance / LAMPORTS_PER_SOL
+    const shortfallSOL = requiredSOL - availableSOL
     
-    console.error(`\n❌ OPERATOR BALANCE INSUFFICIENT FOR WITHDRAWAL FEES`)
-    console.error(`   Operator: ${operator.toString()}`)
-    console.error(`   Available: ${availableSOL.toFixed(6)} SOL`)
-    console.error(`   Required (fees only): ${requiredSOL.toFixed(6)} SOL`)
-    console.error(`   Shortfall: ${shortfallSOL.toFixed(6)} SOL\n`)
-    console.error(`⚠️  NOTE: User pays the deposit amount - operator only pays withdrawal fees!\n`)
-
+    // Jika di development dan shortfall kecil, berikan warning saja
+    if (process.env.NODE_ENV === 'development' && shortfallSOL < 0.001) {
+      console.warn(`⚠️ [DEVELOPMENT] Operator balance slightly low: ${availableSOL.toFixed(6)} SOL available, ${requiredSOL.toFixed(6)} SOL required`)
+      return
+    }
+    
     throw new Error(
-      `Operator balance insufficient for withdrawal fees. ` +
-      `Need ${requiredSOL.toFixed(6)} SOL, have ${availableSOL.toFixed(6)} SOL. ` +
-      `Top up with at least ${shortfallSOL.toFixed(6)} SOL`
+      `Operator balance insufficient!\n` +
+      `Required: ${requiredSOL.toFixed(6)} SOL\n` +
+      `Available: ${availableSOL.toFixed(6)} SOL\n` +
+      `Shortfall: ${shortfallSOL.toFixed(6)} SOL\n` +
+      `Environment: ${process.env.NODE_ENV || 'production'}`
     )
   }
-
-  console.log(`✅ Operator balance check passed (withdrawal fees only)`)
-  console.log(`   Available: ${(balanceLamports / LAMPORTS_PER_SOL).toFixed(6)} SOL`)
-  console.log(`   Required: ${(totalRequired / LAMPORTS_PER_SOL).toFixed(6)} SOL`)
-  console.log(`   Buffer: ${((balanceLamports - totalRequired) / LAMPORTS_PER_SOL).toFixed(6)} SOL`)
 }
 

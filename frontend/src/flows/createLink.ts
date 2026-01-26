@@ -1,12 +1,11 @@
 /**
- * ✅ CORRECT ARCHITECTURE:
+ * ✅ CORRECT ARCHITECTURE SESUAI PRIVACY CASH DOCUMENTATION:
  * 1. Create link metadata on backend
- * 2. User deposits their own SOL directly (triggers Phantom popup!)
- * 3. Send depositTx to backend for recording
- * 4. Link is ready to claim
+ * 2. User signs authorization message (NO PrivacyCash SDK on frontend!)
+ * 3. Backend executes REAL deposit dengan PrivacyCash SDK + operator private key
+ * 4. Link ready to claim
  */
 
-import { executeRealDeposit } from './depositFlow.js'
 import { LAMPORTS_PER_SOL } from '@solana/web3.js'
 
 export interface SigningWallet {
@@ -27,7 +26,7 @@ export async function createLink({
 
   try {
     // 1️⃣ Create link metadata on backend
-    if (import.meta.env.DEV) console.log(`📝 Creating payment link for ${amountSOL} SOL...`)
+    console.log(`📝 Creating payment link for ${amountSOL} SOL...`)
     const createRes = await fetch(`${BACKEND_URL}/api/create-link`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -42,36 +41,47 @@ export async function createLink({
     }
 
     const { linkId } = await createRes.json()
-    if (import.meta.env.DEV) console.log(`✅ Link created: ${linkId}`)
+    console.log(`✅ Link created: ${linkId}`)
 
-    // 2️⃣ ✅ USER DIRECTLY PAYS FROM WALLET - This triggers Phantom popup!
-    if (import.meta.env.DEV) console.log(`🔐 Requesting payment approval from wallet...`)
-    const lamports = Math.round(amountSOL * LAMPORTS_PER_SOL)
-    const { tx: depositTx } = await executeRealDeposit({ lamports, wallet })
+    // 2️⃣ User signs authorization message (HANYA SIGN, TIDAK ADA EXECUTION!)
+    console.log(`🔐 Signing authorization message for ${amountSOL} SOL deposit...`)
+    const message = new TextEncoder().encode(
+      `Authorize deposit of ${amountSOL} SOL to Privacy Cash pool for link ${linkId}`
+    )
+    
+    let signature: Uint8Array
+    try {
+      signature = await wallet.signMessage(message)
+    } catch (signErr: any) {
+      console.error('❌ USER REJECTED SIGNATURE')
+      throw new Error('Signature cancelled by user. Please approve the popup.')
+    }
 
-    if (import.meta.env.DEV) console.log(`✅ User paid ${amountSOL} SOL directly! Transaction: ${depositTx}`)
+    console.log(`✅ Authorization signed successfully`)
 
-    // 3️⃣ Record depositTx on backend (ONLY for recording, not execution)
-    if (import.meta.env.DEV) console.log(`📝 Recording deposit transaction on backend...`)
-    const recordRes = await fetch(`${BACKEND_URL}/api/deposit`, {
+    // 3️⃣ Send to backend for REAL deposit execution (PrivacyCash SDK di backend)
+    console.log(`📤 Sending authorization to backend for deposit execution...`)
+    const depositRes = await fetch(`${BACKEND_URL}/api/deposit`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
+      body: JSON.stringify({ 
         linkId,
-        depositTx,
-        amount: amountSOL,
+        signature: Array.from(signature), // Convert Uint8Array to array
         publicKey: wallet.publicKey.toString(),
+        amount: amountSOL,
       }),
     })
 
-    if (!recordRes.ok) {
-      throw new Error(`Failed to record deposit: ${recordRes.statusText}`)
+    if (!depositRes.ok) {
+      const errorText = await depositRes.text()
+      throw new Error(`Deposit failed: ${errorText || depositRes.statusText}`)
     }
 
-    if (import.meta.env.DEV) console.log(`✅ Deposit recorded on backend`)
+    const { depositTx } = await depositRes.json()
+    console.log(`✅ Deposit executed successfully: ${depositTx}`)
     return { linkId, depositTx }
   } catch (err: any) {
-    console.error('❌ CREATE LINK FLOW ERROR:', err.message || err)
+    console.error('❌ CREATE LINK ERROR:', err.message || err.toString())
     throw err
   }
 }

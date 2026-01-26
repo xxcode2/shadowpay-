@@ -62,6 +62,7 @@ import depositRouter from './routes/deposit.js'
 import claimLinkRouter from './routes/claimLink.js'
 import linkRouter from './routes/link.js'
 import historyRouter from './routes/history.js'
+import configRouter from './routes/config.js'
 
 const app = express()
 
@@ -85,7 +86,7 @@ app.options('*', cors(corsOptions))
 app.use(express.json())
 
 // ✅ STEP 3: HEALTH CHECK
-app.get('/health', (_req, res) => {
+app.get('/health', (_req: express.Request, res: express.Response) => {
   res.status(200).json({
     status: 'ok',
     port: process.env.PORT,
@@ -99,9 +100,10 @@ app.use('/api/deposit', depositRouter)
 app.use('/api/claim-link', claimLinkRouter)
 app.use('/api/link', linkRouter)
 app.use('/api/history', historyRouter)
+app.use('/api/config', configRouter)
 
 // ✅ STEP 5: 404 HANDLER - Must come AFTER routes
-app.use((_req, res) => {
+app.use((_req: express.Request, res: express.Response) => {
   res.status(404).json({ error: 'Route not found' })
 })
 
@@ -126,6 +128,71 @@ async function startServer() {
   } catch (err: any) {
     console.error('⚠️  Schema check failed:', err.message)
     // Continue anyway - schema might already exist
+  }
+
+  // ✅ STEP 7.5: SETUP OPERATOR BALANCE MONITORING
+  try {
+    const { Connection, PublicKey, LAMPORTS_PER_SOL, Keypair } = await import('@solana/web3.js')
+    
+    const operatorKey = process.env.OPERATOR_SECRET_KEY
+    if (operatorKey) {
+      const parseSecretKey = (key: string): Uint8Array | null => {
+        try {
+          if (key.startsWith('[') && key.endsWith(']')) {
+            return Uint8Array.from(JSON.parse(key))
+          }
+          const nums = key.split(',').map(n => parseInt(n.trim(), 10)).filter(n => !isNaN(n))
+          return nums.length === 64 ? Uint8Array.from(nums) : null
+        } catch {
+          return null
+        }
+      }
+      
+      const secretKey = parseSecretKey(operatorKey)
+      if (secretKey) {
+        const operatorKeypair = Keypair.fromSecretKey(secretKey)
+        const network = process.env.SOLANA_NETWORK || 'mainnet'
+        const rpcUrl = process.env.SOLANA_RPC || 
+          (network === 'mainnet' ? 'https://api.mainnet-beta.solana.com' : 'https://api.devnet.solana.com')
+        const connection = new Connection(rpcUrl, 'confirmed')
+        
+        // Run initial check
+        ;(async () => {
+          try {
+            const balance = await connection.getBalance(operatorKeypair.publicKey)
+            const balanceSOL = balance / LAMPORTS_PER_SOL
+            console.log(`💰 Operator balance: ${balanceSOL.toFixed(4)} SOL`)
+            
+            if (balanceSOL < 0.01) {
+              console.error('⚠️ WARNING: Operator balance critically low!')
+            } else if (balanceSOL < 0.05) {
+              console.warn('⚠️ CAUTION: Operator balance running low')
+            }
+          } catch (err) {
+            console.warn('Could not fetch operator balance:', err instanceof Error ? err.message : 'Unknown error')
+          }
+        })()
+        
+        // Setup hourly monitoring
+        setInterval(async () => {
+          try {
+            const balance = await connection.getBalance(operatorKeypair.publicKey)
+            const balanceSOL = balance / LAMPORTS_PER_SOL
+            
+            if (balanceSOL < 0.01) {
+              console.error(`\n🚨 CRITICAL: Operator balance is ${balanceSOL.toFixed(4)} SOL (< 0.01 SOL)`)
+              console.error(`   Please top up: ${operatorKeypair.publicKey.toString()}\n`)
+            } else if (balanceSOL < 0.05) {
+              console.warn(`\n⚠️  WARNING: Operator balance is ${balanceSOL.toFixed(4)} SOL (< 0.05 SOL)\n`)
+            }
+          } catch (err) {
+            console.warn('Balance monitoring error:', err instanceof Error ? err.message : 'Unknown error')
+          }
+        }, 3600000) // Check every hour
+      }
+    }
+  } catch (err: any) {
+    console.warn('⚠️  Balance monitoring setup failed:', err.message)
   }
 
   // ✅ STEP 8: LISTEN
