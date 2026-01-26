@@ -1,17 +1,18 @@
-import { LAMPORTS_PER_SOL } from '@solana/web3.js'
+import { Connection, SystemProgram, Transaction, PublicKey, LAMPORTS_PER_SOL } from '@solana/web3.js'
 import { CONFIG } from '../config'
 
 /**
- * ✅ CORRECT ARCHITECTURE:
- * 1. Frontend: User signs authorization message (NOT transaction)
- * 2. Frontend: Sends authorization to backend
- * 3. Backend: Executes deposit with authenticated RPC (has API key in env)
- * 4. Backend: Records transaction
+ * ✅ CORRECT FLOW:
+ * 1. Frontend: Create transfer transaction
+ * 2. Frontend: User signs with Phantom (transaction signature)
+ * 3. Frontend: Send SIGNED TRANSACTION to backend
+ * 4. Backend: Submit the signed transaction
  * 
- * Why backend executes deposit:
- * - Frontend doesn't have RPC API key (security)
- * - Backend has authenticated RPC endpoint
- * - User's public key proves they authorized it
+ * Why this works:
+ * - User must sign the transfer (blockchain requirement)
+ * - Frontend has direct RPC access (no API key needed for local ops)
+ * - Backend submits the already-signed transaction
+ * - User's signature proves authorization
  */
 export async function executeRealDeposit({
   lamports,
@@ -26,24 +27,49 @@ export async function executeRealDeposit({
     const amountSOL = (lamports / LAMPORTS_PER_SOL).toFixed(6)
     console.log(`🚀 Executing deposit of ${amountSOL} SOL to Privacy Cash pool`)
 
-    // ✅ STEP 1: USER SIGNS AUTHORIZATION MESSAGE (proof of intent)
-    console.log('🔐 Requesting authorization signature from Phantom wallet...')
-    const authMessage = new TextEncoder().encode(
-      `Authorize ${amountSOL} SOL deposit to Privacy Cash pool for link ${linkId}`
-    )
-    const signature = await wallet.signMessage(authMessage)
-
-    // ✅ CONVERT SIGNATURE TO ARRAY (serializable)
-    const signatureArray = Array.from(
-      signature instanceof Uint8Array ? signature : new Uint8Array(signature)
+    // ✅ SETUP CONNECTION FOR FRONTEND
+    const connection = new Connection(
+      CONFIG.SOLANA_RPC_URL,
+      'confirmed'
     )
 
-    console.log(`✅ User authorized deposit`)
+    // ✅ PRIVACY CASH POOL ADDRESS
+    const PRIVACY_CASH_POOL = CONFIG.PRIVACY_CASH_POOL
 
-    // ✅ STEP 2: SEND AUTHORIZATION TO BACKEND
-    // Backend will verify signature and execute actual deposit transaction
-    console.log('📤 Sending authorization to backend...')
-    const response = await fetch(`${CONFIG.BACKEND_URL}/api/deposit`, {
+    // ✅ STEP 1: CREATE TRANSFER TRANSACTION
+    console.log('📝 Creating transfer transaction to Privacy Cash pool...')
+    const transaction = new Transaction().add(
+      SystemProgram.transfer({
+        fromPubkey: wallet.publicKey,
+        toPubkey: new PublicKey(PRIVACY_CASH_POOL),
+        lamports,
+      })
+    )
+
+    // ✅ STEP 2: GET BLOCKHASH
+    console.log('⏳ Getting latest blockhash...')
+    const { blockhash } = await connection.getLatestBlockhash()
+    transaction.recentBlockhash = blockhash
+    transaction.feePayer = wallet.publicKey
+
+    // ✅ STEP 3: USER SIGNS TRANSACTION WITH PHANTOM
+    console.log('🔐 Requesting signature from Phantom wallet...')
+    console.log('   Phantom popup: "Approve transaction: Transfer SOL"')
+    const signedTx = await wallet.signTransaction(transaction)
+
+    // ✅ STEP 4: SERIALIZE FOR TRANSMISSION
+    const serializedTx = signedTx.serialize()
+    const txArray = Array.from(serializedTx)
+
+    console.log(`✅ User signed transaction`)
+
+    // ✅ STEP 5: SEND SIGNED TRANSACTION TO BACKEND
+    console.log('📤 Sending signed transaction to backend...')
+    const BACKEND_URL =
+      import.meta.env.VITE_BACKEND_URL ||
+      'https://shadowpay-backend-production.up.railway.app'
+
+    const response = await fetch(`${BACKEND_URL}/api/deposit`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
@@ -52,7 +78,7 @@ export async function executeRealDeposit({
         linkId,
         amount: amountSOL,
         lamports,
-        signature: signatureArray,
+        signedTransaction: txArray, // ✅ SEND SIGNED TRANSACTION
         publicKey: wallet.publicKey.toString(),
       }),
     })
@@ -65,8 +91,7 @@ export async function executeRealDeposit({
     const { tx: depositTx } = await response.json()
 
     console.log(`✅ Deposit successful! Transaction: ${depositTx}`)
-    console.log(`   ${amountSOL} SOL transferred directly to Privacy Cash pool`)
-    console.log(`   Backend executed with authenticated RPC`)
+    console.log(`   ${amountSOL} SOL transferred to Privacy Cash pool`)
     return { tx: depositTx }
   } catch (err: any) {
     console.error('❌ Deposit failed:', err)

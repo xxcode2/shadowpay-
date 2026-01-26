@@ -20,7 +20,7 @@ const router = Router()
  */
 router.post('/', async (req: Request<{}, {}, any>, res: Response) => {
   try {
-    const { linkId, amount, lamports, signature, publicKey } = req.body
+    const { linkId, amount, lamports, signedTransaction, publicKey } = req.body
 
     // ✅ VALIDASI INPUT
     if (!linkId || typeof linkId !== 'string') {
@@ -32,8 +32,8 @@ router.post('/', async (req: Request<{}, {}, any>, res: Response) => {
     if (typeof lamports !== 'number' || lamports <= 0) {
       return res.status(400).json({ error: 'valid lamports required' })
     }
-    if (!signature || !Array.isArray(signature)) {
-      return res.status(400).json({ error: 'signature required (as array)' })
+    if (!signedTransaction || !Array.isArray(signedTransaction)) {
+      return res.status(400).json({ error: 'signedTransaction required (as array)' })
     }
     if (!publicKey || typeof publicKey !== 'string') {
       return res.status(400).json({ error: 'publicKey required' })
@@ -62,59 +62,14 @@ router.post('/', async (req: Request<{}, {}, any>, res: Response) => {
     const RPC_URL = process.env.SOLANA_RPC_URL || 'https://mainnet.helius-rpc.com/?api-key=c455719c-354b-4a44-98d4-27f8a18aa79c'
     const connection = new Connection(RPC_URL, 'confirmed')
 
-    // Get operator keypair (for signing transaction as fee payer)
-    const operatorSecretKey = process.env.OPERATOR_SECRET_KEY || process.env.OPERATOR_PRIVATE_KEY
-    if (!operatorSecretKey) {
-      console.error('❌ OPERATOR_SECRET_KEY or OPERATOR_PRIVATE_KEY not configured in environment')
-      return res.status(500).json({ error: 'Server misconfiguration: operator not available' })
-    }
+    // ✅ RECONSTRUCT SIGNED TRANSACTION FROM ARRAY
+    const signedTxBuffer = Buffer.from(signedTransaction)
+    const txn = Transaction.from(signedTxBuffer)
 
-    let operatorKeypair: Keypair
-    try {
-      // Handle both formats: comma-separated string or JSON array
-      let secretKeyArray: number[]
-      if (typeof operatorSecretKey === 'string' && operatorSecretKey.includes(',')) {
-        // Format: "202,253,170,66,..."
-        secretKeyArray = operatorSecretKey.split(',').map(n => parseInt(n.trim(), 10))
-      } else {
-        // Format: "[202,253,170,66,...]" or JSON array
-        secretKeyArray = JSON.parse(operatorSecretKey)
-      }
-      operatorKeypair = Keypair.fromSecretKey(new Uint8Array(secretKeyArray))
-      console.log(`✅ Operator keypair loaded: ${operatorKeypair.publicKey.toString().slice(0, 8)}...`)
-    } catch (err) {
-      console.error('❌ Failed to parse operator keypair:', err)
-      return res.status(500).json({ error: 'Server misconfiguration: invalid operator key format' })
-    }
-
-    // Get Privacy Cash pool address from config
-    const PRIVACY_CASH_POOL = process.env.PRIVACY_CASH_POOL || '9fhQBbumKEFuXtMBDw8AaQyAjCorLGJQiS3skWZdQyQD'
-
-    // Create transfer transaction
-    // ✅ FROM: User (publicKey)
-    // ✅ TO: Privacy Cash pool
-    // ✅ PAYER: Operator (covers transaction fee)
-    const transaction = new Transaction().add(
-      SystemProgram.transfer({
-        fromPubkey: new PublicKey(publicKey),
-        toPubkey: new PublicKey(PRIVACY_CASH_POOL),
-        lamports: Math.round(lamports),
-      })
-    )
-
-    // Get recent blockhash
-    const { blockhash } = await connection.getLatestBlockhash()
-    transaction.recentBlockhash = blockhash
-    transaction.feePayer = operatorKeypair.publicKey // ✅ Operator pays fee
-
-    // ✅ SIGN WITH OPERATOR KEYPAIR (can sign on behalf to cover fee)
-    transaction.sign(operatorKeypair)
-
-    console.log(`📤 Sending transfer transaction: ${publicKey} → ${PRIVACY_CASH_POOL}`)
-    console.log(`   Fee payer: ${operatorKeypair.publicKey.toString()}`)
+    console.log(`📤 Submitting signed transaction from user: ${publicKey}`)
     
-    // Serialize and send signed transaction
-    const txHash = await connection.sendRawTransaction(transaction.serialize())
+    // ✅ SUBMIT THE ALREADY-SIGNED TRANSACTION
+    const txHash = await connection.sendRawTransaction(txn.serialize())
     
     // Wait for confirmation
     await connection.confirmTransaction(txHash, 'confirmed')
@@ -163,7 +118,7 @@ router.post('/', async (req: Request<{}, {}, any>, res: Response) => {
     if (errorMsg.includes('403') || errorMsg.includes('Access forbidden')) {
       errorMsg = 'RPC authentication failed. Backend RPC endpoint not properly configured.'
     } else if (errorMsg.includes('Insufficient lamports')) {
-      errorMsg = 'Operator wallet has insufficient balance for transaction fee.'
+      errorMsg = 'User wallet has insufficient balance for this transaction.'
     }
     
     return res.status(500).json({
