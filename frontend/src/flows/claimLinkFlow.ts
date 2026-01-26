@@ -49,30 +49,35 @@ export async function executeClaimLink(input: {
 
     // ✅ HANDLE ERROR RESPONSES WITH PROPER PARSING
     if (!res.ok) {
+      let errorMsg = `Claim failed with status ${res.status}`
+      
       try {
-        const errorData = await res.json()
-        console.error('❌ Claim failed with details:', errorData)
+        const contentType = res.headers.get('content-type')
+        if (contentType?.includes('application/json')) {
+          const errorData = await res.json()
+          console.error('❌ Claim failed with details:', errorData)
+          errorMsg = errorData.error || errorMsg
 
-        // Provide user-friendly error messages
-        let errorMsg = errorData.error || `Claim failed with status ${res.status}`
-
-        if (errorMsg.includes('no valid deposit')) {
-          errorMsg = 'Deposit still processing. Please wait 1-2 minutes and try again.'
-        } else if (errorMsg.includes('already claimed')) {
-          errorMsg = 'This link has already been claimed!'
-        } else if (errorMsg.includes('not found')) {
-          errorMsg = 'This link does not exist. Please check the link ID.'
-        } else if (errorMsg.includes('Invalid Solana')) {
-          errorMsg = 'Invalid wallet address. Please check your Solana address.'
+          if (errorMsg.includes('no valid deposit')) {
+            errorMsg = 'Deposit still processing. Please wait 1-2 minutes and try again.'
+          } else if (errorMsg.includes('already claimed')) {
+            errorMsg = 'This link has already been claimed!'
+          } else if (errorMsg.includes('not found')) {
+            errorMsg = 'This link does not exist. Please check the link ID.'
+          } else if (errorMsg.includes('Invalid Solana')) {
+            errorMsg = 'Invalid wallet address. Please check your Solana address.'
+          }
+        } else {
+          // Not JSON, try text response
+          const errorText = await res.text()
+          console.error('❌ Raw error response:', errorText)
+          errorMsg = errorText || errorMsg
         }
-
-        throw new Error(errorMsg)
       } catch (parseErr: any) {
-        // If not JSON, try text response
-        const errorText = await res.text()
-        console.error('❌ Raw error response:', errorText)
-        throw new Error(`Claim failed: ${errorText || 'Unknown error'}`)
+        console.error('⚠️ Could not parse error response:', parseErr.message)
       }
+
+      throw new Error(errorMsg)
     }
 
     const data = await res.json()
