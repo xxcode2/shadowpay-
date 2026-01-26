@@ -153,10 +153,17 @@ router.post('/', async (req: Request, res: Response) => {
     console.log(`🎯 Recipient: ${recipientAddress}`)
     console.log(`💰 Amount: ${(link.amount).toFixed(6)} SOL (${Number(link.lamports)} lamports)`)
 
+    // ✅ CRITICAL FIX: Use correct Privacy Cash program address
+    // This MUST match the address where the deposit transaction went
+    const PRIVACY_CASH_PROGRAM = process.env.PRIVACY_CASH_PROGRAM || '9fhQBbumKEFuXtMBDw8AaQyAjCorLGJQiS3skWZdQyQD'
+    
+    console.log(`🔐 Using Privacy Cash Program: ${PRIVACY_CASH_PROGRAM}`)
+
     // ✅ Create PrivacyCash instance with operator as RELAYER
     const pc = new PrivacyCash({
       owner: operator,
       RPC_url: RPC,
+      programId: new PublicKey(PRIVACY_CASH_PROGRAM),
     } as any)
 
     // ✅ Convert lamports to number for PrivacyCash SDK
