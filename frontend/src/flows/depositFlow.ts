@@ -1,73 +1,86 @@
-import { Connection, SystemProgram, Transaction, PublicKey, LAMPORTS_PER_SOL } from '@solana/web3.js'
+import { LAMPORTS_PER_SOL } from '@solana/web3.js'
 import { CONFIG } from '../config'
 
 /**
- * ✅ SOLUSI YANG BENAR - DEPOSIT LANGSUNG KE SMART CONTRACT
+ * ✅ CORRECT ARCHITECTURE:
+ * 1. Frontend: User signs authorization message (NOT transaction)
+ * 2. Frontend: Sends authorization to backend
+ * 3. Backend: Executes deposit with authenticated RPC (has API key in env)
+ * 4. Backend: Records transaction
  * 
- * TANPA PrivacyCash SDK di frontend!
- * User melakukan transfer biasa ke Privacy Cash Pool address
- * Backend hanya record transaksi
+ * Why backend executes deposit:
+ * - Frontend doesn't have RPC API key (security)
+ * - Backend has authenticated RPC endpoint
+ * - User's public key proves they authorized it
  */
 export async function executeRealDeposit({
   lamports,
   wallet,
+  linkId,
 }: {
   lamports: number
   wallet: any
+  linkId: string
 }): Promise<{ tx: string }> {
   try {
     const amountSOL = (lamports / LAMPORTS_PER_SOL).toFixed(6)
     console.log(`🚀 Executing deposit of ${amountSOL} SOL to Privacy Cash pool`)
 
-    // ✅ ALAMAT SMART CONTRACT PRIVACY CASH POOL
-    const PRIVACY_CASH_POOL = CONFIG.PRIVACY_CASH_POOL
+    // ✅ STEP 1: USER SIGNS AUTHORIZATION MESSAGE (proof of intent)
+    console.log('🔐 Requesting authorization signature from Phantom wallet...')
+    const authMessage = new TextEncoder().encode(
+      `Authorize ${amountSOL} SOL deposit to Privacy Cash pool for link ${linkId}`
+    )
+    const signature = await wallet.signMessage(authMessage)
 
-    // ✅ SETUP CONNECTION
-    const connection = new Connection(
-      CONFIG.SOLANA_RPC_URL,
-      'confirmed'
+    // ✅ CONVERT SIGNATURE TO ARRAY (serializable)
+    const signatureArray = Array.from(
+      signature instanceof Uint8Array ? signature : new Uint8Array(signature)
     )
 
-    // ✅ BUAT TRANSAKSI TRANSFER LANGSUNG
-    console.log('📝 Creating transfer transaction to Privacy Cash pool...')
-    const transaction = new Transaction().add(
-      SystemProgram.transfer({
-        fromPubkey: wallet.publicKey,
-        toPubkey: new PublicKey(PRIVACY_CASH_POOL),
+    console.log(`✅ User authorized deposit`)
+
+    // ✅ STEP 2: SEND AUTHORIZATION TO BACKEND
+    // Backend will verify signature and execute actual deposit transaction
+    console.log('📤 Sending authorization to backend...')
+    const response = await fetch(`${CONFIG.BACKEND_URL}/api/deposit`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        linkId,
+        amount: amountSOL,
         lamports,
-      })
-    )
+        signature: signatureArray,
+        publicKey: wallet.publicKey.toString(),
+      }),
+    })
 
-    // ✅ GET BLOCKHASH & SET RECENT
-    const { blockhash } = await connection.getLatestBlockhash()
-    transaction.recentBlockhash = blockhash
-    transaction.feePayer = wallet.publicKey
+    if (!response.ok) {
+      const errorData = await response.json()
+      throw new Error(errorData.error || `Backend error: ${response.status}`)
+    }
 
-    // ✅ USER SIGN & SUBMIT TRANSAKSI
-    console.log('🔐 Requesting signature from Phantom wallet...')
-    const signedTx = await wallet.signTransaction(transaction)
-    
-    console.log('📤 Sending transaction to blockchain...')
-    const txHash = await connection.sendRawTransaction(signedTx.serialize())
-    
-    // ✅ WAIT FOR CONFIRMATION
-    console.log('⏳ Waiting for confirmation...')
-    await connection.confirmTransaction(txHash, 'confirmed')
+    const { tx: depositTx } = await response.json()
 
-    console.log(`✅ Deposit successful! Transaction: ${txHash}`)
+    console.log(`✅ Deposit successful! Transaction: ${depositTx}`)
     console.log(`   ${amountSOL} SOL transferred directly to Privacy Cash pool`)
-    return { tx: txHash }
+    console.log(`   Backend executed with authenticated RPC`)
+    return { tx: depositTx }
   } catch (err: any) {
     console.error('❌ Deposit failed:', err)
-    
+
     let errorMsg = err.message || 'Unknown error'
-    
+
     if (errorMsg.toLowerCase().includes('user rejected')) {
       errorMsg = '❌ Payment cancelled. Please approve the Phantom popup to continue.'
     } else if (errorMsg.includes('invalid')) {
       errorMsg = 'Invalid transaction. Please check your wallet and try again.'
+    } else if (errorMsg.includes('access forbidden') || errorMsg.includes('403')) {
+      errorMsg = 'RPC authentication error. Backend is not properly configured.'
     }
-    
+
     throw new Error(`❌ Deposit failed: ${errorMsg}`)
   }
 }
