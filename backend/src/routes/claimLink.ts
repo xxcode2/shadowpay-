@@ -155,7 +155,7 @@ router.post('/', async (req: Request, res: Response) => {
 
     // ✅ CRITICAL FIX: Use correct Privacy Cash program address
     // This MUST match the address where the deposit transaction went
-    const PRIVACY_CASH_PROGRAM_RAW = process.env.PRIVACY_CASH_PROGRAM || '9fhQBBumKEFuXtMBDw8AaQyAjCorLGJQlS3skWZdQyQD'
+    const PRIVACY_CASH_PROGRAM_RAW = process.env.PRIVACY_CASH_PROGRAM || '9fhQBBumKEFuXtMBDw8AaQyAjCorLGJQ1S3skWZdQyQD'
     const PRIVACY_CASH_PROGRAM = PRIVACY_CASH_PROGRAM_RAW.trim() // Remove leading/trailing spaces
     
     // Validate base58 format (Solana base58: 1-9, A-Z except I,O, a-z except l,o)
