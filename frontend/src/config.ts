@@ -15,7 +15,10 @@ export const CONFIG = {
   DEFAULT_ASSET_TYPE: 'SOL' as const,
   SUPPORTED_ASSETS: ['SOL', 'USDC', 'USDT'] as const,
 
-  // Privacy Cash
+  // Privacy Cash Pool (Official Smart Contract Address)
+  // ⚠️ TODO: Verify this address matches official Privacy Cash program on Solana
+  // Reference: https://solscan.io/token/PrivacyCashTokenAddress
+  PRIVACY_CASH_POOL: import.meta.env.VITE_PRIVACY_CASH_POOL || 'PrivacyCashPoolAddress',
   PRIVACY_CASH_MESSAGE: 'Privacy Money account sign in',
 
   // Timeouts
