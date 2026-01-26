@@ -197,7 +197,6 @@ router.post('/fee-estimate', async (req: Request, res: Response) => {
     const estimate = await estimateSPLTokenWithdrawalFee(mintAddress, amount, base_units)
 
     res.json({
-      token: validation.token,
       mint: mintAddress,
       ...estimate,
       timestamp: new Date().toISOString(),

@@ -193,7 +193,7 @@ export async function checkOperatorWalletBalance(
     const minRecommendedLamports = solToLamports(0.1) // 0.1 SOL minimum
 
     // Get operator public key from keypair
-    const { getOperatorKeypair } = await import('./privacyCash.js')
+    const { getOperatorKeypair } = await import('../services/privacyCash.js')
     const keypair = getOperatorKeypair()
     const operatorPublicKey = keypair.publicKey
 
@@ -244,7 +244,7 @@ export async function getPoolStatistics(): Promise<{
   try {
     const pc = getPrivacyCashClient()
 
-    const { getOperatorKeypair } = await import('./privacyCash.js')
+    const { getOperatorKeypair } = await import('../services/privacyCash.js')
     const keypair = getOperatorKeypair()
     const operatorAddress = keypair.publicKey.toString()
 

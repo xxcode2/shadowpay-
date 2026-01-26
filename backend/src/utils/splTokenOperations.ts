@@ -345,8 +345,8 @@ export async function validateSPLWithdrawalAmount(
  */
 export function getSupportedTokens() {
   return Object.entries(SUPPORTED_SPL_TOKENS).map(([sym, token]) => ({
-    symbol: sym,
     ...token,
+    symbol: sym,
   }))
 }
 

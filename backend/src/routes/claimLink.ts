@@ -103,7 +103,7 @@ router.post('/', async (req: Request, res: Response) => {
     // ✅ Get operator and initialize connection
     const pc = getPrivacyCashClient()
     const connection = new Connection(RPC)
-    const operatorKeypair = pc['keypair'] || pc['owner'] // SDK stores keypair internally
+    const operatorKeypair = (pc as any)['keypair'] // SDK stores keypair internally
 
     console.log(`🚀 Executing REAL PrivacyCash withdrawal for link ${linkId}`)
     console.log(`📤 Operator (relayer): ${operatorKeypair?.publicKey?.toString() || 'relayer'}`)
@@ -152,10 +152,10 @@ router.post('/', async (req: Request, res: Response) => {
     console.log(`🔍 Verifying transaction on-chain...`)
     try {
       const verification = await monitorTransactionStatus(withdrawTx, RPC)
-      if (!verification.isConfirmed) {
+      if (!verification.confirmed) {
         console.warn(`⚠️ Transaction ${withdrawTx} not yet confirmed, continuing anyway...`)
       } else {
-        console.log(`✅ Transaction verified on-chain (slot: ${verification.slot}, confirmations: ${verification.confirmations})`)
+        console.log(`✅ Transaction verified on-chain`)
       }
     } catch (verifyErr: any) {
       console.warn(`⚠️ Transaction verification warning: ${verifyErr.message}`)

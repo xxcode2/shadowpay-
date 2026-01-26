@@ -119,7 +119,7 @@ export async function checkOperatorBalanceExample() {
 export async function getHealthStatusExample() {
   // Call health endpoint
   const response = await fetch('http://localhost:3001/api/health');
-  const health = await response.json();
+  const health: any = await response.json();
   
   console.log(`\n🏥 Health Status:`);
   console.log(`   Status: ${health.status}`);
@@ -180,7 +180,7 @@ export async function errorHandlingExample() {
     throw new Error('INSUFFICIENT_BALANCE');
   } catch (err: any) {
     // Format error for client
-    const formattedError = formatWithdrawalError(err);
+    const formattedError: any = formatWithdrawalError(err);
     
     console.error(`User-friendly error: ${formattedError.message}`);
     console.error(`Error code: ${formattedError.code}`);
@@ -195,12 +195,14 @@ export async function estimateFeeExample() {
   const amountSOL = 0.1;
   const baseFee = PRIVACY_CASH_CONFIG.withdrawal.baseFee;
   const protocolFee = amountSOL * PRIVACY_CASH_CONFIG.withdrawal.protocolFeePercentage;
+  const totalFee = baseFee + protocolFee;
+  const netAmount = amountSOL - totalFee;
   
   console.log(`\n💰 Fee Estimation for ${amountSOL} SOL withdrawal:`);
   console.log(`   Base Fee: ${baseFee} SOL`);
   console.log(`   Protocol Fee (0.35%): ${protocolFee.toFixed(8)} SOL`);
-  console.log(`   Total Fee: ${fees.totalFee.toFixed(8)} SOL`);
-  console.log(`   Net Amount Received: ${fees.netAmount.toFixed(8)} SOL`);
+  console.log(`   Total Fee: ${totalFee.toFixed(8)} SOL`);
+  console.log(`   Net Amount Received: ${netAmount.toFixed(8)} SOL`);
 }
 
 // Example 9: Link Creation Flow
@@ -213,10 +215,9 @@ export async function createLinkFlowExample() {
     data: {
       id: 'link_' + Date.now(),
       amount: 0.1,
-      lamports: Math.floor(0.1 * 1_000_000_000),
+      lamports: BigInt(Math.floor(0.1 * 1_000_000_000)),
       claimed: false,
       assetType: 'SOL',
-      memo: 'Payment for services',
     },
   });
   
@@ -248,7 +249,7 @@ export async function queryTransactionHistoryExample() {
   });
   
   console.log(`\n📊 Recent Withdrawals:`);
-  withdrawals.forEach((tx) => {
+  withdrawals.forEach((tx: any) => {
     console.log(`   ${tx.transactionHash.slice(0, 8)}... - ${tx.amount} SOL - ${tx.createdAt.toISOString()}`);
   });
   

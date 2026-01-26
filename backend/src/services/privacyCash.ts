@@ -61,7 +61,9 @@ export function parseOperatorKeypair(secretKeyInput: string): Keypair {
 
     // Try parsing as Base58 string
     if (secretKeyInput.length > 0 && !secretKeyInput.includes(',')) {
-      return Keypair.fromSecretKey(new Uint8Array(Buffer.from(secretKeyInput, 'base58')))
+      const bs58 = require('bs58');
+      const decoded = bs58.decode(secretKeyInput);
+      return Keypair.fromSecretKey(decoded)
     }
 
     throw new Error('Unable to parse operator secret key - unsupported format')

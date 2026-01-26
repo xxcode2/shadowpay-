@@ -97,8 +97,8 @@ export function isSupportedMint(mint: string): boolean {
  */
 export function getAllSupportedTokens() {
   return Object.entries(SUPPORTED_SPL_TOKENS).map(([sym, token]) => ({
-    symbol: sym,
     ...token,
+    symbol: sym,
   }))
 }
 
