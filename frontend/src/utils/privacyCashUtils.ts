@@ -4,8 +4,6 @@
  */
 
 import { PublicKey, LAMPORTS_PER_SOL } from '@solana/web3.js'
-// @ts-ignore - privacycash types may not be available
-import { PrivacyCash } from 'privacycash'
 
 /**
  * Error codes and messages for Privacy Cash operations
@@ -108,37 +106,6 @@ export function formatLamportsToSOL(
  */
 export function parseSOLToLamports(sol: number): number {
   return Math.floor(sol * LAMPORTS_PER_SOL)
-}
-
-/**
- * Initialize Privacy Cash SDK client
- * @param rpcUrl Solana RPC endpoint URL
- * @param wallet Wallet adapter with publicKey
- * @param enableDebug Enable debug logging
- * @returns PrivacyCash SDK instance
- */
-export function initializePrivacyCashClient(
-  rpcUrl: string,
-  wallet: any,
-  enableDebug: boolean = false
-): any {
-  if (!rpcUrl) {
-    throw new Error('RPC URL is required to initialize Privacy Cash SDK')
-  }
-
-  if (!wallet) {
-    throw new Error('Wallet is required to initialize Privacy Cash SDK')
-  }
-
-  // PrivacyCash SDK on browser expects the public key string
-  // The SDK handles the actual signing through the wallet adapter
-  const publicKeyString = wallet.publicKey?.toString?.() || wallet.toString?.() || wallet
-
-  return new PrivacyCash({
-    RPC_url: rpcUrl,
-    owner: publicKeyString,
-    enableDebug,
-  } as any)
 }
 
 /**

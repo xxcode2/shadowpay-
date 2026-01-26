@@ -1,14 +1,10 @@
-import { PublicKey, LAMPORTS_PER_SOL } from '@solana/web3.js'
-import { PrivacyCash } from 'privacycash'
+import { PublicKey, LAMPORTS_PER_SOL, Connection, VersionedTransaction } from '@solana/web3.js'
 import { CONFIG } from '../config'
 import {
   validateDepositAmount,
-  validateSolanaAddress,
   formatLamportsToSOL,
-  initializePrivacyCashClient,
   mapPrivacyCashError,
   assessDepositPrivacy,
-  buildDepositDetails,
   createDepositErrorContext,
   getExplorerUrl,
   estimateTransactionFees,
@@ -17,13 +13,17 @@ import {
 /**
  * ✅ IMPLEMENTASI PRIVACY CASH SDK SESUAI DOKUMENTASI RESMI
  * 
- * SDK menghandle:
- * ✅ User signature request untuk derivasi encryption key
- * ✅ Encryption dan privacy-preserving protocol
- * ✅ Direct deposit ke Privacy Cash shielded pool
- * ✅ Comprehensive validation dan error handling
+ * Flow yang benar:
+ * 1. Call SDK deposit() function langsung (bukan instantiate PrivacyCash class)
+ * 2. SDK akan:
+ *    - Generate encryption key dari wallet signature
+ *    - Create zero-knowledge proof
+ *    - Build deposit transaction
+ *    - Request wallet signature via transactionSigner callback
+ *    - Submit ke blockchain
+ * 3. Backend hanya record transaction hash
  * 
- * Dokumentasi: https://privacycash.mintlify.app/sdk/overview-copied-1
+ * Dokumentasi: https://github.com/privacy-cash/privacy-cash-sdk
  */
 
 export interface DepositResult {
@@ -87,6 +87,9 @@ export function validateDepositRequest(request: DepositRequest): {
 
 /**
  * Execute deposit with comprehensive validation and error handling
+ * 
+ * ✅ Sesuai dokumentasi resmi Privacy Cash SDK
+ * Calls the SDK deposit() function directly with proper parameters
  */
 export async function executeRealDeposit(
   request: DepositRequest
@@ -112,41 +115,67 @@ export async function executeRealDeposit(
     console.log(`🚀 Executing deposit of ${amountSOL} SOL to Privacy Cash pool`)
     console.log(`   📋 Payment Link: ${linkId}`)
     console.log(`   💰 Amount: ${amountSOL} SOL (${lamports} lamports)`)
-    console.log(`   📊 Estimated Fees:`)
-    const fees = estimateTransactionFees()
-    console.log(`      - Network Fee: ${fees.networkFee} SOL`)
-    console.log(`      - Protocol Fee: ${fees.protocolFee} SOL`)
-    console.log(`   ⭐ Phantom popup: "Sign message: Privacy Money account sign in"`)
 
-    // ✅ INITIALIZE PRIVACYCASH SDK
-    console.log('🚀 Initializing Privacy Cash SDK...')
+    // Validate wallet has required methods
+    if (!wallet.publicKey) {
+      throw new Error('Wallet does not have a public key')
+    }
+
+    if (typeof wallet.signTransaction !== 'function') {
+      throw new Error('Wallet does not support transaction signing')
+    }
+
+    console.log(`📍 Wallet: ${wallet.publicKey.toString()}`)
+
+    // ✅ SETUP CONNECTION
     const RPC_URL = CONFIG.SOLANA_RPC_URL || 'https://mainnet.helius-rpc.com'
+    const connection = new Connection(RPC_URL, 'confirmed')
+    
+    console.log(`🌐 Connected to: ${RPC_URL}`)
 
-    // The SDK will use the wallet's public key for initialization
-    // and will request signatures from the wallet when needed
-    const pc = initializePrivacyCashClient(
-      RPC_URL,
-      wallet,
-      import.meta.env.DEV
-    )
+    // ✅ DYNAMIC IMPORT Privacy Cash SDK
+    // Import the deposit function directly from privacycash
+    // Do NOT instantiate PrivacyCash class - call deposit function!
+    const privacyCashModule = await import('privacycash')
+    
+    console.log('📦 Privacy Cash SDK loaded')
+    console.log('   🔐 Initializing encryption and preparing transaction...')
 
-    console.log('✅ Privacy Cash SDK initialized')
-    console.log(`   📍 Using public key: ${wallet.publicKey?.toString() || 'unknown'}`)
-    console.log('   🔐 Waiting for wallet signature...')
+    // ✅ CALL SDK DEPOSIT FUNCTION
+    // Parameters sesuai dokumentasi SDK:
+    // - publicKey: User's public key (NOT private key!)
+    // - connection: Solana connection
+    // - amount_in_lamports: Amount to deposit
+    // - storage: Browser storage for encryption keys
+    // - transactionSigner: Callback untuk sign transaction via wallet
+    // 
+    // SDK akan handle:
+    // - Generate encryption key from wallet signature
+    // - Create zero-knowledge proof
+    // - Build deposit transaction
+    // - Request wallet signature
+    // - Submit ke blockchain
+    
+    const depositResult = await (privacyCashModule as any).deposit({
+      publicKey: wallet.publicKey,
+      connection: connection,
+      amount_in_lamports: lamports,
+      storage: typeof window !== 'undefined' ? window.localStorage : {},
+      transactionSigner: async (tx: VersionedTransaction) => {
+        // 🔐 Wallet adapter akan handle signature popup
+        console.log('📝 Requesting wallet signature for deposit transaction...')
+        return await wallet.signTransaction(tx)
+      },
+    })
 
-    // ✅ EXECUTE DEPOSIT
-    // SDK akan:
-    // 1. Ask user to sign: "Privacy Money account sign in"
-    // 2. Derive encryption key dari signature
-    // 3. Create shielded deposit transaction
-    // 4. Submit to blockchain
-    console.log(`⏳ Creating deposit transaction (${amountSOL} SOL)...`)
-    console.log(`   💬 Check Phantom popup for signature request`)
+    const depositTx = depositResult?.tx || depositResult?.signature
 
-    const { tx } = await pc.deposit({ lamports })
+    if (!depositTx) {
+      throw new Error('No transaction hash returned from deposit')
+    }
 
-    console.log(`✅ Deposit transaction confirmed! Transaction: ${tx}`)
-    console.log(`   ${amountSOL} SOL transferred to Privacy Cash shielded pool`)
+    console.log(`✅ Deposit transaction submitted! Transaction: ${depositTx}`)
+    console.log(`   💾 ${amountSOL} SOL transferred to Privacy Cash shielded pool`)
     console.log(`   ⏱️ Transaction created in ${Date.now() - startTime}ms`)
 
     // ✅ RECORD DEPOSIT DI BACKEND (HANYA RECORD, BUKAN EKSEKUSI)
@@ -162,9 +191,9 @@ export async function executeRealDeposit(
       },
       body: JSON.stringify({
         linkId,
-        depositTx: tx,
+        depositTx,
         amount: amountSOL,
-        publicKey: wallet.publicKey?.toString() || wallet.toString(),
+        publicKey: wallet.publicKey.toString(),
       }),
     })
 
@@ -175,14 +204,14 @@ export async function executeRealDeposit(
 
     console.log(`✅ Deposit recorded successfully in backend`)
     console.log(`   📝 Link: ${linkId}`)
-    console.log(`   💾 Transaction Hash: ${tx}`)
+    console.log(`   💾 Transaction Hash: ${depositTx}`)
     console.log(`   ⏱️ Total time: ${Date.now() - startTime}ms`)
 
-    const explorerUrl = getExplorerUrl(tx)
+    const explorerUrl = getExplorerUrl(depositTx)
     console.log(`   🔗 View on Explorer: ${explorerUrl}`)
 
     return {
-      tx,
+      tx: depositTx,
       amountSOL,
       amountLamports: lamports,
       explorerUrl,
