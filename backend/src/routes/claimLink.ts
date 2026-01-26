@@ -155,9 +155,15 @@ router.post('/', async (req: Request, res: Response) => {
 
     // ✅ CRITICAL FIX: Use correct Privacy Cash program address
     // This MUST match the address where the deposit transaction went
-    const PRIVACY_CASH_PROGRAM = process.env.PRIVACY_CASH_PROGRAM || '9fhQBBumKEFuXtMBDw8AaQyAjCorLGJQlS3skWZdQyQD'
+    const PRIVACY_CASH_PROGRAM_RAW = process.env.PRIVACY_CASH_PROGRAM || '9fhQBBumKEFuXtMBDw8AaQyAjCorLGJQlS3skWZdQyQD'
+    const PRIVACY_CASH_PROGRAM = PRIVACY_CASH_PROGRAM_RAW.trim() // Remove leading/trailing spaces
     
-    console.log(`🔐 Using Privacy Cash Program: ${PRIVACY_CASH_PROGRAM}`)
+    // Validate base58 format (Solana addresses are 32-44 base58 chars)
+    if (!/^[1-9A-HJ-NP-Za-km-z]{32,44}$/.test(PRIVACY_CASH_PROGRAM)) {
+      throw new Error(`Invalid Privacy Cash program address format: '${PRIVACY_CASH_PROGRAM}' - contains non-base58 characters`)
+    }
+    
+    console.log(`🔐 Using Privacy Cash Program: ${PRIVACY_CASH_PROGRAM} (length: ${PRIVACY_CASH_PROGRAM.length})`)
 
     // ✅ Create PrivacyCash instance with operator as RELAYER
     const pc = new PrivacyCash({
