@@ -17,7 +17,7 @@ export const CONFIG = {
 
   // Privacy Cash Pool (Official Smart Contract Address)
   // Verified on Solscan: https://solscan.io/token/PrivacyCashTokenAddress
-  PRIVACY_CASH_POOL: import.meta.env.VITE_PRIVACY_CASH_POOL || '9fhQBbumKEFuXtMBDw8AaQyAjCorLGJQiS3skWZdQyQD',
+  PRIVACY_CASH_POOL: import.meta.env.VITE_PRIVACY_CASH_POOL || '9fhQBBumKEFuXtMBDw8AaQyAjCorLGJQlS3skWZdQyQD',
   PRIVACY_CASH_MESSAGE: 'Privacy Money account sign in',
 
   // Timeouts

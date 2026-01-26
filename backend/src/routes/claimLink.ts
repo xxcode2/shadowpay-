@@ -155,7 +155,7 @@ router.post('/', async (req: Request, res: Response) => {
 
     // ✅ CRITICAL FIX: Use correct Privacy Cash program address
     // This MUST match the address where the deposit transaction went
-    const PRIVACY_CASH_PROGRAM = process.env.PRIVACY_CASH_PROGRAM || '9fhQBbumKEFuXtMBDw8AaQyAjCorLGJQiS3skWZdQyQD'
+    const PRIVACY_CASH_PROGRAM = process.env.PRIVACY_CASH_PROGRAM || '9fhQBBumKEFuXtMBDw8AaQyAjCorLGJQlS3skWZdQyQD'
     
     console.log(`🔐 Using Privacy Cash Program: ${PRIVACY_CASH_PROGRAM}`)
 
