@@ -1,19 +1,18 @@
-import { Connection, SystemProgram, Transaction, PublicKey, LAMPORTS_PER_SOL } from '@solana/web3.js'
+import { PublicKey, LAMPORTS_PER_SOL } from '@solana/web3.js'
+import { PrivacyCash } from 'privacycash'
 import { CONFIG } from '../config'
 
 /**
- * ✅ CORRECT FLOW:
- * 1. Frontend: Create transfer transaction
- * 2. Frontend: User signs with Phantom (transaction signature)
- * 3. Frontend: Send SIGNED TRANSACTION to backend
- * 4. Backend: Submit the signed transaction
+ * ✅ IMPLEMENTASI PRIVACY CASH SDK SESUAI DOKUMENTASI RESMI
  * 
- * Why this works:
- * - User must sign the transfer (blockchain requirement)
- * - Frontend has direct RPC access (no API key needed for local ops)
- * - Backend submits the already-signed transaction
- * - User's signature proves authorization
+ * SDK menghandle:
+ * ✅ User signature request untuk derivasi encryption key
+ * ✅ Encryption dan privacy-preserving protocol
+ * ✅ Direct deposit ke Privacy Cash shielded pool
+ * 
+ * Dokumentasi: https://privacycash.mintlify.app/sdk/overview-copied-1
  */
+
 export async function executeRealDeposit({
   lamports,
   wallet,
@@ -25,87 +24,79 @@ export async function executeRealDeposit({
 }): Promise<{ tx: string }> {
   try {
     const amountSOL = (lamports / LAMPORTS_PER_SOL).toFixed(6)
-    console.log(`🚀 Executing deposit of ${amountSOL} SOL to Privacy Cash pool`)
+    console.log(`🚀 Executing REAL deposit of ${amountSOL} SOL to Privacy Cash pool`)
+    console.log(`   📋 User akan sign offchain message untuk encryption key`)
+    console.log(`   ⭐ Phantom popup: "Sign message: Privacy Money account sign in"`)
 
-    // ✅ SETUP CONNECTION FOR FRONTEND
-    const connection = new Connection(
-      CONFIG.SOLANA_RPC_URL,
-      'confirmed'
-    )
+    // ✅ INITIALIZE PRIVACYCASH SDK
+    // SDK akan handle:
+    // 1. Request user signature untuk encrypt data
+    // 2. Derive encryption key dari signature
+    // 3. Create shielded transaction
+    // 4. Submit to Privacy Cash pool
+    console.log('🚀 Initializing Privacy Cash SDK...')
+    const RPC_URL = CONFIG.SOLANA_RPC_URL || 'https://mainnet.helius-rpc.com'
 
-    // ✅ PRIVACY CASH POOL ADDRESS
-    const PRIVACY_CASH_POOL = CONFIG.PRIVACY_CASH_POOL
+    const pc = new PrivacyCash({
+      RPC_url: RPC_URL,
+      owner: wallet, // Wallet adapter atau Keypair
+      enableDebug: import.meta.env.DEV,
+    } as any)
 
-    // ✅ STEP 1: CREATE TRANSFER TRANSACTION
-    console.log('📝 Creating transfer transaction to Privacy Cash pool...')
-    const transaction = new Transaction().add(
-      SystemProgram.transfer({
-        fromPubkey: wallet.publicKey,
-        toPubkey: new PublicKey(PRIVACY_CASH_POOL),
-        lamports,
-      })
-    )
+    console.log('✅ Privacy Cash SDK initialized')
 
-    // ✅ STEP 2: GET BLOCKHASH
-    console.log('⏳ Getting latest blockhash...')
-    const { blockhash } = await connection.getLatestBlockhash()
-    transaction.recentBlockhash = blockhash
-    transaction.feePayer = wallet.publicKey
+    // ✅ EXECUTE DEPOSIT
+    // SDK akan:
+    // 1. Ask user to sign: "Privacy Money account sign in"
+    // 2. Derive encryption key dari signature
+    // 3. Create shielded deposit transaction
+    // 4. Submit to blockchain
+    console.log(`⏳ Executing deposit (${amountSOL} SOL)...`)
+    console.log(`   💬 Check Phantom popup for signature request`)
 
-    // ✅ STEP 3: USER SIGNS TRANSACTION WITH PHANTOM
-    console.log('🔐 Requesting signature from Phantom wallet...')
-    console.log('   Phantom popup: "Approve transaction: Transfer SOL"')
-    const signedTx = await wallet.signTransaction(transaction)
+    const { tx } = await pc.deposit({ lamports })
 
-    // ✅ STEP 4: SERIALIZE FOR TRANSMISSION
-    const serializedTx = signedTx.serialize()
-    const txArray = Array.from(serializedTx)
+    console.log(`✅ Deposit successful! Transaction: ${tx}`)
+    console.log(`   ${amountSOL} SOL transferred to Privacy Cash shielded pool`)
 
-    console.log(`✅ User signed transaction`)
-
-    // ✅ STEP 5: SEND SIGNED TRANSACTION TO BACKEND
-    console.log('📤 Sending signed transaction to backend...')
+    // ✅ RECORD DEPOSIT DI BACKEND (HANYA RECORD, BUKAN EKSEKUSI)
+    console.log(`📤 Notifying backend about deposit...`)
     const BACKEND_URL =
       import.meta.env.VITE_BACKEND_URL ||
       'https://shadowpay-backend-production.up.railway.app'
 
-    const response = await fetch(`${BACKEND_URL}/api/deposit`, {
+    const recordRes = await fetch(`${BACKEND_URL}/api/deposit`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
       },
       body: JSON.stringify({
         linkId,
+        depositTx: tx,
         amount: amountSOL,
-        lamports,
-        signedTransaction: txArray, // ✅ SEND SIGNED TRANSACTION
-        publicKey: wallet.publicKey.toString(),
+        publicKey: wallet.publicKey?.toString() || wallet.toString(),
       }),
     })
 
-    if (!response.ok) {
-      const errorData = await response.json()
-      throw new Error(errorData.error || `Backend error: ${response.status}`)
+    if (!recordRes.ok) {
+      const errorData = await recordRes.json()
+      throw new Error(`Backend recording error: ${errorData.error || recordRes.statusText}`)
     }
 
-    const { tx: depositTx } = await response.json()
-
-    console.log(`✅ Deposit successful! Transaction: ${depositTx}`)
-    console.log(`   ${amountSOL} SOL transferred to Privacy Cash pool`)
-    return { tx: depositTx }
+    console.log(`✅ Backend notified successfully`)
+    return { tx }
   } catch (err: any) {
-    console.error('❌ Deposit failed:', err)
+    console.error('❌ PrivacyCash deposit failed:', err)
 
-    let errorMsg = err.message || 'Unknown error'
-
-    if (errorMsg.toLowerCase().includes('user rejected')) {
-      errorMsg = '❌ Payment cancelled. Please approve the Phantom popup to continue.'
-    } else if (errorMsg.includes('invalid')) {
-      errorMsg = 'Invalid transaction. Please check your wallet and try again.'
-    } else if (errorMsg.includes('access forbidden') || errorMsg.includes('403')) {
-      errorMsg = 'RPC authentication error. Backend is not properly configured.'
+    // ✅ USER-FRIENDLY ERROR MESSAGES
+    if (err.message?.toLowerCase().includes('user rejected')) {
+      throw new Error('❌ Signature cancelled. Please approve the Phantom popup to continue.')
     }
 
-    throw new Error(`❌ Deposit failed: ${errorMsg}`)
+    if (err.message?.toLowerCase().includes('insufficient')) {
+      throw new Error('❌ Insufficient balance. Please check your wallet balance.')
+    }
+
+    throw new Error(`❌ Deposit failed: ${err.message || 'Unknown error'}`)
   }
 }

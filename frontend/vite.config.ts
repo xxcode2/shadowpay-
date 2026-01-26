@@ -7,7 +7,6 @@ export default defineConfig({
     nodePolyfills({
       protocolImports: true,
       globals: {
-        // ✅ MOCK CONSOLE untuk browser - SDK mencoba write ke stdout
         Buffer: true,
         global: true,
         process: true,
@@ -16,10 +15,7 @@ export default defineConfig({
   ],
   resolve: {
     alias: {
-      // Prevent node-localstorage from being loaded in browser
-      // It tries to use fs.statSync which doesn't exist in browser
       'node-localstorage': path.resolve(__dirname, './src/empty-module.js'),
-      // ✅ MOCK PATH MODULE untuk browser - SDK mencoba gunakan path.join()
       path: path.resolve(__dirname, './src/empty-module.js'),
     },
   },
@@ -27,6 +23,8 @@ export default defineConfig({
     target: 'es2022',
   },
   optimizeDeps: {
+    // ✅ PENTING: Exclude WASM packages dari pre-bundling
+    exclude: ['@lightprotocol/hasher.rs', 'privacycash'],
     esbuildOptions: {
       define: {
         global: 'globalThis',
@@ -34,3 +32,4 @@ export default defineConfig({
     },
   },
 })
+

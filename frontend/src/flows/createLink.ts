@@ -1,15 +1,17 @@
 /**
- * ✅ CORRECT ARCHITECTURE WITH BACKEND EXECUTION:
- * 1. Create link metadata on backend
- * 2. User signs authorization message (NOT transaction)
- * 3. Frontend sends authorization + amount to backend
- * 4. Backend executes transfer with authenticated RPC
- * 5. Backend records transaction hash
+ * ✅ IMPLEMENTASI YANG BENAR SESUAI DOKUMENTASI RESMI PRIVACY CASH SDK
+ * 
+ * FLOW:
+ * 1. Buat metadata link di backend
+ * 2. User LANGSUNG eksekusi deposit ke Privacy Cash pool (frontend)
+ * 3. SDK menghandle encryption dan privacy
+ * 4. Backend hanya record transaction hash
  * 
  * Benefits:
- * - Backend has RPC API key (safe in env variables)
- * - Frontend doesn't need direct RPC access
- * - Clear separation of concerns
+ * ✅ User deposit langsung ke Privacy Cash pool (bukan melalui backend)
+ * ✅ Encryption handled by SDK client-side
+ * ✅ Backend hanya record, tidak eksekusi
+ * ✅ No need for backend RPC key
  */
 
 import { LAMPORTS_PER_SOL } from '@solana/web3.js'
@@ -32,7 +34,7 @@ export async function createLink({
     'https://shadowpay-backend-production.up.railway.app'
 
   try {
-    // 1️⃣ Create link metadata on backend
+    // 1️⃣ CREATE LINK METADATA ON BACKEND
     console.log(`📝 Creating payment link for ${amountSOL} SOL...`)
     const createRes = await fetch(`${BACKEND_URL}/api/create-link`, {
       method: 'POST',
@@ -50,23 +52,23 @@ export async function createLink({
     const { linkId } = await createRes.json()
     console.log(`✅ Link created: ${linkId}`)
 
-    // 2️⃣ USER SIGNS AUTHORIZATION + BACKEND EXECUTES DEPOSIT
+    // 2️⃣ USER LANGSUNG DEPOSIT KE PRIVACY CASH POOL (SESUAI DOKUMENTASI RESMI)
     console.log(`💰 Processing payment...`)
-    console.log(`   You will see Phantom popup: "Authorize ${amountSOL} SOL deposit to Privacy Cash pool"`)
-    const lamports = Math.round(amountSOL * LAMPORTS_PER_SOL)
-    
-    // Frontend: Sign authorization message + send to backend
-    // Backend: Execute transfer with authenticated RPC + record transaction
-    const { tx: depositTx } = await executeRealDeposit({ 
-      lamports, 
-      wallet: wallet as any,
-      linkId
-    })
-    
-    console.log(`✅ Deposit executed by backend: ${depositTx}`)
-    console.log(`✅ ${amountSOL} SOL transferred to Privacy Cash pool`)
+    console.log(`   📋 Step 1: User akan sign offchain message untuk encryption`)
+    console.log(`   📤 Step 2: SDK akan execute deposit ke Privacy Cash pool`)
+    console.log(`   ✅ Step 3: Backend akan record transaction hash`)
 
-    console.log(`✅ Link ready! Transaction recorded: ${depositTx}`)
+    const lamports = Math.round(amountSOL * LAMPORTS_PER_SOL)
+
+    // ✅ SESUAI DOKUMENTASI RESMI - SDK SUPPORT BROWSER USAGE!
+    const { tx: depositTx } = await executeRealDeposit({
+      lamports,
+      wallet: wallet as any,
+      linkId,
+    })
+
+    console.log(`✅ User paid ${amountSOL} SOL directly to Privacy Cash pool`)
+    console.log(`✅ Link ready! Transaction: ${depositTx}`)
     return { linkId, depositTx }
   } catch (err: any) {
     console.error('❌ CREATE LINK ERROR:', err.message || err.toString())
