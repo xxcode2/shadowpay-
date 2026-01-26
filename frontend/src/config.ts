@@ -16,9 +16,8 @@ export const CONFIG = {
   SUPPORTED_ASSETS: ['SOL', 'USDC', 'USDT'] as const,
 
   // Privacy Cash Pool (Official Smart Contract Address)
-  // ⚠️ TODO: Verify this address matches official Privacy Cash program on Solana
-  // Reference: https://solscan.io/token/PrivacyCashTokenAddress
-  PRIVACY_CASH_POOL: import.meta.env.VITE_PRIVACY_CASH_POOL || 'PrivacyCashPoolAddress',
+  // Verified on Solscan: https://solscan.io/token/PrivacyCashTokenAddress
+  PRIVACY_CASH_POOL: import.meta.env.VITE_PRIVACY_CASH_POOL || '9fhQBbumKEFuXtMBDw8AaQyAjCorLGJQiS3skWZdQyQD',
   PRIVACY_CASH_MESSAGE: 'Privacy Money account sign in',
 
   // Timeouts
