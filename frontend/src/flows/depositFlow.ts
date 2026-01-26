@@ -44,23 +44,20 @@ export async function executeRealDeposit({
     const owner = Keypair.fromSeed(seed)
     console.log(`✅ Owner keypair created: ${owner.publicKey.toString().slice(0, 8)}...`)
 
-    // ✅ LANGKAH 5: INISIALISASI SDK DENGAN MINIMAL CONFIG YANG BENAR
+    // ✅ LANGKAH 5: INISIALISASI SDK DENGAN SINGLE OBJECT CONFIG
     console.log('⚙️ Initializing PrivacyCash SDK for browser environment...')
     
-    // ✅ MINIMAL CONFIG - HANYA PARAMETER YANG REQUIRED
-    // SDK otomatis detect browser environment, jangan override path
-    const pc = new PrivacyCash(
-      owner, // owner keypair
-      {
-        RPC_url: import.meta.env.VITE_SOLANA_RPC || 'https://mainnet.helius-rpc.com',
-        wallet: {
-          adapter: wallet,
-          publicKey: wallet.publicKey,
-        },
-        apiEndpoint: 'https://api3.privacycash.org',
-        enableDebug: import.meta.env.DEV,
-      }
-    )
+    // ✅ SDK expects single object parameter with all config
+    const pc = new PrivacyCash({
+      owner: owner, // ✅ KEYPAIR DARI SIGNATURE USER
+      RPC_url: import.meta.env.VITE_SOLANA_RPC || 'https://mainnet.helius-rpc.com',
+      wallet: {
+        adapter: wallet,
+        publicKey: wallet.publicKey,
+      },
+      apiEndpoint: 'https://api3.privacycash.org',
+      enableDebug: import.meta.env.DEV,
+    } as any)
 
     // ✅ EKSEKUSI DEPOSIT
     console.log('⏳ Waiting for your approval in Phantom wallet...')
