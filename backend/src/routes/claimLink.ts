@@ -185,13 +185,29 @@ router.post('/', async (req: Request, res: Response) => {
       })
     }
 
-    // 🔥 EXECUTE REAL WITHDRAWAL
-    const { tx: withdrawTx } = await pc.withdraw({
+    // 🔥 EXECUTE REAL WITHDRAWAL VIA PRIVACY CASH SDK
+    // SDK returns: tx, recipient, amount_in_lamports, fee_in_lamports, isPartial
+    const withdrawalResult = await pc.withdraw({
       lamports: lamportsNum,
       recipientAddress,
     })
 
+    const { tx: withdrawTx, amount_in_lamports: amountReceived, fee_in_lamports: feeCharged, isPartial } = withdrawalResult
+
     console.log(`✅ Real withdrawal tx: ${withdrawTx}`)
+    console.log(`   Amount requested: ${(lamportsNum / LAMPORTS_PER_SOL).toFixed(6)} SOL`)
+    console.log(`   Amount received: ${(amountReceived / LAMPORTS_PER_SOL).toFixed(6)} SOL`)
+    console.log(`   Total fee: ${(feeCharged / LAMPORTS_PER_SOL).toFixed(6)} SOL`)
+
+    if (isPartial) {
+      console.log(`   ⚠️ PARTIAL WITHDRAWAL - balance was insufficient`)
+    }
+
+    // ✅ CALCULATE FEE BREAKDOWN
+    // Fees: 0.006 SOL base + 0.35% protocol fee
+    const BASE_FEE_LAMPORTS = 0.006 * LAMPORTS_PER_SOL
+    const protocolFeeLamports = feeCharged - BASE_FEE_LAMPORTS
+    const protocolFeeSOL = Math.max(0, protocolFeeLamports / LAMPORTS_PER_SOL)
 
     // ✅ ATOMIC update: Link + Transaction record (prevents double-claim)
     await prisma.$transaction([
@@ -208,7 +224,7 @@ router.post('/', async (req: Request, res: Response) => {
           type: 'withdraw',
           linkId,
           transactionHash: withdrawTx,
-          amount: link.amount, // Use amount in SOL, not lamports
+          amount: link.amount, // Original amount in SOL
           assetType: link.assetType,
           status: 'confirmed',
           toAddress: recipientAddress,
@@ -216,14 +232,23 @@ router.post('/', async (req: Request, res: Response) => {
       }),
     ])
 
-    console.log(`✅ Link ${linkId} claimed by ${recipientAddress} | Withdrawal tx: ${withdrawTx}`)
-    console.log(`💰 ShadowPay earned 0.006 SOL commission from this transaction`)
+    console.log(`✅ Link ${linkId} claimed by ${recipientAddress}`)
+    console.log(`💰 Operator earned 0.006 SOL base fee + 0.35% protocol fee`)
 
     return res.status(200).json({
       success: true,
       withdrawTx,
       linkId,
-      message: 'Withdrawal completed successfully',
+      amount: amountReceived / LAMPORTS_PER_SOL, // Amount recipient got
+      fee: {
+        baseFee: 0.006,
+        protocolFee: protocolFeeSOL,
+        totalFee: feeCharged / LAMPORTS_PER_SOL,
+      },
+      isPartial,
+      message: isPartial 
+        ? 'Partial withdrawal completed - balance was insufficient'
+        : 'Withdrawal completed successfully',
     })
   } catch (err: any) {
     console.error('❌ CLAIM ERROR:', err.message || err.toString())

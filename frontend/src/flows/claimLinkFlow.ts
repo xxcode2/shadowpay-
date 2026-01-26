@@ -1,11 +1,16 @@
 /**
- * Execute link claim and withdrawal
+ * ✅ EXECUTE LINK CLAIM AND WITHDRAWAL
+ * 
+ * Uses Privacy Cash SDK withdraw (executed on backend as relayer)
  * 
  * Frontend sends:
  * - linkId: The link to claim
  * - recipientAddress: Where to send the funds
  * 
- * Backend executes REAL PrivacyCash.withdraw() as RELAYER
+ * Backend executes:
+ * - PrivacyCash.withdraw() as RELAYER
+ * - Funds sent from Privacy Cash pool to recipient
+ * - Returns withdrawal details including fees
  */
 export async function executeClaimLink(input: {
   linkId: string
@@ -15,17 +20,16 @@ export async function executeClaimLink(input: {
 
   // ✅ FRONTEND VALIDATION
   if (!linkId || typeof linkId !== 'string') {
-    throw new Error('Missing or invalid linkId')
+    throw new Error('❌ Missing or invalid linkId')
   }
 
   if (!recipientAddress || typeof recipientAddress !== 'string') {
-    throw new Error('Missing recipientAddress')
+    throw new Error('❌ Missing recipientAddress')
   }
 
-  // ✅ BASIC SOLANA ADDRESS FORMAT CHECK (optional, backend validates too)
   // Solana addresses are 32-58 characters base58
   if (recipientAddress.length < 32 || recipientAddress.length > 58) {
-    throw new Error('Invalid Solana wallet address format (incorrect length)')
+    throw new Error('❌ Invalid Solana wallet address format (incorrect length)')
   }
 
   const BACKEND_URL =
@@ -33,6 +37,7 @@ export async function executeClaimLink(input: {
     'https://shadowpay-backend-production.up.railway.app'
 
   console.log(`🚀 Claiming link ${linkId} for ${recipientAddress}...`)
+  console.log(`   ⏳ Backend executing withdrawal via Privacy Cash SDK...`)
 
   try {
     const res = await fetch(`${BACKEND_URL}/api/claim-link`, {
@@ -58,14 +63,19 @@ export async function executeClaimLink(input: {
           console.error('❌ Claim failed with details:', errorData)
           errorMsg = errorData.error || errorMsg
 
-          if (errorMsg.includes('no valid deposit')) {
-            errorMsg = 'Deposit still processing. Please wait 1-2 minutes and try again.'
-          } else if (errorMsg.includes('already claimed')) {
-            errorMsg = 'This link has already been claimed!'
-          } else if (errorMsg.includes('not found')) {
-            errorMsg = 'This link does not exist. Please check the link ID.'
-          } else if (errorMsg.includes('Invalid Solana')) {
-            errorMsg = 'Invalid wallet address. Please check your Solana address.'
+          // Friendly error messages
+          if (errorMsg.toLowerCase().includes('no valid deposit')) {
+            errorMsg = '⏳ Deposit still processing. Please wait 1-2 minutes and try again.'
+          } else if (errorMsg.toLowerCase().includes('already claimed')) {
+            errorMsg = '❌ This link has already been claimed!'
+          } else if (errorMsg.toLowerCase().includes('not found')) {
+            errorMsg = '❌ This link does not exist. Please check the link ID.'
+          } else if (errorMsg.toLowerCase().includes('invalid solana')) {
+            errorMsg = '❌ Invalid wallet address. Please check your Solana address.'
+          } else if (errorMsg.toLowerCase().includes('no balance')) {
+            errorMsg = '❌ No balance in Privacy Cash pool. Deposit may not have confirmed.'
+          } else if (errorMsg.toLowerCase().includes('utxo')) {
+            errorMsg = '⏳ No UTXOs available yet. Please wait a moment and retry.'
           }
         } else {
           // Not JSON, try text response
@@ -81,15 +91,32 @@ export async function executeClaimLink(input: {
     }
 
     const data = await res.json()
-    console.log(`✅ Withdrawal completed: ${data.withdrawTx}`)
+    console.log(`✅ Withdrawal completed successfully!`)
+    console.log(`   📤 Transaction: ${data.withdrawTx}`)
+    console.log(`   💰 Amount received: ${(data.amount || 0).toFixed(6)} SOL`)
+
+    // ✅ DISPLAY FEE BREAKDOWN
+    if (data.fee) {
+      console.log(`   💸 Fees paid:`)
+      console.log(`      - Base fee: ${(data.fee.baseFee || 0).toFixed(6)} SOL`)
+      console.log(`      - Protocol fee (0.35%): ${(data.fee.protocolFee || 0).toFixed(6)} SOL`)
+      console.log(`      - Total fees: ${(data.fee.totalFee || 0).toFixed(6)} SOL`)
+    }
+
+    if (data.isPartial) {
+      console.log(`   ⚠️ PARTIAL WITHDRAWAL - balance was insufficient for full amount`)
+    }
 
     return {
       success: true,
       withdrawTx: data.withdrawTx,
       linkId: data.linkId,
+      amount: data.amount || 0,
+      fee: data.fee || { baseFee: 0, protocolFee: 0, totalFee: 0 },
+      isPartial: data.isPartial || false,
     }
   } catch (err: any) {
     console.error('❌ Claim link error:', err.message || err.toString())
-    throw new Error(`Claim failed: ${err.message || 'Unknown error'}`)
+    throw new Error(`❌ Claim failed: ${err.message || 'Unknown error'}`)
   }
 }
