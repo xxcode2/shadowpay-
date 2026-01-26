@@ -44,53 +44,27 @@ export async function executeRealDeposit({
     const owner = Keypair.fromSeed(seed)
     console.log(`✅ Owner keypair created: ${owner.publicKey.toString().slice(0, 8)}...`)
 
-    // ✅ LANGKAH 5: INISIALISASI SDK DENGAN BROWSER-COMPATIBLE CONFIG
+    // ✅ LANGKAH 5: INISIALISASI SDK DENGAN MINIMAL CONFIG YANG BENAR
     console.log('⚙️ Initializing PrivacyCash SDK for browser environment...')
     
-    // ✅ KONFIGURASI KHUSUS UNTUK BROWSER (INI KUNCI KE SUKSES!)
-    const browserConfig = {
-      // ✅ RPC config
-      RPC_url: import.meta.env.VITE_SOLANA_RPC || 'https://mainnet.helius-rpc.com',
-      
-      // ✅ OWNER config (dari signature user)
-      owner: owner,
-      
-      // ✅ WALLET config (untuk signing transaksi)
-      wallet: {
-        adapter: wallet,
-        publicKey: wallet.publicKey,
-      },
-      
-      // ✅ API config (sesuai log asli)
-      apiEndpoint: 'https://api3.privacycash.org',
-      
-      // ✅ BROWSER-SPECIFIC CONFIG (HINDARI FILESYSTEM)
-      browserMode: true, // ✅ AKTIFKAN MODE BROWSER
-      cacheProvider: 'localStorage', // ✅ GUNAKAN localStorage SESUAI LOG ASLI
-      storagePrefix: 'privacycash_', // ✅ PREFIX UNTUK localStorage
-      
-      // ✅ DEBUG config
-      enableDebug: import.meta.env.DEV,
-      
-      // ✅ PATH OVERRIDE (HINDARI ERROR PATH)
-      dataPath: 'memory://', // ✅ GUNAKAN MEMORY STORAGE, BUKAN FILESYSTEM
-      cachePath: 'memory://', // ✅ SEMUA CACHE DI MEMORI
-      utxoCachePath: 'memory://', // ✅ TIDAK PERLU FILESYSTEM PATHS
-    }
+    // ✅ MINIMAL CONFIG - HANYA PARAMETER YANG REQUIRED
+    // SDK otomatis detect browser environment, jangan override path
+    const pc = new PrivacyCash(
+      owner, // owner keypair
+      {
+        RPC_url: import.meta.env.VITE_SOLANA_RPC || 'https://mainnet.helius-rpc.com',
+        wallet: {
+          adapter: wallet,
+          publicKey: wallet.publicKey,
+        },
+        apiEndpoint: 'https://api3.privacycash.org',
+        enableDebug: import.meta.env.DEV,
+      }
+    )
 
-    const pc = new PrivacyCash(browserConfig as any) // Type casting untuk kompatibilitas
-
-    // ✅ EKSEKUSI DEPOSIT DENGAN CONFIG YANG BENAR
+    // ✅ EKSEKUSI DEPOSIT
     console.log('⏳ Waiting for your approval in Phantom wallet...')
-    const depositOptions = {
-      lamports,
-      enableDebug: import.meta.env.DEV,
-      // ✅ OPTIONS TAMBAHAN UNTUK BROWSER
-      skipFilesystem: true, // ✅ HINDARI FILESYSTEM OPERATIONS
-      useMemoryCache: true, // ✅ GUNAKAN MEMORY CACHE
-    }
-
-    const { tx } = await pc.deposit(depositOptions)
+    const { tx } = await pc.deposit({ lamports })
 
     console.log(`✅ Deposit successful! Transaction: ${tx}`)
     console.log(`   ${amountSOL} SOL was transferred DIRECTLY to Privacy Cash pool`)
