@@ -1,17 +1,13 @@
 /**
- * ✅ IMPLEMENTASI YANG BENAR SESUAI DOKUMENTASI RESMI PRIVACY CASH SDK
+ * ✅ USER-CENTRIC DEPOSIT ARCHITECTURE
  * 
- * FLOW:
- * 1. Buat metadata link di backend
- * 2. User LANGSUNG eksekusi deposit ke Privacy Cash pool (frontend)
- * 3. SDK menghandle encryption dan privacy
- * 4. Backend hanya record transaction hash
+ * Flow:
+ * 1. Create link metadata on backend
+ * 2. User signs deposit transaction in their wallet
+ * 3. Backend relays signed transaction to Privacy Cash
+ * 4. Funds go directly to Privacy Cash pool (not operator)
  * 
- * Benefits:
- * ✅ User deposit langsung ke Privacy Cash pool (bukan melalui backend)
- * ✅ Encryption handled by SDK client-side
- * ✅ Backend hanya record, tidak eksekusi
- * ✅ No need for backend RPC key
+ * Non-custodial: Operator never holds user funds
  */
 
 import { LAMPORTS_PER_SOL } from '@solana/web3.js'
@@ -52,15 +48,15 @@ export async function createLink({
     const { linkId } = await createRes.json()
     console.log(`✅ Link created: ${linkId}`)
 
-    // 2️⃣ USER LANGSUNG DEPOSIT KE PRIVACY CASH POOL (SESUAI DOKUMENTASI RESMI)
+    // 2️⃣ USER SIGNS DEPOSIT TRANSACTION (Non-Custodial)
     console.log(`💰 Processing payment...`)
-    console.log(`   📋 Step 1: User akan sign offchain message untuk encryption`)
-    console.log(`   📤 Step 2: User akan sign transaction untuk deposit`)
-    console.log(`   ✅ Step 3: Backend akan record transaction hash`)
+    console.log(`   📋 Step 1: Building deposit transaction`)
+    console.log(`   🔐 Step 2: User signs in wallet`)
+    console.log(`   📤 Step 3: Backend relays to Privacy Cash`)
 
     const amountStr = amountSOL.toString()
 
-    // ✅ USER SIGNS TRANSACTION - USER PAYS!
+    // ✅ USER SIGNS & DEPOSITS - FUNDS GO DIRECTLY TO PRIVACY CASH POOL
     const depositTx = await executeRealDeposit(
       {
         linkId,
@@ -70,7 +66,7 @@ export async function createLink({
       wallet as any
     )
 
-    console.log(`✅ User paid ${amountSOL} SOL directly to Privacy Cash pool`)
+    console.log(`✅ User deposited ${amountSOL} SOL directly to Privacy Cash pool`)
     console.log(`✅ Link ready! Transaction: ${depositTx}`)
     return { linkId, depositTx }
   } catch (err: any) {

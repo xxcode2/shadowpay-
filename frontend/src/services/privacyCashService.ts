@@ -87,6 +87,46 @@ export class PrivacyCashService {
   }
 
   /**
+   * Get the UTXO keypair for creating encrypted outputs
+   * The UTXO keypair is derived from the user's signature
+   * 
+   * UTXO Structure (from Privacy Cash):
+   * - private key: derived from encryption key
+   * - public key: PoseidonHash(privateKey)
+   * - Used to encrypt/decrypt UTXOs
+   */
+  static getUtxoKeypair(): any {
+    if (!this.encryptionService) {
+      throw new Error('Encryption service not initialized. Call deriveEncryptionKey() first.')
+    }
+    
+    try {
+      // Get the derived UTXO private key from encryption service
+      const utxoPrivateKey = this.encryptionService.deriveUtxoPrivateKey()
+      
+      if (!utxoPrivateKey) {
+        throw new Error('Failed to derive UTXO private key')
+      }
+      
+      // In a full implementation, create a Keypair from the private key
+      // For now, return a mock keypair structure that has the pubkey
+      return {
+        privateKey: utxoPrivateKey,
+        pubkey: {
+          toString: () => {
+            // This would be PoseidonHash of the private key
+            // For now, return a placeholder
+            return 'utxo_pubkey_' + utxoPrivateKey.slice(0, 16)
+          }
+        }
+      }
+    } catch (error) {
+      console.error('Failed to get UTXO keypair:', error)
+      throw error
+    }
+  }
+
+  /**
    * Reset state (useful for wallet switching)
    */
   static reset(): void {

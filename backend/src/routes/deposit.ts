@@ -253,32 +253,33 @@ router.post('/execute', async (req: Request<{}, {}, any>, res: Response) => {
 })
 
 /**
- * POST /api/deposit/build-instruction
+ * POST /api/deposit/relay
  * 
- * ⚠️  IMPORTANT: Privacy Cash SDK's deposit() method:
- * - Generates ZK proof
- * - Builds and IMMEDIATELY executes transaction
- * - Relays to Privacy Cash indexer
- * - Cannot be split into build + user-sign
+ * ✅ USER-CENTRIC DEPOSIT FLOW (Fully Non-Custodial):
+ * 1. Frontend: Build deposit transaction using Privacy Cash SDK
+ * 2. Frontend: USER signs transaction in their wallet
+ * 3. Frontend: Send signed transaction to backend
+ * 4. Backend: Relay signed transaction to Privacy Cash indexer
+ * 5. Funds go directly from user wallet to Privacy Cash pool
  * 
- * Therefore: Backend must execute using operator keypair
- * This is the only way Privacy Cash SDK works
+ * Backend only acts as RELAYER, never takes custody of funds
+ * Operator is just the signer for the relayer call, not for user deposits
  */
-router.post('/build-instruction', async (req: Request<{}, {}, any>, res: Response) => {
+router.post('/relay', async (req: Request<{}, {}, any>, res: Response) => {
   try {
-    const { linkId, amount, lamports, publicKey } = req.body
+    const { linkId, signedTransaction, amount, publicKey } = req.body
 
     // ✅ VALIDASI INPUT
     if (!linkId || typeof linkId !== 'string') {
       return res.status(400).json({ error: 'linkId required' })
     }
 
-    if (!publicKey || typeof publicKey !== 'string') {
-      return res.status(400).json({ error: 'publicKey required' })
+    if (!signedTransaction || typeof signedTransaction !== 'string') {
+      return res.status(400).json({ error: 'signedTransaction required' })
     }
 
-    if (!lamports || typeof lamports !== 'number') {
-      return res.status(400).json({ error: 'lamports required' })
+    if (!publicKey || typeof publicKey !== 'string') {
+      return res.status(400).json({ error: 'publicKey required' })
     }
 
     // ✅ Validate Solana address format
@@ -301,50 +302,41 @@ router.post('/build-instruction', async (req: Request<{}, {}, any>, res: Respons
       return res.status(400).json({ error: 'Deposit already recorded for this link' })
     }
 
-    console.log(`📝 Building & executing deposit for link ${linkId}...`)
+    console.log(`📤 Relaying user-signed deposit transaction for link ${linkId}...`)
     console.log(`   User: ${publicKey}`)
-    console.log(`   Amount: ${lamports} lamports (${amount} SOL)`)
-    console.log(`   ℹ️  Privacy Cash SDK requires immediate execution (cannot be deferred)`)
-    console.log(`   Using operator keypair to execute (user's funds = operator deposit)`)
+    console.log(`   Amount: ${amount} SOL`)
 
     try {
-      // ✅ Execute deposit via Privacy Cash SDK
-      // SDK's deposit() method:
-      // - Generates ZK proof (requires current blockhash)
-      // - Builds proper transact instruction  
-      // - Relays to Privacy Cash indexer
-      // - Returns transaction signature
+      // ✅ RELAY TO PRIVACY CASH INDEXER
+      // Send the already-signed transaction from user to Privacy Cash backend
+      const relayUrl = `${process.env.PRIVACY_CASH_INDEXER_URL || 'https://api3.privacycash.org'}/deposit`
       
-      const { getPrivacyCashClient } = await import('../services/privacyCash.js')
-      const pc = getPrivacyCashClient()
-      
-      console.log(`📤 Executing deposit via Privacy Cash SDK...`)
-      
-      // Get balance before
-      const balanceBefore = await pc.getPrivateBalance()
-      const balanceBeforeLamports = typeof balanceBefore === 'object' ? balanceBefore.lamports : balanceBefore
-      console.log(`   Operator balance before: ${balanceBeforeLamports} lamports`)
-      
-      // Execute deposit - this does EVERYTHING (proof, relay, etc)
-      const depositResult = await pc.deposit({
-        lamports: lamports
+      console.log(`📡 Relaying to Privacy Cash indexer: ${relayUrl}`)
+
+      const relayResponse = await fetch(relayUrl, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          signedTransaction,
+          senderAddress: publicKey,
+        }),
       })
-      
-      const depositResultAny = depositResult as any
-      const depositTx = depositResultAny.tx || depositResultAny.signature || (typeof depositResult === 'string' ? depositResult : undefined)
-      
-      if (!depositTx) {
-        throw new Error('No transaction signature returned from Privacy Cash SDK')
+
+      if (!relayResponse.ok) {
+        const errorText = await relayResponse.text()
+        console.error('❌ Privacy Cash relay error:', errorText)
+        throw new Error(`Relay failed: ${relayResponse.status} ${errorText}`)
       }
-      
-      console.log(`✅ Deposit executed successfully!`)
-      console.log(`   Transaction: ${depositTx}`)
-      
-      // Get balance after
-      const balanceAfter = await pc.getPrivateBalance()
-      const balanceAfterLamports = typeof balanceAfter === 'object' ? balanceAfter.lamports : balanceAfter
-      console.log(`   Operator balance after: ${balanceAfterLamports} lamports`)
-      console.log(`   Balance increased: ${balanceAfterLamports - balanceBeforeLamports} lamports`)
+
+      const relayResult = (await relayResponse.json()) as { signature?: string }
+      const depositTx = relayResult.signature
+
+      if (!depositTx) {
+        throw new Error('No transaction signature returned from Privacy Cash relay')
+      }
+
+      console.log(`✅ Transaction relayed successfully!`)
+      console.log(`   Signature: ${depositTx}`)
       
       // ✅ RECORD DEPOSIT IN DATABASE
       await prisma.$transaction([
@@ -364,43 +356,33 @@ router.post('/build-instruction', async (req: Request<{}, {}, any>, res: Respons
           },
         }),
       ])
-      
+
       console.log(`✅ Deposit recorded in database`)
-      
+
       return res.status(200).json({
         success: true,
         tx: depositTx,
-        message: 'Deposit executed and recorded successfully via Privacy Cash SDK',
+        message: 'Deposit relayed successfully to Privacy Cash pool',
         details: {
           linkId,
           amount,
-          lamports,
           publicKey,
           signature: depositTx,
         },
       })
-    } catch (buildErr: any) {
-      console.error('❌ SDK execution error:', buildErr.message)
-      console.error('   Stack:', buildErr.stack)
-      
-      // Return details for debugging
-      const errorMsg = buildErr.message || 'Unknown error'
-      const details = errorMsg.includes('Blockhash') 
-        ? 'Blockhash expired - transaction took too long. Try again.'
-        : errorMsg.includes('insufficient')
-        ? 'Insufficient operator balance'
-        : errorMsg
-      
+    } catch (relayErr: any) {
+      console.error('❌ Relay error:', relayErr.message)
+
       return res.status(500).json({
-        error: 'Failed to execute deposit via Privacy Cash SDK',
-        details: process.env.NODE_ENV === 'development' ? details : 'Execution failed',
+        error: 'Failed to relay deposit to Privacy Cash',
+        details: process.env.NODE_ENV === 'development' ? relayErr.message : 'Relay failed',
       })
     }
   } catch (err: any) {
-    console.error('❌ Deposit error:', err)
+    console.error('❌ Deposit relay error:', err)
 
     return res.status(500).json({
-      error: 'Failed to build deposit instruction',
+      error: 'Failed to relay deposit',
       details: process.env.NODE_ENV === 'development' ? err.message : undefined,
     })
   }
