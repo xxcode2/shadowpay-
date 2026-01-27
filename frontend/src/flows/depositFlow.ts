@@ -100,7 +100,7 @@ export async function executeRealDeposit(
     
     // Create connection and send transaction
     const { Connection } = await import('@solana/web3.js')
-    const RPC_URL = 'https://mainnet.helius-rpc.com'
+    const RPC_URL = CONFIG.SOLANA_RPC_URL
     const connection = new Connection(RPC_URL, 'confirmed')
     
     // Send raw transaction
