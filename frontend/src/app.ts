@@ -12,6 +12,7 @@ const API_URL = `${BACKEND_URL}/api`
 declare global {
   interface Window {
     solana?: any
+    PrivacyCash?: any
     currentLinkId?: string
   }
 }
@@ -25,6 +26,7 @@ export class App {
     if (this.bound) return
     this.bound = true
     this.bindEvents()
+    this.initializePrivacyCashSDK()
     this.setStatus('Ready — Connect wallet to start')
 
     // Auto-fill link ID from URL parameter
@@ -36,6 +38,28 @@ export class App {
         linkInput.value = linkParam
         this.switchMode('claim')
       }
+    }
+  }
+
+  // ================= PRIVACY CASH SDK =================
+  private initializePrivacyCashSDK() {
+    try {
+      if (import.meta.env.DEV) console.log('🔐 Initializing Privacy Cash SDK...')
+      
+      // Try to access Privacy Cash from privacycash package
+      if (typeof window !== 'undefined') {
+        // If SDK is not already loaded, try to access it from the module
+        if (!window.PrivacyCash) {
+          // Privacy Cash SDK should be available from the privacycash npm package
+          // It will be loaded by vite/bundler
+          console.log('ℹ️ Privacy Cash SDK will be loaded dynamically when needed')
+        } else {
+          console.log('✅ Privacy Cash SDK loaded successfully')
+        }
+      }
+    } catch (error: any) {
+      console.warn('⚠️ Privacy Cash SDK initialization:', error.message)
+      // Non-critical, SDK can be loaded later
     }
   }
 
