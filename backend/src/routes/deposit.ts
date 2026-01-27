@@ -318,22 +318,68 @@ router.post('/build-instruction', async (req: Request<{}, {}, any>, res: Respons
         lamports: lamports
       })
       
-      // Get the transaction
-      const transaction = depositResult.tx
+      console.log(`✅ Deposit result:`, depositResult)
+      console.log(`   Type: ${typeof depositResult}`)
+      console.log(`   Keys: ${depositResult ? Object.keys(depositResult) : 'null'}`)
+      
+      // Get the transaction - might be in different formats
+      let transaction = depositResult?.tx || depositResult
+      
+      console.log(`   Transaction type: ${typeof transaction}`)
+      console.log(`   Is Buffer: ${Buffer.isBuffer(transaction)}`)
+      console.log(`   Transaction sample: ${typeof transaction === 'string' ? transaction.substring(0, 50) : JSON.stringify(transaction).substring(0, 50)}`)
+      
+      // If it's already a string (signature), just return it
+      if (typeof transaction === 'string') {
+        console.log(`✅ Deposit executed! Signature: ${transaction}`)
+        
+        return res.status(200).json({
+          success: true,
+          tx: transaction,
+          message: 'Deposit executed via Privacy Cash SDK. Transaction on-chain.',
+          details: {
+            linkId,
+            amount,
+            lamports,
+            publicKey,
+            signature: transaction,
+          },
+        })
+      }
+      
+      // If it's a Transaction object, serialize it
+      const { Transaction: Web3Transaction } = await import('@solana/web3.js')
+      
+      let transactionBuffer: Buffer
+      
+      // Handle different possible formats
+      if (Buffer.isBuffer(transaction)) {
+        transactionBuffer = transaction
+      } else if (transaction && typeof transaction === 'object') {
+        // It's an object, try to serialize it
+        const txObj = transaction as any
+        if (typeof txObj.serialize === 'function') {
+          transactionBuffer = txObj.serialize({
+            requireAllSignatures: false,
+            verifySignatures: false,
+          })
+        } else {
+          // Try to convert to buffer
+          transactionBuffer = Buffer.from(JSON.stringify(transaction))
+        }
+      } else {
+        throw new Error(`Unexpected transaction format: ${typeof transaction}`)
+      }
+      
+      const transactionBase64 = transactionBuffer.toString('base64')
       
       console.log(`✅ Deposit instruction built via Privacy Cash SDK`)
-      console.log(`   Transaction: ${transaction}`)
+      console.log(`   Transaction size: ${transactionBuffer.length} bytes`)
       console.log(`   User must sign this transaction`)
-      
-      // Serialize transaction to base64 for frontend
-      const { Transaction: Web3Transaction } = await import('@solana/web3.js')
-      const txBytes = Buffer.isBuffer(transaction) ? transaction : Buffer.from(transaction as any)
-      const transactionBase64 = txBytes.toString('base64')
       
       return res.status(200).json({
         success: true,
         transaction: transactionBase64,
-        transactionObject: transaction,
         message: 'Deposit instruction built via Privacy Cash SDK. User must sign with their wallet.',
         details: {
           linkId,
@@ -344,6 +390,7 @@ router.post('/build-instruction', async (req: Request<{}, {}, any>, res: Respons
       })
     } catch (buildErr: any) {
       console.error('❌ SDK build error:', buildErr.message)
+      console.error('   Stack:', buildErr.stack)
       
       return res.status(500).json({
         error: 'Failed to build deposit instruction via Privacy Cash SDK',

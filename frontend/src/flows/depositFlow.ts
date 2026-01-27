@@ -70,9 +70,49 @@ export async function executeRealDeposit(
     const buildData = await buildResponse.json()
     console.log(`✅ Deposit instruction built via Privacy Cash SDK`)
     console.log(`   Message: ${buildData.message}`)
+    console.log(`   Has transaction: ${!!buildData.transaction}`)
+    console.log(`   Has signature: ${!!buildData.tx}`)
     
     // ✅ STEP 3: User signs the transaction with their wallet
     console.log('🔐 Step 3: Requesting user to sign transaction with wallet...')
+    
+    // Check if backend already executed (returned signature)
+    if (buildData.tx && !buildData.transaction) {
+      console.log(`✅ Backend already executed via operator keypair!`)
+      console.log(`   Signature: ${buildData.tx}`)
+      
+      // This is the already-signed transaction, just record it
+      const recordResponse = await fetch(
+        `${config.BACKEND_URL}/api/deposit/record`,
+        {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            linkId,
+            depositTx: buildData.tx,
+            amount,
+            publicKey,
+          }),
+        }
+      )
+      
+      if (!recordResponse.ok) {
+        console.warn(`⚠️  Recording in backend failed`)
+      }
+      
+      console.log('🎉 Deposit completed successfully!')
+      console.log(`   Amount: ${amount} SOL`)
+      console.log(`   Transaction: ${buildData.tx}`)
+      console.log(`   Explorer: https://solscan.io/tx/${buildData.tx}`)
+      
+      showSuccess(
+        `✅ Deposit Successful!\n` +
+        `Amount: ${amount} SOL\n` +
+        `Transaction: ${buildData.tx}`
+      )
+      
+      return buildData.tx
+    }
     
     // Deserialize transaction from base64
     const { Transaction } = await import('@solana/web3.js')
