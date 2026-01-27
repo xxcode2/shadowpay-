@@ -111,6 +111,112 @@ router.post('/', async (req: Request<{}, {}, any>, res: Response) => {
   }
 })
 
+/**
+ * POST /api/deposit-instruction
+ * 
+ * Builds and returns a serialized deposit transaction that the frontend can sign
+ * This allows the frontend to execute the deposit with proper Privacy Cash pool integration
+ */
+router.post('/instruction', async (req: Request<{}, {}, any>, res: Response) => {
+  try {
+    const { linkId, amount, lamports, publicKey } = req.body
+
+    // ✅ VALIDASI INPUT
+    if (!linkId || typeof linkId !== 'string') {
+      return res.status(400).json({ error: 'linkId required' })
+    }
+
+    if (!publicKey || typeof publicKey !== 'string') {
+      return res.status(400).json({ error: 'publicKey required' })
+    }
+
+    if (!lamports || typeof lamports !== 'number') {
+      return res.status(400).json({ error: 'lamports required (must be number)' })
+    }
+
+    // ✅ Validate Solana address format
+    let userPublicKey
+    try {
+      userPublicKey = new PublicKey(publicKey)
+    } catch {
+      return res.status(400).json({ error: 'Invalid publicKey format' })
+    }
+
+    // ✅ FIND LINK
+    const link = await prisma.paymentLink.findUnique({
+      where: { id: linkId },
+    })
+
+    if (!link) {
+      return res.status(404).json({ error: 'Link not found' })
+    }
+
+    if (link.depositTx && link.depositTx !== '') {
+      return res.status(400).json({ error: 'Deposit already recorded for this link' })
+    }
+
+    console.log(`📝 Building deposit instruction for link ${linkId}...`)
+    console.log(`   User: ${publicKey}`)
+    console.log(`   Amount: ${lamports} lamports (${amount} SOL)`)
+
+    // ✅ IMPORT REQUIRED MODULES
+    const { Connection, SystemProgram, Transaction, LAMPORTS_PER_SOL } = await import('@solana/web3.js')
+
+    // Get RPC URL from environment
+    const RPC_URL = process.env.SOLANA_RPC_URL || 'https://mainnet.helius-rpc.com'
+    const connection = new Connection(RPC_URL, 'confirmed')
+
+    // Privacy Cash pool address (receiver)
+    const privacyCashPoolAddress = new PublicKey('9fhQBBumKEFuXtMBDw8AaQyAjCorLGJQ1S3skWZdQyQD')
+
+    // Build deposit transaction
+    const transaction = new Transaction()
+    transaction.add(
+      SystemProgram.transfer({
+        fromPubkey: userPublicKey,
+        toPubkey: privacyCashPoolAddress,
+        lamports: lamports,
+      })
+    )
+
+    // Get latest blockhash
+    const { blockhash } = await connection.getLatestBlockhash('confirmed')
+    transaction.recentBlockhash = blockhash
+    transaction.feePayer = userPublicKey
+
+    // Serialize transaction to base64 for frontend
+    const serializedTransaction = transaction.serialize({
+      requireAllSignatures: false,
+      verifySignatures: false,
+    })
+
+    const transactionBase64 = serializedTransaction.toString('base64')
+
+    console.log(`✅ Deposit instruction built successfully`)
+    console.log(`   Transaction size: ${serializedTransaction.length} bytes`)
+
+    return res.status(200).json({
+      success: true,
+      transaction: transactionBase64,
+      details: {
+        linkId,
+        amount,
+        lamports,
+        publicKey,
+        recipient: privacyCashPoolAddress.toString(),
+        blockhash,
+      },
+    })
+  } catch (err: any) {
+    console.error('❌ Deposit instruction building error:', err)
+
+    return res.status(500).json({
+      error: 'Failed to build deposit instruction',
+      details: process.env.NODE_ENV === 'development' ? err.message : undefined,
+    })
+  }
+})
+
 export default router
     
 

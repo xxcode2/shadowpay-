@@ -150,35 +150,56 @@ export async function executeRealDeposit(
       throw err
     }
     
-    // ✅ STEP 2: Build and submit deposit transaction to Privacy Cash pool
-    console.log('📝 Step 2: Building deposit transaction...')
-    console.log('📝 Step 3: Requesting wallet signature for deposit...')
+    // ✅ STEP 2: Request backend to execute deposit
+    // Backend has the PrivacyCash SDK client to properly handle deposits
+    console.log('📝 Step 2: Building deposit request for backend...')
+    console.log('📝 Step 3: Requesting backend to build deposit transaction...')
     
-    const {
-      SystemProgram,
-      Transaction,
-    } = await import('@solana/web3.js')
-    
-    // Create transaction to deposit SOL to Privacy Cash pool
-    const transaction = new Transaction()
-    transaction.add(
-      SystemProgram.transfer({
-        fromPubkey: wallet.publicKey,
-        toPubkey: new PublicKey('9fhQBBumKEFuXtMBDw8AaQyAjCorLGJQ1S3skWZdQyQD'), // Privacy Cash pool address
+    const BACKEND_URL =
+      import.meta.env.VITE_BACKEND_URL ||
+      'https://shadowpay-backend-production.up.railway.app'
+
+    // Request backend to build the deposit transaction
+    console.log('📤 Requesting deposit transaction from backend...')
+    const depositInstructionRes = await fetch(`${BACKEND_URL}/api/deposit/instruction`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        linkId,
+        amount: amountSOL,
         lamports: lamports,
-      })
-    )
-    
-    // Set recent blockhash
-    const { blockhash } = await connection.getLatestBlockhash('confirmed')
-    transaction.recentBlockhash = blockhash
-    transaction.feePayer = wallet.publicKey
-    
-    // Sign and send transaction
+        publicKey: wallet.publicKey.toString(),
+      }),
+    })
+
+    if (!depositInstructionRes.ok) {
+      const errorData = await depositInstructionRes.json()
+      throw new Error(`Failed to get deposit transaction: ${errorData.error || depositInstructionRes.statusText}`)
+    }
+
+    const { transaction: transactionBase64 } = await depositInstructionRes.json()
+
+    if (!transactionBase64) {
+      throw new Error('No transaction instruction received from backend')
+    }
+
+    // Deserialize the transaction from backend
+    const { Transaction } = await import('@solana/web3.js')
+    const transactionBuffer = Buffer.from(transactionBase64, 'base64')
+    const transaction = Transaction.from(transactionBuffer)
+
+    // Sign the transaction with user's wallet
+    console.log('📝 Requesting wallet signature...')
     const signedTransaction = await wallet.signTransaction(transaction)
+
+    // Send the signed transaction
+    console.log('📤 Submitting signed deposit transaction...')
     const depositTx = await connection.sendRawTransaction(signedTransaction.serialize())
-    
+
     // Wait for confirmation
+    console.log('⏳ Waiting for transaction confirmation...')
     await connection.confirmTransaction(depositTx, 'confirmed')
 
     if (!depositTx) {
@@ -189,11 +210,8 @@ export async function executeRealDeposit(
     console.log(`   💾 ${amountSOL} SOL transferred to Privacy Cash shielded pool`)
     console.log(`   ⏱️ Transaction created in ${Date.now() - startTime}ms`)
 
-    // ✅ RECORD DEPOSIT DI BACKEND (HANYA RECORD, BUKAN EKSEKUSI)
-    console.log(`📤 Recording deposit in backend...`)
-    const BACKEND_URL =
-      import.meta.env.VITE_BACKEND_URL ||
-      'https://shadowpay-backend-production.up.railway.app'
+    // ✅ NOTIFY BACKEND THAT DEPOSIT WAS CONFIRMED
+    console.log(`📤 Recording deposit confirmation in backend...`)
 
     const recordRes = await fetch(`${BACKEND_URL}/api/deposit`, {
       method: 'POST',
