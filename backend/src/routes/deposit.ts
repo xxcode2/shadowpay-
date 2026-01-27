@@ -112,12 +112,12 @@ router.post('/', async (req: Request<{}, {}, any>, res: Response) => {
 })
 
 /**
- * POST /api/deposit-instruction
+ * POST /api/deposit/execute
  * 
- * Builds and returns a serialized deposit transaction that the frontend can sign
- * This allows the frontend to execute the deposit with proper Privacy Cash pool integration
+ * Backend executes deposit via Privacy Cash SDK
+ * This properly updates the private balance in Privacy Cash
  */
-router.post('/instruction', async (req: Request<{}, {}, any>, res: Response) => {
+router.post('/execute', async (req: Request<{}, {}, any>, res: Response) => {
   try {
     const { linkId, amount, lamports, publicKey } = req.body
 
@@ -131,13 +131,12 @@ router.post('/instruction', async (req: Request<{}, {}, any>, res: Response) => 
     }
 
     if (!lamports || typeof lamports !== 'number') {
-      return res.status(400).json({ error: 'lamports required (must be number)' })
+      return res.status(400).json({ error: 'lamports required' })
     }
 
     // ✅ Validate Solana address format
-    let userPublicKey
     try {
-      userPublicKey = new PublicKey(publicKey)
+      new PublicKey(publicKey)
     } catch {
       return res.status(400).json({ error: 'Invalid publicKey format' })
     }
@@ -155,63 +154,94 @@ router.post('/instruction', async (req: Request<{}, {}, any>, res: Response) => 
       return res.status(400).json({ error: 'Deposit already recorded for this link' })
     }
 
-    console.log(`📝 Building deposit instruction for link ${linkId}...`)
+    console.log(`📝 Executing deposit for link ${linkId}...`)
     console.log(`   User: ${publicKey}`)
     console.log(`   Amount: ${lamports} lamports (${amount} SOL)`)
 
-    // ✅ IMPORT REQUIRED MODULES
-    const { Connection, SystemProgram, Transaction, LAMPORTS_PER_SOL } = await import('@solana/web3.js')
-
-    // Get RPC URL from environment
-    const RPC_URL = process.env.SOLANA_RPC_URL || 'https://mainnet.helius-rpc.com'
-    const connection = new Connection(RPC_URL, 'confirmed')
-
-    // Privacy Cash pool address (receiver)
-    const privacyCashPoolAddress = new PublicKey('9fhQBBumKEFuXtMBDw8AaQyAjCorLGJQ1S3skWZdQyQD')
-
-    // Build deposit transaction
-    const transaction = new Transaction()
-    transaction.add(
-      SystemProgram.transfer({
-        fromPubkey: userPublicKey,
-        toPubkey: privacyCashPoolAddress,
-        lamports: lamports,
+    // ✅ EXECUTE DEPOSIT VIA PRIVACY CASH SDK
+    const { getPrivacyCashClient } = await import('../services/privacyCash.js')
+    
+    try {
+      const pc = getPrivacyCashClient()
+      
+      console.log(`📤 Executing deposit via Privacy Cash SDK...`)
+      console.log(`   🔐 Using operator keypair to deposit`)
+      
+      // Check balance before
+      const balanceBefore = await pc.getPrivateBalance()
+      const balanceBeforeLamports = typeof balanceBefore === 'object' ? balanceBefore.lamports : balanceBefore
+      console.log(`   Balance before: ${balanceBeforeLamports} lamports`)
+      
+      // ✅ Call SDK deposit() - this will:
+      // - Generate ZK proof
+      // - Create proper deposit transaction
+      // - Relay to Privacy Cash indexer
+      // - Update private balance
+      const depositResult = await pc.deposit({
+        lamports: lamports
       })
-    )
-
-    // Get latest blockhash
-    const { blockhash } = await connection.getLatestBlockhash('confirmed')
-    transaction.recentBlockhash = blockhash
-    transaction.feePayer = userPublicKey
-
-    // Serialize transaction to base64 for frontend
-    const serializedTransaction = transaction.serialize({
-      requireAllSignatures: false,
-      verifySignatures: false,
-    })
-
-    const transactionBase64 = serializedTransaction.toString('base64')
-
-    console.log(`✅ Deposit instruction built successfully`)
-    console.log(`   Transaction size: ${serializedTransaction.length} bytes`)
-
-    return res.status(200).json({
-      success: true,
-      transaction: transactionBase64,
-      details: {
-        linkId,
+      
+      const depositTx = depositResult.tx
+      
+      console.log(`✅ Deposit executed successfully!`)
+      console.log(`   Transaction: ${depositTx}`)
+      
+      // Check balance after
+      const balanceAfter = await pc.getPrivateBalance()
+      const balanceAfterLamports = typeof balanceAfter === 'object' ? balanceAfter.lamports : balanceAfter
+      console.log(`   Balance after: ${balanceAfterLamports} lamports`)
+      console.log(`   Balance increased: ${balanceAfterLamports - balanceBeforeLamports} lamports`)
+      
+      // ✅ RECORD DEPOSIT IN DATABASE
+      console.log(`📤 Recording deposit in database...`)
+      
+      await prisma.$transaction([
+        prisma.paymentLink.update({
+          where: { id: linkId },
+          data: { depositTx },
+        }),
+        prisma.transaction.create({
+          data: {
+            type: 'deposit',
+            linkId,
+            transactionHash: depositTx,
+            amount: typeof amount === 'string' ? parseFloat(amount) : amount,
+            assetType: link.assetType,
+            status: 'confirmed',
+            fromAddress: publicKey,
+          },
+        }),
+      ])
+      
+      console.log(`✅ Deposit recorded in database`)
+      
+      return res.status(200).json({
+        success: true,
+        tx: depositTx,
         amount,
-        lamports,
-        publicKey,
-        recipient: privacyCashPoolAddress.toString(),
-        blockhash,
-      },
-    })
+        message: 'Deposit executed and recorded successfully. Funds are now in your Privacy Cash private balance.',
+      })
+    } catch (sdkErr: any) {
+      console.error('❌ Privacy Cash SDK error:', sdkErr.message)
+      
+      // Check if it's an insufficient balance error
+      if (sdkErr.message?.includes('Insufficient balance')) {
+        return res.status(400).json({
+          error: 'Operator wallet has insufficient SOL balance for deposit',
+          details: process.env.NODE_ENV === 'development' ? sdkErr.message : undefined,
+        })
+      }
+      
+      return res.status(500).json({
+        error: 'Failed to execute deposit via Privacy Cash SDK',
+        details: process.env.NODE_ENV === 'development' ? sdkErr.message : undefined,
+      })
+    }
   } catch (err: any) {
-    console.error('❌ Deposit instruction building error:', err)
+    console.error('❌ Deposit execution error:', err)
 
     return res.status(500).json({
-      error: 'Failed to build deposit instruction',
+      error: 'Failed to execute deposit',
       details: process.env.NODE_ENV === 'development' ? err.message : undefined,
     })
   }
