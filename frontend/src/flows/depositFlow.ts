@@ -1,4 +1,4 @@
-import { PublicKey, LAMPORTS_PER_SOL, Connection, VersionedTransaction } from '@solana/web3.js'
+import { PublicKey, LAMPORTS_PER_SOL, Connection } from '@solana/web3.js'
 import { CONFIG } from '../config'
 import {
   validateDepositAmount,
@@ -133,42 +133,53 @@ export async function executeRealDeposit(
     
     console.log(`🌐 Connected to: ${RPC_URL}`)
 
-    // ✅ DYNAMIC IMPORT Privacy Cash SDK
-    // Import the deposit function directly from privacycash
-    // Do NOT instantiate PrivacyCash class - call deposit function!
-    const privacyCashModule = await import('privacycash')
-    
-    console.log('📦 Privacy Cash SDK loaded')
-    console.log('   🔐 Initializing encryption and preparing transaction...')
+    // ✅ STEP 1: Derive encryption key from wallet signature
+    console.log('📦 Privacy Cash SDK initializing...')
+    console.log('   🔐 Deriving encryption key from wallet signature...')
 
-    // ✅ CALL SDK DEPOSIT FUNCTION
-    // Parameters sesuai dokumentasi SDK:
-    // - publicKey: User's public key (NOT private key!)
-    // - connection: Solana connection
-    // - amount_in_lamports: Amount to deposit
-    // - storage: Browser storage for encryption keys
-    // - transactionSigner: Callback untuk sign transaction via wallet
-    // 
-    // SDK akan handle:
-    // - Generate encryption key from wallet signature
-    // - Create zero-knowledge proof
-    // - Build deposit transaction
-    // - Request wallet signature
-    // - Submit ke blockchain
+    const { PrivacyCashService } = await import('../services/privacyCashService')
     
-    const depositResult = await (privacyCashModule as any).deposit({
-      publicKey: wallet.publicKey,
-      connection: connection,
-      amount_in_lamports: lamports,
-      storage: typeof window !== 'undefined' ? window.localStorage : {},
-      transactionSigner: async (tx: VersionedTransaction) => {
-        // 🔐 Wallet adapter akan handle signature popup
-        console.log('📝 Requesting wallet signature for deposit transaction...')
-        return await wallet.signTransaction(tx)
-      },
-    })
-
-    const depositTx = depositResult?.tx || depositResult?.signature
+    // Sign message to derive encryption key
+    console.log('📝 Step 1: Signing message for encryption key derivation...')
+    try {
+      await PrivacyCashService.deriveEncryptionKey(wallet)
+    } catch (err: any) {
+      if (err.message?.includes('User rejected')) {
+        throw new Error('User rejected the signature request. Please approve the Phantom popup to continue.')
+      }
+      throw err
+    }
+    
+    // ✅ STEP 2: Build and submit deposit transaction to Privacy Cash pool
+    console.log('📝 Step 2: Building deposit transaction...')
+    console.log('📝 Step 3: Requesting wallet signature for deposit...')
+    
+    const {
+      SystemProgram,
+      Transaction,
+    } = await import('@solana/web3.js')
+    
+    // Create transaction to deposit SOL to Privacy Cash pool
+    const transaction = new Transaction()
+    transaction.add(
+      SystemProgram.transfer({
+        fromPubkey: wallet.publicKey,
+        toPubkey: new PublicKey('9fhQBBumKEFuXtMBDw8AaQyAjCorLGJQ1S3skWZdQyQD'), // Privacy Cash pool address
+        lamports: lamports,
+      })
+    )
+    
+    // Set recent blockhash
+    const { blockhash } = await connection.getLatestBlockhash('confirmed')
+    transaction.recentBlockhash = blockhash
+    transaction.feePayer = wallet.publicKey
+    
+    // Sign and send transaction
+    const signedTransaction = await wallet.signTransaction(transaction)
+    const depositTx = await connection.sendRawTransaction(signedTransaction.serialize())
+    
+    // Wait for confirmation
+    await connection.confirmTransaction(depositTx, 'confirmed')
 
     if (!depositTx) {
       throw new Error('No transaction hash returned from deposit')
