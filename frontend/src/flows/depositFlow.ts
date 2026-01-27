@@ -1,224 +1,186 @@
-import { PublicKey, LAMPORTS_PER_SOL, Connection } from '@solana/web3.js'
+import { PrivacyCashService } from '../services/privacyCashService'
 import { CONFIG } from '../config'
-import {
-  validateDepositAmount,
-  formatLamportsToSOL,
-  mapPrivacyCashError,
-  assessDepositPrivacy,
-  createDepositErrorContext,
-  getExplorerUrl,
-  estimateTransactionFees,
-} from '../utils/privacyCashUtils'
-
-/**
- * ✅ IMPLEMENTASI PRIVACY CASH SDK SESUAI DOKUMENTASI RESMI
- * 
- * Flow yang benar:
- * 1. Call SDK deposit() function langsung (bukan instantiate PrivacyCash class)
- * 2. SDK akan:
- *    - Generate encryption key dari wallet signature
- *    - Create zero-knowledge proof
- *    - Build deposit transaction
- *    - Request wallet signature via transactionSigner callback
- *    - Submit ke blockchain
- * 3. Backend hanya record transaction hash
- * 
- * Dokumentasi: https://github.com/privacy-cash/privacy-cash-sdk
- */
-
-export interface DepositResult {
-  tx: string
-  amountSOL: string
-  amountLamports: number
-  explorerUrl: string
-  message: string
-}
+import { showError, showSuccess } from '../utils/notificationUtils'
 
 export interface DepositRequest {
-  lamports: number
-  wallet: any
   linkId: string
-  skipPrivacyWarning?: boolean
+  amount: string
+  publicKey: string
 }
 
 /**
- * Validate deposit request before execution
- */
-export function validateDepositRequest(request: DepositRequest): {
-  isValid: boolean
-  errors: string[]
-  warnings: string[]
-} {
-  const errors: string[] = []
-  const warnings: string[] = []
-
-  // Validate lamports
-  const amountValidation = validateDepositAmount(request.lamports)
-  if (!amountValidation.isValid) {
-    errors.push(amountValidation.error || 'Invalid amount')
-  } else if (amountValidation.error && !amountValidation.isValid) {
-    warnings.push(amountValidation.error)
-  }
-
-  // Validate wallet
-  if (!request.wallet) {
-    errors.push('Wallet is required')
-  }
-
-  // Validate linkId
-  if (!request.linkId || typeof request.linkId !== 'string') {
-    errors.push('Valid linkId is required')
-  }
-
-  // Privacy assessment
-  if (!request.skipPrivacyWarning) {
-    const privacyAssessment = assessDepositPrivacy(request.lamports)
-    if (!privacyAssessment.isPrivacySafe) {
-      warnings.push(...privacyAssessment.recommendations)
-    }
-  }
-
-  return {
-    isValid: errors.length === 0,
-    errors,
-    warnings,
-  }
-}
-
-/**
- * Execute deposit with comprehensive validation and error handling
+ * Main deposit flow - USER PAYS VERSION
  * 
- * ✅ Sesuai dokumentasi resmi Privacy Cash SDK
- * Calls the SDK deposit() function directly with proper parameters
+ * Step 1: Derive encryption key by signing message
+ * Step 2: Request backend to build deposit instruction
+ * Step 3: User signs the transaction with their wallet ✅ USER SIGNS HERE
+ * Step 4: Submit signed transaction to blockchain
+ * Step 5: Record deposit in backend database
  */
 export async function executeRealDeposit(
-  request: DepositRequest
-): Promise<DepositResult> {
-  const startTime = Date.now()
+  request: DepositRequest,
+  wallet: any
+): Promise<string> {
+  const { linkId, amount, publicKey } = request
+  const lamports = Math.round(parseFloat(amount) * 1e9)
+  
+  console.log('🔐 Starting deposit flow...')
+  console.log(`   Link: ${linkId}`)
+  console.log(`   User: ${publicKey}`)
+  console.log(`   Amount: ${amount} SOL (${lamports} lamports)`)
+  console.log(`   ✅ User will sign and pay from their wallet`)
   
   try {
-    // ✅ VALIDATE REQUEST
-    console.log('🔍 Validating deposit request...')
-    const validation = validateDepositRequest(request)
-
-    if (!validation.isValid) {
-      throw new Error(`Validation failed: ${validation.errors.join(', ')}`)
+    // ✅ STEP 1: Derive encryption key by signing message
+    console.log('📝 Step 1: Deriving encryption key by signing off-chain message...')
+    
+    try {
+      const encryptionKey = await PrivacyCashService.deriveEncryptionKey(wallet)
+      console.log(`✅ Encryption key derived`)
+      console.log(`   Key: ${encryptionKey}`)
+    } catch (keyErr: any) {
+      console.warn('⚠️  Encryption key derivation failed (non-critical):', keyErr.message)
+      // Non-critical - continue anyway
     }
-
-    if (validation.warnings.length > 0) {
-      console.warn('⚠️ Privacy warnings:', validation.warnings)
+    
+    // ✅ STEP 2: Request backend to build deposit instruction
+    console.log('🏗️  Step 2: Requesting backend to build deposit instruction...')
+    
+    const config = CONFIG
+    const buildResponse = await fetch(
+      `${config.BACKEND_URL}/api/deposit/build-instruction`,
+      {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          linkId,
+          amount,
+          lamports,
+          publicKey,
+        }),
+      }
+    )
+    
+    if (!buildResponse.ok) {
+      const error = await buildResponse.json()
+      throw new Error(`Failed to build deposit instruction: ${error.error}`)
     }
-
-    const { lamports, wallet, linkId } = request
-    const amountSOL = formatLamportsToSOL(lamports)
-
-    console.log(`🚀 Executing deposit of ${amountSOL} SOL to Privacy Cash pool`)
-    console.log(`   📋 Payment Link: ${linkId}`)
-    console.log(`   💰 Amount: ${amountSOL} SOL (${lamports} lamports)`)
-
-    // Validate wallet has required methods
-    if (!wallet.publicKey) {
-      throw new Error('Wallet does not have a public key')
-    }
-
-    if (typeof wallet.signTransaction !== 'function') {
+    
+    const buildData = await buildResponse.json()
+    console.log(`✅ Deposit instruction built`)
+    console.log(`   Transaction ready for user signature`)
+    console.log(`   Message: ${buildData.message}`)
+    
+    // ✅ STEP 3: User signs the transaction with their wallet
+    console.log('🔐 Step 3: Requesting user to sign transaction with wallet...')
+    
+    // Deserialize transaction from base64
+    const { Transaction } = await import('@solana/web3.js')
+    const transactionBuffer = Buffer.from(buildData.transaction, 'base64')
+    const transaction = Transaction.from(transactionBuffer)
+    
+    console.log(`   Transaction deserialized`)
+    console.log(`   Fee payer: ${transaction.feePayer?.toString()}`)
+    
+    // Sign transaction with wallet - USER SIGNS HERE!
+    if (!wallet.signTransaction) {
       throw new Error('Wallet does not support transaction signing')
     }
-
-    console.log(`📍 Wallet: ${wallet.publicKey.toString()}`)
-
-    // ✅ SETUP CONNECTION
-    const RPC_URL = CONFIG.SOLANA_RPC_URL || 'https://mainnet.helius-rpc.com'
+    
+    const signedTransaction = await wallet.signTransaction(transaction)
+    console.log(`✅ Transaction signed by user`)
+    console.log(`   Signatures: ${signedTransaction.signatures.length}`)
+    
+    // Serialize signed transaction to base64
+    const signedTransactionBuffer = signedTransaction.serialize()
+    const signedTransactionBase64 = signedTransactionBuffer.toString('base64')
+    
+    // ✅ STEP 4: Submit signed transaction to blockchain
+    console.log('📤 Step 4: Submitting signed transaction to blockchain...')
+    
+    // Create connection and send transaction
+    const { Connection } = await import('@solana/web3.js')
+    const RPC_URL = 'https://mainnet.helius-rpc.com'
     const connection = new Connection(RPC_URL, 'confirmed')
     
-    console.log(`🌐 Connected to: ${RPC_URL}`)
-
-    // ✅ STEP 1: Derive encryption key from wallet signature
-    console.log('📦 Privacy Cash SDK initializing...')
-    console.log('   🔐 Deriving encryption key from wallet signature...')
-
-    const { PrivacyCashService } = await import('../services/privacyCashService')
-    
-    // Sign message to derive encryption key
-    console.log('📝 Step 1: Signing message for encryption key derivation...')
-    try {
-      await PrivacyCashService.deriveEncryptionKey(wallet)
-    } catch (err: any) {
-      if (err.message?.includes('User rejected')) {
-        throw new Error('User rejected the signature request. Please approve the Phantom popup to continue.')
+    // Send raw transaction
+    const transactionSignature = await connection.sendRawTransaction(
+      signedTransactionBuffer,
+      {
+        skipPreflight: false,
+        maxRetries: 5,
       }
-      throw err
+    )
+    
+    console.log(`✅ Transaction submitted to blockchain`)
+    console.log(`   Signature: ${transactionSignature}`)
+    
+    // Wait for confirmation
+    console.log('⏳ Waiting for transaction confirmation...')
+    const confirmation = await connection.confirmTransaction(
+      transactionSignature,
+      'confirmed'
+    )
+    
+    if (confirmation.value.err) {
+      throw new Error(`Transaction failed on-chain: ${JSON.stringify(confirmation.value.err)}`)
     }
     
-    // ✅ STEP 2: Request backend to execute deposit
-    // Backend has the PrivacyCash SDK client to properly handle deposits
-    console.log('📝 Step 2: Requesting backend to execute deposit via Privacy Cash SDK...')
+    console.log(`✅ Transaction confirmed on blockchain`)
     
-    const BACKEND_URL =
-      import.meta.env.VITE_BACKEND_URL ||
-      'https://shadowpay-backend-production.up.railway.app'
-
-    // Request backend to execute deposit with SDK
-    console.log('📤 Requesting deposit execution from backend...')
-    const depositExecRes = await fetch(`${BACKEND_URL}/api/deposit/execute`, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({
-        linkId,
-        amount: amountSOL,
-        lamports: lamports,
-        publicKey: wallet.publicKey.toString(),
-      }),
-    })
-
-    if (!depositExecRes.ok) {
-      const errorData = await depositExecRes.json()
-      throw new Error(`Failed to execute deposit: ${errorData.error || depositExecRes.statusText}`)
+    // ✅ STEP 5: Record deposit in backend
+    console.log('📝 Step 5: Recording deposit in backend database...')
+    
+    const recordResponse = await fetch(
+      `${config.BACKEND_URL}/api/deposit/record`,
+      {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          linkId,
+          depositTx: transactionSignature,
+          amount,
+          publicKey,
+        }),
+      }
+    )
+    
+    if (!recordResponse.ok) {
+      const error = await recordResponse.json()
+      console.warn(`⚠️  Recording in backend failed: ${error.error}`)
+      // Still show success since transaction is on-chain
+    } else {
+      const recordData = await recordResponse.json()
+      console.log(`✅ Deposit recorded in backend`)
+      console.log(`   Message: ${recordData.message}`)
     }
-
-    const { tx: depositTx } = await depositExecRes.json()
-
-    if (!depositTx) {
-      throw new Error('No transaction hash returned from backend')
+    
+    // ✅ SUCCESS
+    console.log('🎉 Deposit completed successfully!')
+    console.log(`   Amount: ${amount} SOL`)
+    console.log(`   Transaction: ${transactionSignature}`)
+    console.log(`   Explorer: https://solscan.io/tx/${transactionSignature}`)
+    
+    showSuccess(
+      `✅ Deposit Successful!\n` +
+      `Amount: ${amount} SOL\n` +
+      `Transaction: ${transactionSignature}`
+    )
+    
+    return transactionSignature
+    
+  } catch (error: any) {
+    console.error('❌ Deposit flow error:', error.message)
+    
+    // Show detailed error
+    let errorMsg = error.message
+    if (error.message?.includes('User rejected')) {
+      errorMsg = 'You rejected the transaction signature. Please try again and approve the signature.'
+    } else if (error.message?.includes('insufficient')) {
+      errorMsg = 'Insufficient SOL balance for this deposit.'
     }
-
-    console.log(`✅ Deposit executed by backend! Transaction: ${depositTx}`)
-    console.log(`   💾 ${amountSOL} SOL deposited to Privacy Cash private pool`)
-    console.log(`   ⏱️ Total time: ${Date.now() - startTime}ms`)
-
-    const explorerUrl = getExplorerUrl(depositTx)
-    console.log(`   🔗 View on Explorer: ${explorerUrl}`)
-
-    return {
-      tx: depositTx,
-      amountSOL,
-      amountLamports: lamports,
-      explorerUrl,
-      message: `✅ Deposit successful! ${amountSOL} SOL has been transferred to your Privacy Cash shielded pool.`,
-    }
-  } catch (err: any) {
-    console.error('❌ Deposit failed:', err)
-
-    // ✅ CREATE ERROR CONTEXT
-    const errorContext = createDepositErrorContext(err, {
-      lamports: request.lamports,
-      wallet: request.wallet?.publicKey?.toString(),
-      linkId: request.linkId,
-      rpcUrl: CONFIG.SOLANA_RPC_URL,
-    })
-
-    console.error('📋 Error Context:', errorContext)
-
-    // ✅ MAP ERROR TO USER-FRIENDLY MESSAGE
-    const userMessage = mapPrivacyCashError(err)
-
-    // Create detailed error for throwing
-    const depositError = new Error(userMessage)
-    ;(depositError as any).context = errorContext
-    ;(depositError as any).originalError = err
-
-    throw depositError
+    
+    showError(`❌ Deposit failed: ${errorMsg}`)
+    throw error
   }
 }

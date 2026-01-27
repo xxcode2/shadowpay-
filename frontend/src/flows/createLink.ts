@@ -55,17 +55,20 @@ export async function createLink({
     // 2️⃣ USER LANGSUNG DEPOSIT KE PRIVACY CASH POOL (SESUAI DOKUMENTASI RESMI)
     console.log(`💰 Processing payment...`)
     console.log(`   📋 Step 1: User akan sign offchain message untuk encryption`)
-    console.log(`   📤 Step 2: SDK akan execute deposit ke Privacy Cash pool`)
+    console.log(`   📤 Step 2: User akan sign transaction untuk deposit`)
     console.log(`   ✅ Step 3: Backend akan record transaction hash`)
 
-    const lamports = Math.round(amountSOL * LAMPORTS_PER_SOL)
+    const amountStr = amountSOL.toString()
 
-    // ✅ SESUAI DOKUMENTASI RESMI - SDK SUPPORT BROWSER USAGE!
-    const { tx: depositTx } = await executeRealDeposit({
-      lamports,
-      wallet: wallet as any,
-      linkId,
-    })
+    // ✅ USER SIGNS TRANSACTION - USER PAYS!
+    const depositTx = await executeRealDeposit(
+      {
+        linkId,
+        amount: amountStr,
+        publicKey: (wallet?.publicKey?.toString() || '') as string,
+      },
+      wallet as any
+    )
 
     console.log(`✅ User paid ${amountSOL} SOL directly to Privacy Cash pool`)
     console.log(`✅ Link ready! Transaction: ${depositTx}`)
