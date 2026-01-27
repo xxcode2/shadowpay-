@@ -152,16 +152,15 @@ export async function executeRealDeposit(
     
     // ✅ STEP 2: Request backend to execute deposit
     // Backend has the PrivacyCash SDK client to properly handle deposits
-    console.log('📝 Step 2: Building deposit request for backend...')
-    console.log('📝 Step 3: Requesting backend to build deposit transaction...')
+    console.log('📝 Step 2: Requesting backend to execute deposit via Privacy Cash SDK...')
     
     const BACKEND_URL =
       import.meta.env.VITE_BACKEND_URL ||
       'https://shadowpay-backend-production.up.railway.app'
 
-    // Request backend to build the deposit transaction
-    console.log('📤 Requesting deposit transaction from backend...')
-    const depositInstructionRes = await fetch(`${BACKEND_URL}/api/deposit/instruction`, {
+    // Request backend to execute deposit with SDK
+    console.log('📤 Requesting deposit execution from backend...')
+    const depositExecRes = await fetch(`${BACKEND_URL}/api/deposit/execute`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
@@ -174,66 +173,19 @@ export async function executeRealDeposit(
       }),
     })
 
-    if (!depositInstructionRes.ok) {
-      const errorData = await depositInstructionRes.json()
-      throw new Error(`Failed to get deposit transaction: ${errorData.error || depositInstructionRes.statusText}`)
+    if (!depositExecRes.ok) {
+      const errorData = await depositExecRes.json()
+      throw new Error(`Failed to execute deposit: ${errorData.error || depositExecRes.statusText}`)
     }
 
-    const { transaction: transactionBase64 } = await depositInstructionRes.json()
-
-    if (!transactionBase64) {
-      throw new Error('No transaction instruction received from backend')
-    }
-
-    // Deserialize the transaction from backend
-    const { Transaction } = await import('@solana/web3.js')
-    const transactionBuffer = Buffer.from(transactionBase64, 'base64')
-    const transaction = Transaction.from(transactionBuffer)
-
-    // Sign the transaction with user's wallet
-    console.log('📝 Requesting wallet signature...')
-    const signedTransaction = await wallet.signTransaction(transaction)
-
-    // Send the signed transaction
-    console.log('📤 Submitting signed deposit transaction...')
-    const depositTx = await connection.sendRawTransaction(signedTransaction.serialize())
-
-    // Wait for confirmation
-    console.log('⏳ Waiting for transaction confirmation...')
-    await connection.confirmTransaction(depositTx, 'confirmed')
+    const { tx: depositTx } = await depositExecRes.json()
 
     if (!depositTx) {
-      throw new Error('No transaction hash returned from deposit')
+      throw new Error('No transaction hash returned from backend')
     }
 
-    console.log(`✅ Deposit transaction submitted! Transaction: ${depositTx}`)
-    console.log(`   💾 ${amountSOL} SOL transferred to Privacy Cash shielded pool`)
-    console.log(`   ⏱️ Transaction created in ${Date.now() - startTime}ms`)
-
-    // ✅ NOTIFY BACKEND THAT DEPOSIT WAS CONFIRMED
-    console.log(`📤 Recording deposit confirmation in backend...`)
-
-    const recordRes = await fetch(`${BACKEND_URL}/api/deposit`, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({
-        linkId,
-        depositTx,
-        amount: amountSOL,
-        publicKey: wallet.publicKey.toString(),
-      }),
-    })
-
-    if (!recordRes.ok) {
-      const errorData = await recordRes.json()
-      throw new Error(`Backend recording error: ${errorData.error || recordRes.statusText}`)
-    }
-
-    console.log(`✅ Deposit recorded successfully in backend`)
-    console.log(`   📝 Link: ${linkId}`)
-    console.log(`   💾 Transaction Hash: ${depositTx}`)
+    console.log(`✅ Deposit executed by backend! Transaction: ${depositTx}`)
+    console.log(`   💾 ${amountSOL} SOL deposited to Privacy Cash private pool`)
     console.log(`   ⏱️ Total time: ${Date.now() - startTime}ms`)
 
     const explorerUrl = getExplorerUrl(depositTx)
