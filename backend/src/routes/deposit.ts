@@ -255,8 +255,14 @@ router.post('/execute', async (req: Request<{}, {}, any>, res: Response) => {
 /**
  * POST /api/deposit/build-instruction
  * 
- * Build a proper Privacy Cash deposit instruction that USER must sign
- * Uses Privacy Cash SDK to generate ZK proof and proper transact instruction
+ * ⚠️  IMPORTANT: Privacy Cash SDK's deposit() method:
+ * - Generates ZK proof
+ * - Builds and IMMEDIATELY executes transaction
+ * - Relays to Privacy Cash indexer
+ * - Cannot be split into build + user-sign
+ * 
+ * Therefore: Backend must execute using operator keypair
+ * This is the only way Privacy Cash SDK works
  */
 router.post('/build-instruction', async (req: Request<{}, {}, any>, res: Response) => {
   try {
@@ -276,9 +282,8 @@ router.post('/build-instruction', async (req: Request<{}, {}, any>, res: Respons
     }
 
     // ✅ Validate Solana address format
-    let userPublicKey
     try {
-      userPublicKey = new PublicKey(publicKey)
+      new PublicKey(publicKey)
     } catch {
       return res.status(400).json({ error: 'Invalid publicKey format' })
     }
@@ -296,109 +301,103 @@ router.post('/build-instruction', async (req: Request<{}, {}, any>, res: Respons
       return res.status(400).json({ error: 'Deposit already recorded for this link' })
     }
 
-    console.log(`📝 Building deposit instruction for link ${linkId}...`)
+    console.log(`📝 Building & executing deposit for link ${linkId}...`)
     console.log(`   User: ${publicKey}`)
     console.log(`   Amount: ${lamports} lamports (${amount} SOL)`)
-    console.log(`   ✅ Using Privacy Cash SDK for proper transact instruction`)
+    console.log(`   ℹ️  Privacy Cash SDK requires immediate execution (cannot be deferred)`)
+    console.log(`   Using operator keypair to execute (user's funds = operator deposit)`)
 
     try {
-      // ✅ Get Privacy Cash SDK client to build proper instruction
+      // ✅ Execute deposit via Privacy Cash SDK
+      // SDK's deposit() method:
+      // - Generates ZK proof (requires current blockhash)
+      // - Builds proper transact instruction  
+      // - Relays to Privacy Cash indexer
+      // - Returns transaction signature
+      
       const { getPrivacyCashClient } = await import('../services/privacyCash.js')
       const pc = getPrivacyCashClient()
       
-      console.log(`🏗️  Building deposit via Privacy Cash SDK...`)
+      console.log(`📤 Executing deposit via Privacy Cash SDK...`)
       
-      // ✅ Call SDK deposit() which will:
-      // - Generate encryption key
-      // - Create proper UTXO data
-      // - Generate zero-knowledge proof
-      // - Build transact instruction
-      // - Return unsigned transaction for user to sign
+      // Get balance before
+      const balanceBefore = await pc.getPrivateBalance()
+      const balanceBeforeLamports = typeof balanceBefore === 'object' ? balanceBefore.lamports : balanceBefore
+      console.log(`   Operator balance before: ${balanceBeforeLamports} lamports`)
+      
+      // Execute deposit - this does EVERYTHING (proof, relay, etc)
       const depositResult = await pc.deposit({
         lamports: lamports
       })
       
-      console.log(`✅ Deposit result:`, depositResult)
-      console.log(`   Type: ${typeof depositResult}`)
-      console.log(`   Keys: ${depositResult ? Object.keys(depositResult) : 'null'}`)
+      const depositResultAny = depositResult as any
+      const depositTx = depositResultAny.tx || depositResultAny.signature || (typeof depositResult === 'string' ? depositResult : undefined)
       
-      // Get the transaction - might be in different formats
-      let transaction = depositResult?.tx || depositResult
+      if (!depositTx) {
+        throw new Error('No transaction signature returned from Privacy Cash SDK')
+      }
       
-      console.log(`   Transaction type: ${typeof transaction}`)
-      console.log(`   Is Buffer: ${Buffer.isBuffer(transaction)}`)
-      console.log(`   Transaction sample: ${typeof transaction === 'string' ? transaction.substring(0, 50) : JSON.stringify(transaction).substring(0, 50)}`)
+      console.log(`✅ Deposit executed successfully!`)
+      console.log(`   Transaction: ${depositTx}`)
       
-      // If it's already a string (signature), just return it
-      if (typeof transaction === 'string') {
-        console.log(`✅ Deposit executed! Signature: ${transaction}`)
-        
-        return res.status(200).json({
-          success: true,
-          tx: transaction,
-          message: 'Deposit executed via Privacy Cash SDK. Transaction on-chain.',
-          details: {
+      // Get balance after
+      const balanceAfter = await pc.getPrivateBalance()
+      const balanceAfterLamports = typeof balanceAfter === 'object' ? balanceAfter.lamports : balanceAfter
+      console.log(`   Operator balance after: ${balanceAfterLamports} lamports`)
+      console.log(`   Balance increased: ${balanceAfterLamports - balanceBeforeLamports} lamports`)
+      
+      // ✅ RECORD DEPOSIT IN DATABASE
+      await prisma.$transaction([
+        prisma.paymentLink.update({
+          where: { id: linkId },
+          data: { depositTx },
+        }),
+        prisma.transaction.create({
+          data: {
+            type: 'deposit',
             linkId,
-            amount,
-            lamports,
-            publicKey,
-            signature: transaction,
+            transactionHash: depositTx,
+            amount: typeof amount === 'string' ? parseFloat(amount) : amount,
+            assetType: link.assetType,
+            status: 'confirmed',
+            fromAddress: publicKey,
           },
-        })
-      }
+        }),
+      ])
       
-      // If it's a Transaction object, serialize it
-      const { Transaction: Web3Transaction } = await import('@solana/web3.js')
-      
-      let transactionBuffer: Buffer
-      
-      // Handle different possible formats
-      if (Buffer.isBuffer(transaction)) {
-        transactionBuffer = transaction
-      } else if (transaction && typeof transaction === 'object') {
-        // It's an object, try to serialize it
-        const txObj = transaction as any
-        if (typeof txObj.serialize === 'function') {
-          transactionBuffer = txObj.serialize({
-            requireAllSignatures: false,
-            verifySignatures: false,
-          })
-        } else {
-          // Try to convert to buffer
-          transactionBuffer = Buffer.from(JSON.stringify(transaction))
-        }
-      } else {
-        throw new Error(`Unexpected transaction format: ${typeof transaction}`)
-      }
-      
-      const transactionBase64 = transactionBuffer.toString('base64')
-      
-      console.log(`✅ Deposit instruction built via Privacy Cash SDK`)
-      console.log(`   Transaction size: ${transactionBuffer.length} bytes`)
-      console.log(`   User must sign this transaction`)
+      console.log(`✅ Deposit recorded in database`)
       
       return res.status(200).json({
         success: true,
-        transaction: transactionBase64,
-        message: 'Deposit instruction built via Privacy Cash SDK. User must sign with their wallet.',
+        tx: depositTx,
+        message: 'Deposit executed and recorded successfully via Privacy Cash SDK',
         details: {
           linkId,
           amount,
           lamports,
           publicKey,
+          signature: depositTx,
         },
       })
     } catch (buildErr: any) {
-      console.error('❌ SDK build error:', buildErr.message)
+      console.error('❌ SDK execution error:', buildErr.message)
       console.error('   Stack:', buildErr.stack)
       
+      // Return details for debugging
+      const errorMsg = buildErr.message || 'Unknown error'
+      const details = errorMsg.includes('Blockhash') 
+        ? 'Blockhash expired - transaction took too long. Try again.'
+        : errorMsg.includes('insufficient')
+        ? 'Insufficient operator balance'
+        : errorMsg
+      
       return res.status(500).json({
-        error: 'Failed to build deposit instruction via Privacy Cash SDK',
-        details: process.env.NODE_ENV === 'development' ? buildErr.message : undefined,
+        error: 'Failed to execute deposit via Privacy Cash SDK',
+        details: process.env.NODE_ENV === 'development' ? details : 'Execution failed',
       })
     }
   } catch (err: any) {
-    console.error('❌ Deposit build error:', err)
+    console.error('❌ Deposit error:', err)
 
     return res.status(500).json({
       error: 'Failed to build deposit instruction',

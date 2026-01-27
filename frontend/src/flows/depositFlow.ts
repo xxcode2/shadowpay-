@@ -9,13 +9,15 @@ export interface DepositRequest {
 }
 
 /**
- * Main deposit flow - USER PAYS VERSION
+ * Main deposit flow - OPERATOR PAYS VERSION
+ * 
+ * Privacy Cash SDK requires IMMEDIATE execution (cannot be deferred for user signature)
+ * So backend executes deposit using operator keypair
  * 
  * Step 1: Derive encryption key by signing message
- * Step 2: Request backend to build deposit instruction
- * Step 3: User signs the transaction with their wallet ✅ USER SIGNS HERE
- * Step 4: Submit signed transaction to blockchain
- * Step 5: Record deposit in backend database
+ * Step 2: Request backend to EXECUTE deposit (not build)
+ * Step 3: Backend executes via Privacy Cash SDK and returns signature
+ * Step 4: Record transaction in database
  */
 export async function executeRealDeposit(
   request: DepositRequest,
@@ -28,7 +30,7 @@ export async function executeRealDeposit(
   console.log(`   Link: ${linkId}`)
   console.log(`   User: ${publicKey}`)
   console.log(`   Amount: ${amount} SOL (${lamports} lamports)`)
-  console.log(`   ✅ User will sign and pay from their wallet`)
+  console.log(`   ℹ️  Backend will execute via operator keypair (Privacy Cash SDK requirement)`)
   
   try {
     // ✅ STEP 1: Derive encryption key by signing message
@@ -37,18 +39,18 @@ export async function executeRealDeposit(
     try {
       const encryptionKey = await PrivacyCashService.deriveEncryptionKey(wallet)
       console.log(`✅ Encryption key derived`)
-      console.log(`   Key: ${encryptionKey}`)
     } catch (keyErr: any) {
       console.warn('⚠️  Encryption key derivation failed (non-critical):', keyErr.message)
       // Non-critical - continue anyway
     }
     
-    // ✅ STEP 2: Request backend to build deposit instruction
-    console.log('🏗️  Step 2: Requesting backend to build deposit instruction...')
-    console.log('   Using Privacy Cash SDK for proper transact instruction')
+    // ✅ STEP 2: Request backend to EXECUTE deposit
+    // Privacy Cash SDK requires immediate execution - cannot be deferred
+    console.log('📤 Step 2: Requesting backend to execute deposit...')
+    console.log('   Backend will use Privacy Cash SDK to execute immediately')
     
     const config = CONFIG
-    const buildResponse = await fetch(
+    const executeResponse = await fetch(
       `${config.BACKEND_URL}/api/deposit/build-instruction`,
       {
         method: 'POST',
@@ -62,139 +64,17 @@ export async function executeRealDeposit(
       }
     )
     
-    if (!buildResponse.ok) {
-      const error = await buildResponse.json()
-      throw new Error(`Failed to build deposit instruction: ${error.error}`)
+    if (!executeResponse.ok) {
+      const error = await executeResponse.json()
+      throw new Error(`Backend error: ${error.error || error.details || executeResponse.statusText}`)
     }
     
-    const buildData = await buildResponse.json()
-    console.log(`✅ Deposit instruction built via Privacy Cash SDK`)
-    console.log(`   Message: ${buildData.message}`)
-    console.log(`   Has transaction: ${!!buildData.transaction}`)
-    console.log(`   Has signature: ${!!buildData.tx}`)
+    const executeData = await executeResponse.json()
+    const transactionSignature = executeData.tx
     
-    // ✅ STEP 3: User signs the transaction with their wallet
-    console.log('🔐 Step 3: Requesting user to sign transaction with wallet...')
-    
-    // Check if backend already executed (returned signature)
-    if (buildData.tx && !buildData.transaction) {
-      console.log(`✅ Backend already executed via operator keypair!`)
-      console.log(`   Signature: ${buildData.tx}`)
-      
-      // This is the already-signed transaction, just record it
-      const recordResponse = await fetch(
-        `${config.BACKEND_URL}/api/deposit/record`,
-        {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            linkId,
-            depositTx: buildData.tx,
-            amount,
-            publicKey,
-          }),
-        }
-      )
-      
-      if (!recordResponse.ok) {
-        console.warn(`⚠️  Recording in backend failed`)
-      }
-      
-      console.log('🎉 Deposit completed successfully!')
-      console.log(`   Amount: ${amount} SOL`)
-      console.log(`   Transaction: ${buildData.tx}`)
-      console.log(`   Explorer: https://solscan.io/tx/${buildData.tx}`)
-      
-      showSuccess(
-        `✅ Deposit Successful!\n` +
-        `Amount: ${amount} SOL\n` +
-        `Transaction: ${buildData.tx}`
-      )
-      
-      return buildData.tx
-    }
-    
-    // Deserialize transaction from base64
-    const { Transaction } = await import('@solana/web3.js')
-    const transactionBuffer = Buffer.from(buildData.transaction, 'base64')
-    const transaction = Transaction.from(transactionBuffer)
-    
-    console.log(`   Transaction deserialized`)
-    console.log(`   Fee payer: ${transaction.feePayer?.toString()}`)
-    console.log(`   Instructions: ${transaction.instructions.length}`)
-    
-    // Sign transaction with wallet - USER SIGNS HERE!
-    if (!wallet.signTransaction) {
-      throw new Error('Wallet does not support transaction signing')
-    }
-    
-    const signedTransaction = await wallet.signTransaction(transaction)
-    console.log(`✅ Transaction signed by user`)
-    console.log(`   Signatures: ${signedTransaction.signatures.length}`)
-    
-    // Serialize signed transaction to base64
-    const signedTransactionBuffer = signedTransaction.serialize()
-    const signedTransactionBase64 = signedTransactionBuffer.toString('base64')
-    
-    // ✅ STEP 4: Submit signed transaction to blockchain
-    console.log('📤 Step 4: Submitting signed transaction to blockchain...')
-    
-    // Create connection and send transaction
-    const { Connection } = await import('@solana/web3.js')
-    const RPC_URL = CONFIG.SOLANA_RPC_URL
-    const connection = new Connection(RPC_URL, 'confirmed')
-    
-    // Send raw transaction
-    const transactionSignature = await connection.sendRawTransaction(
-      signedTransactionBuffer,
-      {
-        skipPreflight: false,
-        maxRetries: 5,
-      }
-    )
-    
-    console.log(`✅ Transaction submitted to blockchain`)
+    console.log(`✅ Deposit executed by backend!`)
     console.log(`   Signature: ${transactionSignature}`)
-    
-    // Wait for confirmation
-    console.log('⏳ Waiting for transaction confirmation...')
-    const confirmation = await connection.confirmTransaction(
-      transactionSignature,
-      'confirmed'
-    )
-    
-    if (confirmation.value.err) {
-      throw new Error(`Transaction failed on-chain: ${JSON.stringify(confirmation.value.err)}`)
-    }
-    
-    console.log(`✅ Transaction confirmed on blockchain`)
-    
-    // ✅ STEP 5: Record deposit in backend
-    console.log('📝 Step 5: Recording deposit in backend database...')
-    
-    const recordResponse = await fetch(
-      `${config.BACKEND_URL}/api/deposit/record`,
-      {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          linkId,
-          depositTx: transactionSignature,
-          amount,
-          publicKey,
-        }),
-      }
-    )
-    
-    if (!recordResponse.ok) {
-      const error = await recordResponse.json()
-      console.warn(`⚠️  Recording in backend failed: ${error.error}`)
-      // Still show success since transaction is on-chain
-    } else {
-      const recordData = await recordResponse.json()
-      console.log(`✅ Deposit recorded in backend`)
-      console.log(`   Message: ${recordData.message}`)
-    }
+    console.log(`   Message: ${executeData.message}`)
     
     // ✅ SUCCESS
     console.log('🎉 Deposit completed successfully!')
@@ -215,10 +95,10 @@ export async function executeRealDeposit(
     
     // Show detailed error
     let errorMsg = error.message
-    if (error.message?.includes('User rejected')) {
-      errorMsg = 'You rejected the transaction signature. Please try again and approve the signature.'
+    if (error.message?.includes('Blockhash')) {
+      errorMsg = 'Transaction blockhash expired. Try again.'
     } else if (error.message?.includes('insufficient')) {
-      errorMsg = 'Insufficient SOL balance for this deposit.'
+      errorMsg = 'Insufficient balance for this deposit.'
     }
     
     showError(`❌ Deposit failed: ${errorMsg}`)
