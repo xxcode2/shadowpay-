@@ -315,30 +315,15 @@ router.post('/relay', async (req: Request<{}, {}, any>, res: Response) => {
     console.log(`   UTXO: amount=${utxo.amount}, blinding=${utxo.blinding}, pubkey=${utxo.pubkey}`)
 
     try {
-      // ✅ RECORD UTXO IN DATABASE
-      // Store the UTXO data so we can verify withdrawals later
-      console.log(`💾 Recording UTXO in database...`)
+      // ✅ RECORD DEPOSIT IN DATABASE
+      console.log(`💾 Recording deposit in database...`)
 
       const txHash = `utxo_${linkId}_${Date.now()}`  // Generate unique transaction ID
-
-      // Update payment link (handle case where utxoData column may not exist yet)
-      const updatePayload: any = { 
-        depositTx: txHash,
-      }
-
-      // Only include utxoData if we need to store it
-      // (Can be skipped if column doesn't exist in older migrations)
-      try {
-        updatePayload.utxoData = JSON.stringify(utxo)
-      } catch {
-        // If storing UTXO data fails, that's okay - we still have the transaction
-        console.warn('⚠️  Could not serialize UTXO data, skipping storage')
-      }
 
       await prisma.$transaction([
         prisma.paymentLink.update({
           where: { id: linkId },
-          data: updatePayload,
+          data: { depositTx: txHash },
         }),
         prisma.transaction.create({
           data: {

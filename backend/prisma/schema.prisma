@@ -25,9 +25,6 @@ model PaymentLink {
   depositTx   String?
   withdrawTx  String?
 
-  // UTXO data for Privacy Cash (stored as JSON)
-  utxoData    String?            // JSON: { amount, blinding, pubkey, mintAddress, ... }
-
   // Relations
   transactions Transaction[]
 
