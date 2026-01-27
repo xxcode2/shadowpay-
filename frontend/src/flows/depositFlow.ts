@@ -45,6 +45,7 @@ export async function executeRealDeposit(
     
     // ✅ STEP 2: Request backend to build deposit instruction
     console.log('🏗️  Step 2: Requesting backend to build deposit instruction...')
+    console.log('   Using Privacy Cash SDK for proper transact instruction')
     
     const config = CONFIG
     const buildResponse = await fetch(
@@ -67,8 +68,7 @@ export async function executeRealDeposit(
     }
     
     const buildData = await buildResponse.json()
-    console.log(`✅ Deposit instruction built`)
-    console.log(`   Transaction ready for user signature`)
+    console.log(`✅ Deposit instruction built via Privacy Cash SDK`)
     console.log(`   Message: ${buildData.message}`)
     
     // ✅ STEP 3: User signs the transaction with their wallet
@@ -81,6 +81,7 @@ export async function executeRealDeposit(
     
     console.log(`   Transaction deserialized`)
     console.log(`   Fee payer: ${transaction.feePayer?.toString()}`)
+    console.log(`   Instructions: ${transaction.instructions.length}`)
     
     // Sign transaction with wallet - USER SIGNS HERE!
     if (!wallet.signTransaction) {

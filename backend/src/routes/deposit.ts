@@ -255,8 +255,8 @@ router.post('/execute', async (req: Request<{}, {}, any>, res: Response) => {
 /**
  * POST /api/deposit/build-instruction
  * 
- * Build a deposit instruction that USER must sign
- * This ensures USER pays for their own deposit, not the operator
+ * Build a proper Privacy Cash deposit instruction that USER must sign
+ * Uses Privacy Cash SDK to generate ZK proof and proper transact instruction
  */
 router.post('/build-instruction', async (req: Request<{}, {}, any>, res: Response) => {
   try {
@@ -299,63 +299,54 @@ router.post('/build-instruction', async (req: Request<{}, {}, any>, res: Respons
     console.log(`📝 Building deposit instruction for link ${linkId}...`)
     console.log(`   User: ${publicKey}`)
     console.log(`   Amount: ${lamports} lamports (${amount} SOL)`)
-    console.log(`   ✅ User will sign and pay`)
+    console.log(`   ✅ Using Privacy Cash SDK for proper transact instruction`)
 
     try {
-      const { Connection, SystemProgram, Transaction } = await import('@solana/web3.js')
+      // ✅ Get Privacy Cash SDK client to build proper instruction
+      const { getPrivacyCashClient } = await import('../services/privacyCash.js')
+      const pc = getPrivacyCashClient()
       
-      const RPC_URL = process.env.SOLANA_RPC_URL || 'https://mainnet.helius-rpc.com'
-      const connection = new Connection(RPC_URL, 'confirmed')
+      console.log(`🏗️  Building deposit via Privacy Cash SDK...`)
       
-      // Privacy Cash program address
-      const privacyCashProgramId = new PublicKey('9fhQBBumKEFuXtMBDw8AaQyAjCorLGJQ1S3skWZdQyQD')
-      
-      // Build deposit transaction
-      // This transfers SOL from USER wallet to Privacy Cash
-      const transaction = new Transaction()
-      transaction.add(
-        SystemProgram.transfer({
-          fromPubkey: userPublicKey,
-          toPubkey: privacyCashProgramId,
-          lamports: lamports,
-        })
-      )
-      
-      // Get latest blockhash
-      const { blockhash } = await connection.getLatestBlockhash('confirmed')
-      transaction.recentBlockhash = blockhash
-      transaction.feePayer = userPublicKey
-      
-      // Serialize transaction to base64 for frontend
-      const serializedTransaction = transaction.serialize({
-        requireAllSignatures: false,
-        verifySignatures: false,
+      // ✅ Call SDK deposit() which will:
+      // - Generate encryption key
+      // - Create proper UTXO data
+      // - Generate zero-knowledge proof
+      // - Build transact instruction
+      // - Return unsigned transaction for user to sign
+      const depositResult = await pc.deposit({
+        lamports: lamports
       })
       
-      const transactionBase64 = serializedTransaction.toString('base64')
+      // Get the transaction
+      const transaction = depositResult.tx
       
-      console.log(`✅ Deposit instruction built successfully`)
-      console.log(`   Transaction size: ${serializedTransaction.length} bytes`)
+      console.log(`✅ Deposit instruction built via Privacy Cash SDK`)
+      console.log(`   Transaction: ${transaction}`)
       console.log(`   User must sign this transaction`)
+      
+      // Serialize transaction to base64 for frontend
+      const { Transaction: Web3Transaction } = await import('@solana/web3.js')
+      const txBytes = Buffer.isBuffer(transaction) ? transaction : Buffer.from(transaction as any)
+      const transactionBase64 = txBytes.toString('base64')
       
       return res.status(200).json({
         success: true,
         transaction: transactionBase64,
-        message: 'Deposit instruction ready. User must sign with their wallet.',
+        transactionObject: transaction,
+        message: 'Deposit instruction built via Privacy Cash SDK. User must sign with their wallet.',
         details: {
           linkId,
           amount,
           lamports,
           publicKey,
-          programId: privacyCashProgramId.toString(),
-          blockhash,
         },
       })
     } catch (buildErr: any) {
-      console.error('❌ Instruction building error:', buildErr.message)
+      console.error('❌ SDK build error:', buildErr.message)
       
       return res.status(500).json({
-        error: 'Failed to build deposit instruction',
+        error: 'Failed to build deposit instruction via Privacy Cash SDK',
         details: process.env.NODE_ENV === 'development' ? buildErr.message : undefined,
       })
     }
