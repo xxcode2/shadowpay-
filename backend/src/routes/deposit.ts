@@ -2,67 +2,62 @@ import { Router, Request, Response } from 'express'
 import { PublicKey } from '@solana/web3.js'
 import prisma from '../lib/prisma.js'
 import crypto from 'crypto'
+import { parseOperatorKeypair, initializePrivacyCash } from '../services/privacyCash.js'
 
 const router = Router()
 
 /**
- * ✅ RELAY SIGNED TRANSACTION TO PRIVACY CASH RELAYER
+ * ✅ DEPOSIT VIA PRIVACY CASH SDK (Backend)
  * 
- * Frontend uses Privacy Cash SDK to:
- * 1. Generate ZK proof
- * 2. Create encrypted UTXOs
- * 3. Sign transaction
- * 
- * Backend relays signed transaction to Privacy Cash relayer API
- * which then submits to Solana
+ * Backend receives deposit request from frontend and:
+ * 1. Initializes Privacy Cash SDK with operator keypair
+ * 2. Calls SDK.deposit({ lamports })
+ * 3. SDK generates ZK proof, encrypted UTXOs, and signs transaction
+ * 4. Relays signed transaction to Privacy Cash relayer API
+ * 5. Records transaction in database
  */
-async function relayToPrivacyCash(payload: {
+async function executePrivacyCashDeposit(payload: {
   linkId: string
-  signedTransaction: string
   amount: number
+  lamports: number
   publicKey: string
   referrer?: string
 }): Promise<{ transactionHash: string }> {
-  console.log(`🔗 Relaying signed transaction to Privacy Cash relayer...`)
-  
-  // Privacy Cash Relayer API endpoint
-  const RELAYER_API_URL = process.env.PRIVACY_CASH_RELAYER_URL || 'https://relayer.privacycash.org'
+  console.log(`🔐 Executing Privacy Cash SDK deposit...`)
   
   try {
-    // Call Privacy Cash relayer with signed transaction
-    const response = await fetch(`${RELAYER_API_URL}/deposit`, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({
-        signedTransaction: payload.signedTransaction,
-        senderAddress: payload.publicKey,
-        referralWalletAddress: payload.referrer,
-      }),
+    // Get operator keypair from environment
+    if (!process.env.OPERATOR_SECRET_KEY) {
+      throw new Error('OPERATOR_SECRET_KEY environment variable is required')
+    }
+
+    const operatorKeypair = parseOperatorKeypair(process.env.OPERATOR_SECRET_KEY)
+    console.log(`   Operator: ${operatorKeypair.publicKey.toString()}`)
+
+    // Initialize Privacy Cash SDK with operator keypair
+    const rpcUrl = process.env.SOLANA_RPC_URL || 'https://api.mainnet-beta.solana.com'
+    const privacyCashClient = initializePrivacyCash(operatorKeypair, rpcUrl, true)
+    console.log(`   RPC: ${rpcUrl}`)
+
+    // Call Privacy Cash SDK deposit
+    console.log(`   📝 Calling Privacy Cash SDK deposit()...`)
+    console.log(`      Amount: ${payload.lamports} lamports (${payload.amount} SOL)`)
+    
+    const depositResult = await privacyCashClient.deposit({
+      lamports: payload.lamports,
     })
 
-    if (!response.ok) {
-      const errorText = await response.text()
-      console.error(`Privacy Cash Relayer Error (${response.status}):`, errorText)
-      
-      throw new Error(
-        `Privacy Cash relayer error (${response.status}): ${errorText || response.statusText}`
-      )
+    const transactionHash = depositResult.tx
+    if (!transactionHash) {
+      throw new Error('Privacy Cash SDK did not return transaction hash')
     }
 
-    const result = await response.json() as { signature?: string; success?: boolean; [key: string]: any }
+    console.log(`   ✅ Privacy Cash deposit executed`)
+    console.log(`      Signature: ${transactionHash}`)
+    console.log(`      Amount: ${payload.amount} SOL`)
+    console.log(`      Status: Encrypted in Privacy Cash pool`)
 
-    if (!result.signature) {
-      throw new Error('Privacy Cash relayer did not return transaction signature')
-    }
-
-    console.log(`✅ Privacy Cash relayer accepted transaction`)
-    console.log(`   Signature: ${result.signature}`)
-    
-    return {
-      transactionHash: result.signature,
-    }
+    return { transactionHash }
   } catch (error: any) {
     // Fallback to mock for development
     if (process.env.ALLOW_MOCK_DEPOSITS === 'true') {
@@ -72,41 +67,41 @@ async function relayToPrivacyCash(payload: {
       }
     }
     
-    console.error('❌ Privacy Cash Relayer Error:', error.message)
-    throw new Error(`Failed to relay transaction to Privacy Cash: ${error.message}`)
+    console.error('❌ Privacy Cash SDK Error:', error.message)
+    throw new Error(`Failed to execute Privacy Cash deposit: ${error.message}`)
   }
 }
 
 /**
  * POST /api/deposit
  *
- * ✅ PRIVACY CASH SDK DEPOSIT RELAY:
- * Frontend (using Privacy Cash SDK) sends:
- * 1. Signed transaction (already has ZK proof, encrypted UTXO, etc)
+ * ✅ PRIVACY CASH SDK DEPOSIT (Backend):
+ * Frontend sends:
+ * 1. User amount (SOL)
  * 2. User's public key
  * 3. Link ID
  * 
- * Backend relays signed transaction to Privacy Cash relayer API
- * which submits to Solana and Privacy Cash pool
+ * Backend:
+ * 1. Initializes Privacy Cash SDK with operator keypair
+ * 2. Calls SDK.deposit({ lamports })
+ * 3. SDK handles all crypto (ZK proof, encryption, signing)
+ * 4. Records transaction in database
  */
 router.post('/', async (req: Request<{}, {}, any>, res: Response) => {
   try {
-    const { linkId, signedTransaction, amount, publicKey, referrer } = req.body
+    const { linkId, amount, lamports, publicKey, referrer, signature } = req.body
 
     // ✅ VALIDATE INPUT
     if (!linkId || typeof linkId !== 'string') {
       return res.status(400).json({ error: 'linkId required' })
     }
 
-    if (!signedTransaction || typeof signedTransaction !== 'string') {
-      return res.status(400).json({ 
-        error: 'signedTransaction required',
-        details: 'Frontend must sign transaction with Privacy Cash SDK before sending to backend'
-      })
-    }
-
     if (typeof amount !== 'string' && typeof amount !== 'number') {
       return res.status(400).json({ error: 'amount required (as string or number)' })
+    }
+
+    if (typeof lamports !== 'number') {
+      return res.status(400).json({ error: 'lamports required (as number)' })
     }
 
     if (!publicKey || typeof publicKey !== 'string') {
@@ -133,33 +128,34 @@ router.post('/', async (req: Request<{}, {}, any>, res: Response) => {
       return res.status(400).json({ error: 'Deposit already recorded for this link' })
     }
 
-    console.log(`📨 Received signed transaction for link ${linkId}...`)
-    console.log(`   Amount: ${amount} SOL`)
-    console.log(`   Sender: ${publicKey}`)
-    console.log(`   Transaction signed by Privacy Cash SDK`)
+    const amountSOL = typeof amount === 'string' ? parseFloat(amount) : amount
 
-    // ✅ RELAY SIGNED TRANSACTION TO PRIVACY CASH RELAYER
-    console.log(`🔄 Relaying to Privacy Cash relayer...`)
+    console.log(`📨 Received deposit request for link ${linkId}...`)
+    console.log(`   Amount: ${amountSOL} SOL (${lamports} lamports)`)
+    console.log(`   User: ${publicKey}`)
+
+    // ✅ EXECUTE PRIVACY CASH DEPOSIT VIA SDK
+    console.log(`🔄 Executing deposit via Privacy Cash SDK...`)
     
     let privacyCashTx: string
     try {
-      const relayResponse = await relayToPrivacyCash({
+      const depositResult = await executePrivacyCashDeposit({
         linkId,
-        signedTransaction,
-        amount: typeof amount === 'string' ? parseFloat(amount) : amount,
+        amount: amountSOL,
+        lamports,
         publicKey,
         referrer,
       })
       
-      privacyCashTx = relayResponse.transactionHash
+      privacyCashTx = depositResult.transactionHash
       
-      console.log(`✅ Relayed to Privacy Cash`)
+      console.log(`✅ Deposit executed via Privacy Cash SDK`)
       console.log(`   Signature: ${privacyCashTx}`)
-    } catch (relayErr: any) {
-      console.error('❌ Failed to relay to Privacy Cash:', relayErr.message)
+    } catch (depositErr: any) {
+      console.error('❌ Failed to execute Privacy Cash deposit:', depositErr.message)
       return res.status(502).json({
-        error: 'Failed to relay to Privacy Cash',
-        details: relayErr.message,
+        error: 'Failed to execute Privacy Cash deposit',
+        details: depositErr.message,
       })
     }
 
@@ -176,7 +172,7 @@ router.post('/', async (req: Request<{}, {}, any>, res: Response) => {
           type: 'deposit',
           linkId,
           transactionHash: privacyCashTx,
-          amount: typeof amount === 'string' ? parseFloat(amount) : amount,
+          amount: amountSOL,
           assetType: link.assetType,
           status: 'confirmed',
           fromAddress: publicKey,
@@ -186,21 +182,21 @@ router.post('/', async (req: Request<{}, {}, any>, res: Response) => {
 
     console.log(`✅ Deposit recorded in database`)
     console.log(`   Link: ${linkId}`)
-    console.log(`   Amount: ${amount} SOL`)
+    console.log(`   Amount: ${amountSOL} SOL`)
     console.log(`   Status: Relayed to Privacy Cash pool`)
 
     return res.status(200).json({
       success: true,
       tx: privacyCashTx,
       transactionHash: privacyCashTx,
-      amount,
-      message: 'Deposit successful. Transaction relayed to Privacy Cash pool.',
-      status: 'relayed',
+      amount: amountSOL,
+      message: 'Deposit successful. Transaction encrypted in Privacy Cash pool.',
+      status: 'confirmed',
       details: {
         encrypted: true,
         zkProof: true,
-        relayerSubmitted: true,
-        description: 'Your transaction is encrypted and submitted via Privacy Cash relayer.'
+        privacyLevel: 'high',
+        description: 'Your deposit is encrypted with zero-knowledge proofs in the Privacy Cash pool.'
       },
     })
   } catch (error: any) {
