@@ -313,6 +313,7 @@ export class App {
       signMessage: (message: Uint8Array) => window.solana.signMessage(message),
       signTransaction: (tx: any) => window.solana.signTransaction(tx),
       signAllTransactions: (txs: any[]) => window.solana.signAllTransactions(txs),
+      sendTransaction: (tx: any, options?: any) => window.solana.sendTransaction(tx, options),
     }
   }
 
