@@ -103,17 +103,25 @@ router.post('/prepare', async (req: Request<{}, {}, any>, res: Response) => {
       
       const connection = new Connection(rpcUrl)
       
+      console.log(`   RPC URL: ${rpcUrl.substring(0, 50)}...`)
+      console.log(`   Initializing Privacy Cash SDK...`)
+      
       // Initialize SDK with operator keypair (needed for SDK to work)
       const privacyCashClient = initializePrivacyCash(operatorKeypair, rpcUrl, true)
       
+      console.log(`   ✅ SDK initialized`)
       console.log(`   Generating deposit proof for user: ${publicKey}`)
       
       // Generate deposit - SDK creates transaction structure
+      console.log(`   Calling SDK.deposit()...`)
       const depositResult = await privacyCashClient.deposit({
         lamports,
       })
       
-      if (!(depositResult as any).tx && !(depositResult as any).transaction) {
+      console.log(`   SDK returned result:`, JSON.stringify(depositResult).substring(0, 100))
+      
+      if (!depositResult || (!(depositResult as any).tx && !(depositResult as any).transaction)) {
+        console.error(`❌ SDK did not return valid transaction:`, depositResult)
         throw new Error('SDK did not return transaction')
       }
       
@@ -162,10 +170,15 @@ router.post('/prepare', async (req: Request<{}, {}, any>, res: Response) => {
       })
       
     } catch (sdkErr: any) {
-      console.error('❌ SDK Error:', sdkErr.message)
+      console.error('❌ SDK Error occurred')
+      console.error('   Message:', sdkErr.message)
+      console.error('   Stack:', sdkErr.stack)
+      console.error('   Full error:', JSON.stringify(sdkErr, null, 2))
+      
       return res.status(500).json({
         error: 'Failed to generate Privacy Cash transaction',
-        details: sdkErr.message,
+        details: sdkErr.message || 'Unknown SDK error',
+        type: sdkErr.constructor.name,
       })
     }
     
