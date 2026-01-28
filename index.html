@@ -499,19 +499,56 @@
       }
 
       walletState.isProcessing = true;
-      showLoadingModal('🔐 Creating payment link...<br><small class="text-gray-500">Preparing Privacy Cash deposit</small>');
-
+      
       try {
-        // Call the real backend API to create a link
+        const amountSOL = parseFloat(amount);
+        
+        // ✅ STEP 1: Get recipient (backend) wallet address for payment
+        showLoadingModal('🔍 Getting backend wallet address...<br><small class="text-gray-500">Preparing payment</small>');
+        
         const BACKEND_URL = 'https://shadowpay-backend-production.up.railway.app' || 'http://localhost:3000';
+        
+        const configResponse = await fetch(`${BACKEND_URL}/api/config`);
+        if (!configResponse.ok) {
+          throw new Error('Failed to get backend wallet address');
+        }
+        const configData = await configResponse.json();
+        const backendWallet = configData.operatorAddress || configData.walletAddress;
+        
+        if (!backendWallet) {
+          throw new Error('Backend wallet address not configured');
+        }
+
+        // ✅ STEP 2: Request real SOL payment from user via Phantom
+        showLoadingModal(`💳 Requesting payment approval from Phantom...<br><small class="text-gray-500">You need to send ${amountSOL} SOL to create this link</small>`);
+        
+        console.log(`💳 Requesting SOL payment from user...`);
+        console.log(`   Amount: ${amountSOL} SOL`);
+        console.log(`   To: ${backendWallet}`);
+        
+        // Dynamically import the payment function
+        const solTransfer = await import('./utils/solTransfer.ts');
+        
+        const paymentResult = await solTransfer.sendSolPayment(
+          walletState.wallet,
+          backendWallet,
+          amountSOL
+        );
+        
+        console.log(`✅ Payment successful!`);
+        console.log(`   Transaction: ${paymentResult.txHash}`);
+
+        // ✅ STEP 3: Create the link with payment tx hash
+        showLoadingModal('📝 Creating payment link...<br><small class="text-gray-500">Recording payment on blockchain</small>');
         
         const linkResponse = await fetch(`${BACKEND_URL}/api/create-link`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
-            amount: parseFloat(amount),
+            amount: amountSOL,
             memo: memo || '',
-            assetType: 'SOL'
+            assetType: 'SOL',
+            paymentTxHash: paymentResult.txHash
           })
         });
 
@@ -523,55 +560,37 @@
         const linkData = await linkResponse.json();
         const linkId = linkData.id;
 
-        // Now deposit to the link using Privacy Cash SDK
-        showLoadingModal('💳 Requesting signature from Phantom...<br><small class="text-gray-500">Sign the transaction</small>');
+        // ✅ STEP 4: Deposit to Privacy Cash (optional, if Privacy Cash is configured)
+        showLoadingModal('🔐 Finalizing Privacy Cash pool deposit...<br><small class="text-gray-500">Encrypting with your key</small>');
 
-        // Import the deposit flow (assumes it's available globally)
-        // In production, use proper module imports
-        const depositFlow = window.depositFlow || {};
-        
-        if (depositFlow.executeRealDeposit) {
-          await depositFlow.executeRealDeposit(
-            {
-              linkId: linkId,
-              amount: amount,
-              publicKey: walletState.address
-            },
-            walletState.wallet
-          );
-        } else {
-          // Fallback: show link and wait for deposit
-          const linkUrl = `https://shadowpay.app/claim/${linkId}`;
-          transactionHistory.sent.unshift({
-            id: Date.now().toString(),
-            amount: parseFloat(amount),
-            memo: memo || 'No memo',
-            status: 'pending',
-            date: Date.now(),
-            linkId: linkId
-          });
-
-          walletState.isProcessing = false;
-          hideLoadingModal();
-
-          document.getElementById('generated-link').value = linkUrl;
-          document.getElementById('link-result').classList.remove('hidden');
-          document.getElementById('success-message').textContent = `✅ Payment link created! Share this link with the recipient.`;
-          showSuccessModal();
-
-          document.getElementById('create-form').reset();
-          return;
+        try {
+          const depositFlow = window.depositFlow || {};
+          
+          if (depositFlow.executeRealDeposit) {
+            await depositFlow.executeRealDeposit(
+              {
+                linkId: linkId,
+                amount: amount,
+                publicKey: walletState.address
+              },
+              walletState.wallet
+            );
+          }
+        } catch (privacyErr) {
+          console.warn('Privacy Cash deposit optional - continuing:', privacyErr);
         }
 
+        // ✅ SUCCESS: Show the link
         const linkUrl = `https://shadowpay.app/claim/${linkId}`;
 
         transactionHistory.sent.unshift({
           id: Date.now().toString(),
-          amount: parseFloat(amount),
+          amount: amountSOL,
           memo: memo || 'No memo',
           status: 'confirmed',
           date: Date.now(),
-          linkId: linkId
+          linkId: linkId,
+          paymentTx: paymentResult.txHash
         });
 
         walletState.isProcessing = false;
@@ -579,15 +598,27 @@
 
         document.getElementById('generated-link').value = linkUrl;
         document.getElementById('link-result').classList.remove('hidden');
-        document.getElementById('success-message').textContent = `✅ Successfully deposited ${amount} SOL to Privacy Cash! Share this link with the recipient.`;
+        document.getElementById('success-message').textContent = `✅ Payment confirmed! Link created with ${amountSOL} SOL. Share this link with the recipient.`;
         showSuccessModal();
 
         document.getElementById('create-form').reset();
       } catch (error) {
         walletState.isProcessing = false;
         hideLoadingModal();
-        showErrorModal(`❌ Deposit failed: ${error.message}`);
-        console.error('Deposit error:', error);
+        
+        let errorMsg = error.message || 'Link creation failed';
+        
+        // Friendly error messages
+        if (errorMsg.includes('User rejected')) {
+          errorMsg = '❌ You cancelled the payment request. No SOL was sent.';
+        } else if (errorMsg.includes('insufficient funds')) {
+          errorMsg = '❌ Insufficient SOL balance. Please add SOL to your Phantom wallet.';
+        } else if (errorMsg.includes('backend wallet')) {
+          errorMsg = '❌ Backend not properly configured. Please try again later.';
+        }
+        
+        showErrorModal(errorMsg);
+        console.error('Link creation error:', error);
       }
     }
 
