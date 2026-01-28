@@ -85,7 +85,7 @@ export async function executeRealDeposit(
     let recentBlockhash: string
     try {
       // Try to use wallet's connection first (if available)
-      const connection = wallet.connection || new Connection('https://api.mainnet-beta.solana.com', 'confirmed')
+      const connection = wallet.connection || new Connection('https://mainnet.helius-rpc.com/?api-key=c455719c-354b-4a44-98d4-27f8a18aa79c', 'confirmed')
       
       const blockHashObj = await connection.getLatestBlockhash('confirmed')
       recentBlockhash = blockHashObj.blockhash
