@@ -38,28 +38,76 @@ interface DepositRecordRequest {
 }
 
 /**
- * DEBUG: Health check for deposit service
+ * DEBUG: Enhanced health check with detailed diagnostics
  */
 router.get('/health', async (req: Request, res: Response) => {
   try {
     console.log(`\n🏥 DEPOSIT SERVICE HEALTH CHECK`)
     
-    // Check operator keypair
-    let operatorKeyOk = false
+    const checks: any = {
+      timestamp: new Date().toISOString(),
+      service: 'deposit',
+      checks: {}
+    }
+    
+    // Check 1: Operator keypair
     try {
-      loadKeypairFromEnv()
-      operatorKeyOk = true
-      console.log(`   ✅ Operator keypair loaded`)
+      const keypair = loadKeypairFromEnv()
+      checks.checks.operatorKey = {
+        status: 'ok',
+        publicKey: keypair.publicKey.toBase58(),
+      }
+      console.log(`   ✅ Operator keypair: ${keypair.publicKey.toBase58()}`)
     } catch (err: any) {
-      console.error(`   ❌ Operator keypair issue:`, err.message)
+      checks.checks.operatorKey = {
+        status: 'error',
+        error: err.message
+      }
+      console.error(`   ❌ Operator keypair: ${err.message}`)
     }
 
-    return res.status(200).json({
-      status: 'ok',
-      service: 'deposit',
-      operatorKeyOk,
-      rpcUrl: (process.env.RPC_URL || 'Using default').substring(0, 50) + '...',
+    // Check 2: RPC Connection
+    const rpcUrl = process.env.RPC_URL || process.env.SOLANA_RPC_URL || ''
+    try {
+      if (!rpcUrl) throw new Error('RPC_URL not configured')
+      
+      const connection = new Connection(rpcUrl, 'confirmed')
+      const version = await connection.getVersion()
+      checks.checks.rpc = {
+        status: 'ok',
+        solanaVersion: version['solana-core']
+      }
+      console.log(`   ✅ RPC: ${version['solana-core']}`)
+    } catch (err: any) {
+      checks.checks.rpc = {
+        status: 'error',
+        error: err.message
+      }
+      console.error(`   ❌ RPC: ${err.message}`)
+    }
+
+    // Check 3: Privacy Cash SDK
+    try {
+      await import('privacycash')
+      checks.checks.sdk = {
+        status: 'ok'
+      }
+      console.log(`   ✅ Privacy Cash SDK available`)
+    } catch (err: any) {
+      checks.checks.sdk = {
+        status: 'error',
+        error: err.message
+      }
+      console.error(`   ❌ Privacy Cash SDK: ${err.message}`)
+    }
+
+    const allOk = Object.values(checks.checks).every((check: any) => check.status === 'ok')
+    
+    return res.status(allOk ? 200 : 503).json({
+      status: allOk ? 'healthy' : 'unhealthy',
+      ...checks
     })
+    
   } catch (error: any) {
     console.error(`❌ Health check failed:`, error)
     return res.status(500).json({
@@ -70,179 +118,133 @@ router.get('/health', async (req: Request, res: Response) => {
 })
 
 /**
- * ✅ ENDPOINT 1: Prepare deposit (generate proof, create transaction for user to sign)
+ * DEBUG: Detailed debug endpoint
+ */
+router.get('/debug', async (req: Request, res: Response) => {
+  try {
+    console.log(`\n🔍 DEPOSIT DEBUG ENDPOINT`)
+    
+    const debug: any = {
+      timestamp: new Date().toISOString(),
+      environment: process.env.NODE_ENV || 'development',
+      checks: {}
+    }
+
+    // 1. Environment Variables
+    debug.checks.env = {
+      OPERATOR_SECRET_KEY: process.env.OPERATOR_SECRET_KEY ? '✅ SET' : '❌ NOT SET',
+      OPERATOR_PRIVATE_KEY: process.env.OPERATOR_PRIVATE_KEY ? '✅ SET' : '❌ NOT SET',
+      RPC_URL: process.env.RPC_URL ? '✅ SET' : '❌ NOT SET',
+      SOLANA_RPC_URL: process.env.SOLANA_RPC_URL ? '✅ SET' : '❌ NOT SET',
+      DATABASE_URL: process.env.DATABASE_URL ? '✅ SET' : '❌ NOT SET',
+    }
+
+    // 2. Operator Keypair
+    try {
+      const keypair = loadKeypairFromEnv()
+      debug.checks.operatorKeypair = {
+        status: 'ok',
+        publicKey: keypair.publicKey.toBase58(),
+      }
+    } catch (err: any) {
+      debug.checks.operatorKeypair = {
+        status: 'error',
+        error: err.message,
+      }
+    }
+
+    // 3. RPC Connection
+    const rpcUrl = process.env.RPC_URL || process.env.SOLANA_RPC_URL
+    if (rpcUrl) {
+      try {
+        const connection = new Connection(rpcUrl, 'confirmed')
+        const version = await connection.getVersion()
+        const slot = await connection.getSlot()
+        
+        debug.checks.rpc = {
+          status: 'ok',
+          solanaVersion: version['solana-core'],
+          currentSlot: slot,
+        }
+      } catch (err: any) {
+        debug.checks.rpc = {
+          status: 'error',
+          error: err.message,
+        }
+      }
+    }
+
+    // 4. Privacy Cash SDK
+    try {
+      const { PrivacyCash } = await import('privacycash')
+      debug.checks.sdk = {
+        status: 'ok',
+        hasDepositMethod: true
+      }
+    } catch (err: any) {
+      debug.checks.sdk = {
+        status: 'error',
+        error: err.message,
+      }
+    }
+
+    // 5. Database
+    try {
+      await prisma.$queryRaw`SELECT 1`
+      const linkCount = await prisma.paymentLink.count()
+      debug.checks.database = {
+        status: 'ok',
+        linkCount
+      }
+    } catch (err: any) {
+      debug.checks.database = {
+        status: 'error',
+        error: err.message,
+      }
+    }
+
+    const errorCount = Object.values(debug.checks)
+      .filter((check: any) => check.status === 'error').length
+    
+    debug.summary = {
+      totalChecks: Object.keys(debug.checks).length,
+      errors: errorCount,
+      status: errorCount === 0 ? 'all_ok' : 'issues_found'
+    }
+
+    return res.status(200).json(debug)
+    
+  } catch (error: any) {
+    console.error(`❌ Debug endpoint failed:`, error)
+    return res.status(500).json({
+      status: 'error',
+      error: error.message,
+    })
+  }
+})
+
+/**
+ * ✅ ENDPOINT 1: Prepare deposit (with detailed error handling)
  */
 router.post('/prepare', async (req: Request<{}, {}, any>, res: Response) => {
+  const requestId = Math.random().toString(36).substring(7)
+  
   try {
     const { linkId, amount, publicKey, lamports } = req.body as PrepareDepositRequest
 
-    console.log(`\n🔗 PREPARE DEPOSIT (USER WILL PAY)`)
+    console.log(`\n🔗 [${requestId}] PREPARE DEPOSIT`)
     console.log(`   Link: ${linkId}`)
-    console.log(`   User: ${publicKey}`)
     console.log(`   Amount: ${amount} SOL`)
 
     // ✅ Validate input
     if (!linkId || !publicKey || !amount || lamports === undefined) {
-      return res.status(400).json({ error: 'Missing required fields: linkId, publicKey, amount, lamports' })
+      return res.status(400).json({ error: 'Missing required fields' })
     }
 
     try {
       new PublicKey(publicKey)
     } catch {
       return res.status(400).json({ error: 'Invalid publicKey format' })
-    }
-
-    // ✅ Find link
-    console.log(`\n🔍 Looking up payment link...`)
-    const link = await prisma.paymentLink.findUnique({
-      where: { id: linkId },
-    })
-
-    if (!link) {
-      console.error(`❌ Link not found: ${linkId}`)
-      return res.status(404).json({ error: 'Link not found' })
-    }
-
-    if (link.depositTx && link.depositTx !== '') {
-      console.error(`❌ Deposit already recorded: ${linkId}`)
-      return res.status(400).json({ error: 'Deposit already recorded for this link' })
-    }
-
-    console.log(`✅ Link verified`)
-
-    // ✅ Load operator keypair (ONLY for SDK initialization and proof generation)
-    console.log(`\n🔐 Initializing Privacy Cash SDK...`)
-    console.log(`   Operator keypair used for: Proof generation only`)
-    console.log(`   Fee payer will be: USER (${publicKey.slice(0, 8)}...)`)
-    
-    let operatorKeypair: any
-    try {
-      operatorKeypair = loadKeypairFromEnv()
-    } catch (err: any) {
-      console.error('❌ Failed to load operator keypair:', err.message)
-      return res.status(500).json({
-        error: 'Operator configuration error',
-        details: 'Could not load operator keypair. Make sure OPERATOR_PRIVATE_KEY is set.'
-      })
-    }
-
-    // ✅ Initialize SDK with operator keypair and generate proof
-    console.log(`🔮 Generating zero-knowledge proof...`)
-    
-    try {
-      const rpcUrl = process.env.RPC_URL || 
-        'https://mainnet.helius-rpc.com/?api-key=c455719c-354b-4a44-98d4-27f8a18aa79c'
-      
-      const connection = new Connection(rpcUrl)
-      
-      console.log(`   RPC URL: ${rpcUrl.substring(0, 50)}...`)
-      console.log(`   Initializing Privacy Cash SDK...`)
-      
-      // Initialize SDK with operator keypair (needed for SDK to work)
-      const privacyCashClient = initializePrivacyCash(operatorKeypair, rpcUrl, true)
-      
-      console.log(`   ✅ SDK initialized`)
-      console.log(`   Generating deposit proof for user: ${publicKey}`)
-      
-      // Generate deposit - SDK creates transaction structure
-      console.log(`   Calling SDK.deposit()...`)
-      const depositResult = await privacyCashClient.deposit({
-        lamports,
-      })
-      
-      console.log(`   SDK returned result:`, JSON.stringify(depositResult).substring(0, 100))
-      
-      if (!depositResult || (!(depositResult as any).tx && !(depositResult as any).transaction)) {
-        console.error(`❌ SDK did not return valid transaction:`, depositResult)
-        throw new Error('SDK did not return transaction')
-      }
-      
-      console.log(`   ✅ ZK proof generated`)
-      console.log(`   ✅ Transaction structure created`)
-      
-      // ✅ CRITICAL: Modify transaction to use USER as fee payer
-      console.log(`\n🔧 Setting USER as fee payer...`)
-      
-      const txBuffer = Buffer.from((depositResult as any).tx || (depositResult as any).transaction, 'base64')
-      const transaction = Transaction.from(txBuffer)
-      
-      // Set USER's wallet as fee payer (not operator!)
-      const userPubkey = new PublicKey(publicKey)
-      transaction.feePayer = userPubkey
-      
-      // Get fresh blockhash
-      const { blockhash, lastValidBlockHeight } = await connection.getLatestBlockhash()
-      transaction.recentBlockhash = blockhash
-      
-      console.log(`   ✅ Fee payer set to: ${publicKey.slice(0, 8)}... (USER)`)
-      console.log(`   ✅ Blockhash: ${blockhash.slice(0, 8)}...`)
-      
-      // Serialize back to base64
-      const modifiedTxBase64 = transaction.serialize({
-        requireAllSignatures: false,
-        verifySignatures: false,
-      }).toString('base64')
-      
-      console.log(`   ✅ Transaction ready for user signature`)
-      
-      console.log(`\n✅ DEPOSIT PREPARED`)
-      console.log(`   User will sign and pay all fees`)
-      
-      return res.status(200).json({
-        success: true,
-        transaction: modifiedTxBase64,
-        amount: parseFloat(amount),
-        message: 'Transaction prepared. USER will pay all fees when signing.',
-        details: {
-          feePayer: publicKey,
-          userPays: true,
-          estimatedFee: '~0.002 SOL',
-          next: 'User signs with Phantom, then submit to /deposit endpoint',
-        },
-      })
-      
-    } catch (sdkErr: any) {
-      console.error('❌ SDK Error occurred')
-      console.error('   Message:', sdkErr.message)
-      console.error('   Stack:', sdkErr.stack)
-      console.error('   Full error:', JSON.stringify(sdkErr, null, 2))
-      
-      return res.status(500).json({
-        error: 'Failed to generate Privacy Cash transaction',
-        details: sdkErr.message || 'Unknown SDK error',
-        type: sdkErr.constructor.name,
-      })
-    }
-    
-  } catch (error: any) {
-    console.error('❌ Prepare deposit error:', error)
-    return res.status(500).json({
-      error: error.message || 'Failed to prepare deposit',
-    })
-  }
-})
-
-/**
- * ✅ ENDPOINT 2: Submit deposit (user already signed the transaction)
- */
-router.post('/', async (req: Request<{}, {}, any>, res: Response) => {
-  try {
-    const { 
-      linkId, 
-      amount, 
-      lamports, 
-      publicKey, 
-      signedTransaction 
-    } = req.body as DepositRecordRequest
-
-    console.log(`\n🔗 SUBMIT SIGNED DEPOSIT`)
-    console.log(`   Link: ${linkId}`)
-    console.log(`   User: ${publicKey}`)
-    console.log(`   Amount: ${amount} SOL`)
-
-    // ✅ Validate input
-    if (!linkId || !publicKey || !signedTransaction || amount === undefined || lamports === undefined) {
-      return res.status(400).json({ error: 'Missing required fields' })
     }
 
     // ✅ Find link
@@ -258,34 +260,162 @@ router.post('/', async (req: Request<{}, {}, any>, res: Response) => {
       return res.status(400).json({ error: 'Deposit already recorded' })
     }
 
-    const amountSOL = typeof amount === 'string' ? parseFloat(amount) : amount
-
-    // ✅ Submit signed transaction to blockchain
-    console.log(`\n📤 Submitting user-signed transaction...`)
-    console.log(`   User's wallet will pay all fees`)
+    // ✅ Load operator keypair
+    console.log(`   🔐 Loading operator keypair...`)
+    let operatorKeypair: any
     
-    const rpcUrl = process.env.RPC_URL || 
+    try {
+      operatorKeypair = loadKeypairFromEnv()
+      console.log(`   ✅ Keypair loaded`)
+    } catch (err: any) {
+      console.error(`   ❌ Keypair error: ${err.message}`)
+      return res.status(500).json({
+        error: 'Operator configuration error',
+        details: 'Could not load operator keypair',
+        suggestion: 'Set OPERATOR_SECRET_KEY in environment variables',
+      })
+    }
+
+    // ✅ Get RPC URL
+    const rpcUrl = process.env.RPC_URL || process.env.SOLANA_RPC_URL || 
       'https://mainnet.helius-rpc.com/?api-key=c455719c-354b-4a44-98d4-27f8a18aa79c'
+
+    console.log(`   🌐 RPC: ${rpcUrl.substring(0, 40)}...`)
+
+    // ✅ Initialize Connection
+    let connection: Connection
+    try {
+      connection = new Connection(rpcUrl, 'confirmed')
+      await connection.getLatestBlockhash()
+      console.log(`   ✅ RPC verified`)
+    } catch (rpcErr: any) {
+      console.error(`   ❌ RPC error: ${rpcErr.message}`)
+      return res.status(500).json({
+        error: 'RPC connection error',
+        details: rpcErr.message,
+      })
+    }
+
+    // ✅ Initialize SDK and generate proof
+    console.log(`   🔮 Generating proof...`)
+    
+    let depositResult: any
+    try {
+      const privacyCashClient = initializePrivacyCash(operatorKeypair, rpcUrl, true)
+      
+      depositResult = await privacyCashClient.deposit({
+        lamports,
+      })
+      
+      if (!depositResult || (!(depositResult as any).tx && !(depositResult as any).transaction)) {
+        throw new Error('SDK returned invalid response')
+      }
+      
+      console.log(`   ✅ Proof generated`)
+    } catch (depositErr: any) {
+      console.error(`   ❌ Proof error: ${depositErr.message}`)
+      return res.status(500).json({
+        error: 'Failed to generate deposit',
+        details: depositErr.message,
+      })
+    }
+
+    // ✅ Prepare transaction
+    console.log(`   🔧 Preparing transaction...`)
+    
+    try {
+      const txBuffer = Buffer.from((depositResult as any).tx || (depositResult as any).transaction, 'base64')
+      const transaction = Transaction.from(txBuffer)
+      
+      const userPubkey = new PublicKey(publicKey)
+      transaction.feePayer = userPubkey
+      
+      const { blockhash } = await connection.getLatestBlockhash()
+      transaction.recentBlockhash = blockhash
+      
+      console.log(`   ✅ Ready for user signature`)
+      
+      const modifiedTxBase64 = transaction.serialize({
+        requireAllSignatures: false,
+        verifySignatures: false,
+      }).toString('base64')
+      
+      console.log(`\n✅ [${requestId}] PREPARED`)
+      
+      return res.status(200).json({
+        success: true,
+        transaction: modifiedTxBase64,
+        amount: parseFloat(amount),
+      })
+      
+    } catch (txErr: any) {
+      console.error(`   ❌ Transaction error: ${txErr.message}`)
+      return res.status(500).json({
+        error: 'Failed to prepare transaction',
+        details: txErr.message,
+      })
+    }
+    
+  } catch (error: any) {
+    console.error(`\n❌ [${requestId}] ERROR:`, error.message)
+    
+    return res.status(500).json({
+      error: 'Internal server error',
+      message: error.message,
+      requestId,
+    })
+  }
+})
+
+/**
+ * ✅ ENDPOINT 2: Submit deposit
+ */
+router.post('/', async (req: Request<{}, {}, any>, res: Response) => {
+  try {
+    const { 
+      linkId, 
+      amount, 
+      lamports, 
+      publicKey, 
+      signedTransaction 
+    } = req.body as DepositRecordRequest
+
+    console.log(`\n🔗 SUBMIT DEPOSIT`)
+
+    if (!linkId || !publicKey || !signedTransaction || amount === undefined || lamports === undefined) {
+      return res.status(400).json({ error: 'Missing required fields' })
+    }
+
+    const link = await prisma.paymentLink.findUnique({
+      where: { id: linkId },
+    })
+
+    if (!link) {
+      return res.status(404).json({ error: 'Link not found' })
+    }
+
+    if (link.depositTx && link.depositTx !== '') {
+      return res.status(400).json({ error: 'Deposit already recorded' })
+    }
+
+    const amountSOL = typeof amount === 'string' ? parseFloat(amount) : amount
+    const rpcUrl = process.env.RPC_URL || process.env.SOLANA_RPC_URL || 
+      'https://mainnet.helius-rpc.com/?api-key=c455719c-354b-4a44-98d4-27f8a18aa79c'
+    
     const connection = new Connection(rpcUrl)
     
     let transactionSignature: string
     
     try {
-      // Decode the signed transaction
       const txBuffer = Buffer.from(signedTransaction, 'base64')
       
-      // Send to blockchain
-      console.log(`   Sending transaction to blockchain...`)
       transactionSignature = await connection.sendRawTransaction(txBuffer, {
         skipPreflight: false,
         preflightCommitment: 'confirmed',
       })
       
-      console.log(`   ✅ Transaction submitted: ${transactionSignature.slice(0, 20)}...`)
-      console.log(`   ✅ USER paid all fees`)
+      console.log(`   ✅ Submitted`)
       
-      // Wait for confirmation
-      console.log(`   Waiting for confirmation...`)
       const confirmation = await connection.confirmTransaction(
         transactionSignature,
         'confirmed'
@@ -298,16 +428,13 @@ router.post('/', async (req: Request<{}, {}, any>, res: Response) => {
       console.log(`   ✅ Confirmed`)
       
     } catch (submitErr: any) {
-      console.error('❌ Transaction submission failed:', submitErr.message)
+      console.error(`   ❌ Submit error: ${submitErr.message}`)
       return res.status(500).json({
-        error: 'Failed to submit transaction to blockchain',
+        error: 'Failed to submit transaction',
         details: submitErr.message,
       })
     }
 
-    // ✅ Record in database
-    console.log(`\n💾 Recording in database...`)
-    
     try {
       await prisma.$transaction([
         prisma.paymentLink.update({
@@ -327,40 +454,28 @@ router.post('/', async (req: Request<{}, {}, any>, res: Response) => {
         }),
       ])
 
-      console.log(`   ✅ Recorded in database`)
+      console.log(`   ✅ Recorded`)
     } catch (dbErr: any) {
-      console.error('❌ Database error:', dbErr.message)
-      // Transaction is on blockchain even if DB fails
+      console.error(`   ❌ Database error: ${dbErr.message}`)
       return res.status(500).json({
         error: 'Transaction submitted but database recording failed',
         tx: transactionSignature,
-        details: dbErr.message,
       })
     }
 
     console.log(`\n✅ DEPOSIT COMPLETE`)
-    console.log(`   Amount: ${amountSOL} SOL`)
-    console.log(`   User wallet paid all fees`)
-    console.log(`   Transaction: ${transactionSignature}`)
 
     return res.status(200).json({
       success: true,
       tx: transactionSignature,
       transactionHash: transactionSignature,
       amount: amountSOL,
-      message: 'Deposit successful. USER paid all fees.',
+      message: 'Deposit successful',
       status: 'confirmed',
-      details: {
-        userPaid: true,
-        userWallet: publicKey,
-        amountSOL,
-        explorerUrl: `https://solscan.io/tx/${transactionSignature}`,
-        description: 'Your wallet signed this transaction and paid all fees. Funds are encrypted in Privacy Cash pool.',
-      },
     })
     
   } catch (error: any) {
-    console.error('❌ Submit deposit failed:', error)
+    console.error(`❌ Submit failed:`, error)
     return res.status(500).json({
       error: error.message || 'Failed to process deposit',
     })
