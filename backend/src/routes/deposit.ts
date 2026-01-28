@@ -1,205 +1,58 @@
 import { Router, Request, Response } from 'express'
-import { Connection, PublicKey } from '@solana/web3.js'
+import { Connection, PublicKey, Transaction } from '@solana/web3.js'
 import prisma from '../lib/prisma.js'
-import { loadKeypairFromEnv } from '../services/keypairManager.js'
-import { initializePrivacyCash } from '../services/privacyCash.js'
 
 const router = Router()
 
 /**
- * ✅ HYBRID USER-PAYS FLOW - Backend generates proof, User signs and pays
+ * ✅ USER-PAYS DEPOSIT FLOW - User wallet pays all fees
  * 
- * ARCHITECTURE:
- * - Endpoint 1: POST /api/deposit/prepare
- *   Backend generates ZK proof + unsigned transaction
+ * NEW APPROACH:
+ * - Frontend calls Privacy Cash SDK directly (not backend)
+ * - User's wallet signs and pays for everything
+ * - Backend only records the transaction
  * 
- * - Endpoint 2: POST /api/deposit
- *   Frontend sends signed transaction for relay
+ * Flow:
+ * 1. Frontend: Initialize Privacy Cash SDK with user's wallet
+ * 2. Frontend: Call SDK.deposit() - generates proof and transaction
+ * 3. Frontend: User signs transaction in Phantom
+ * 4. Frontend: Submit signed transaction to blockchain
+ * 5. Frontend: Send transaction hash to backend
+ * 6. Backend: Record transaction in database
  * 
- * Key Points:
- * - Operator keypair only used for proof generation (SDK requirement)
- * - Operator does NOT sign transactions
- * - User signs transaction (their private key, their fees)
- * - User pays all transaction fees
+ * Result: User pays all fees, operator wallet not needed for deposits
  */
 
-interface PrepareDepositRequest {
+interface DepositRecordRequest {
   linkId: string
-  amount: string
+  transactionHash: string
+  amount: string | number
   publicKey: string
   lamports: number
 }
 
-interface DepositRequest {
-  linkId: string
-  amount: string
-  lamports: number
-  publicKey: string
-  signedTransaction: string
-}
-
 /**
- * ✅ ENDPOINT 1: Prepare deposit (backend generates ZK proof)
- */
-router.post('/prepare', async (req: Request<{}, {}, any>, res: Response) => {
-  try {
-    const { linkId, amount, publicKey, lamports } = req.body as PrepareDepositRequest
-
-    console.log(`\n🔗 DEPOSIT PREPARE ENDPOINT`)
-    console.log(`📋 Preparing deposit:`)
-    console.log(`   Link ID: ${linkId}`)
-    console.log(`   User: ${publicKey}`)
-    console.log(`   Amount: ${amount} SOL (${lamports} lamports)`)
-
-    // ✅ VALIDATE INPUT
-    if (!linkId || typeof linkId !== 'string') {
-      console.error('❌ Missing linkId')
-      return res.status(400).json({ error: 'linkId required' })
-    }
-
-    if (!publicKey || typeof publicKey !== 'string') {
-      console.error('❌ Missing publicKey')
-      return res.status(400).json({ error: 'publicKey required' })
-    }
-
-    if (typeof amount !== 'string' && typeof amount !== 'number') {
-      console.error('❌ Missing amount')
-      return res.status(400).json({ error: 'amount required' })
-    }
-
-    if (typeof lamports !== 'number') {
-      console.error('❌ Missing lamports')
-      return res.status(400).json({ error: 'lamports required' })
-    }
-
-    // ✅ Validate Solana address format
-    try {
-      new PublicKey(publicKey)
-    } catch {
-      console.error('❌ Invalid publicKey format')
-      return res.status(400).json({ error: 'Invalid publicKey format' })
-    }
-
-    // ✅ FIND LINK
-    const link = await prisma.paymentLink.findUnique({
-      where: { id: linkId },
-    })
-
-    if (!link) {
-      console.error(`❌ Link not found: ${linkId}`)
-      return res.status(404).json({ error: 'Link not found' })
-    }
-
-    if (link.depositTx && link.depositTx !== '') {
-      console.error(`❌ Deposit already recorded: ${linkId}`)
-      return res.status(400).json({ error: 'Deposit already recorded for this link' })
-    }
-
-    const amountSOL = typeof amount === 'string' ? parseFloat(amount) : amount
-
-    // ✅ GENERATE ZK PROOF + TRANSACTION WITH SDK
-    console.log(`\n🔐 Generating ZK proof with Privacy Cash SDK...`)
-    
-    let operatorKeypair: any
-    try {
-      console.log(`   - Loading operator keypair from OPERATOR_SECRET_KEY env...`)
-      operatorKeypair = loadKeypairFromEnv()
-      console.log(`   ✅ Operator keypair loaded successfully`)
-      console.log(`   📍 Operator wallet: ${operatorKeypair.publicKey.toString()}`)
-    } catch (keypairErr: any) {
-      console.error(`\n❌ KEYPAIR LOADING FAILED`)
-      console.error(`   Error: ${keypairErr.message}`)
-      return res.status(400).json({
-        error: 'Invalid OPERATOR_SECRET_KEY configuration',
-        details: keypairErr.message,
-        hint: 'Check that OPERATOR_SECRET_KEY is properly set on Railway.',
-      })
-    }
-
-    try {
-      const rpcUrl = process.env.RPC_URL || 'https://mainnet.helius-rpc.com/?api-key=c455719c-354b-4a44-98d4-27f8a18aa79c'
-
-      // Initialize SDK with operator keypair (needed for SDK)
-      console.log(`   - Initializing Privacy Cash SDK with operator keypair`)
-      const privacyCashClient = initializePrivacyCash(operatorKeypair, rpcUrl, true)
-      console.log(`   ✅ SDK initialized`)
-
-      console.log(`   - Generating ZK proof for user: ${publicKey}`)
-      console.log(`   - Amount: ${amountSOL} SOL`)
-
-      // SDK generates transaction
-      console.log(`   - Calling SDK.deposit()...`)
-      const depositResult = await privacyCashClient.deposit({
-        lamports,
-      })
-
-      const transactionBase64 = depositResult.tx
-      if (!transactionBase64) {
-        throw new Error('SDK did not return transaction')
-      }
-
-      console.log(`   ✅ ZK proof generated`)
-      console.log(`   ✅ Transaction created (unsigned, waiting for user signature)`)
-
-      return res.status(200).json({
-        success: true,
-        transaction: transactionBase64,
-        amount: amountSOL,
-        message: 'Transaction prepared. Please sign with your wallet.',
-      })
-    } catch (sdkErr: any) {
-      console.error('❌ SDK Error:', sdkErr.message)
-      console.error('❌ Full error:', sdkErr)
-      
-      // Check if it's an insufficient balance error
-      const errorMsg = sdkErr.message || String(sdkErr)
-      if (errorMsg.includes('insufficient lamports') || errorMsg.includes('insufficient balance')) {
-        return res.status(500).json({
-          error: 'Operator wallet has insufficient SOL to process deposit',
-          details: errorMsg,
-          action: 'The operator wallet needs SOL to generate the Privacy Cash proof. Please fund the operator wallet.',
-          operatorWallet: operatorKeypair.publicKey.toString(),
-          requiredAmount: `At least ${lamports / 1e9} SOL`,
-        })
-      }
-      
-      return res.status(500).json({
-        error: 'Failed to generate Privacy Cash transaction',
-        details: errorMsg,
-      })
-    }
-  } catch (error: any) {
-    console.error('❌ Prepare deposit error:', error.message)
-    console.error('❌ Full error:', error)
-    return res.status(500).json({
-      error: error instanceof Error ? error.message : 'Failed to prepare deposit',
-      details: String(error),
-    })
-  }
-})
-
-/**
- * ✅ ENDPOINT 2: Finalize deposit (relay user-signed transaction)
+ * ✅ ENDPOINT: Record completed deposit
+ * 
+ * This endpoint is called AFTER user has already submitted the transaction
+ * Backend just records it in database
  */
 router.post('/', async (req: Request<{}, {}, any>, res: Response) => {
-  const startTime = Date.now()
-  
   try {
     const { 
       linkId, 
+      transactionHash,
       amount, 
       lamports, 
-      publicKey, 
-      signedTransaction 
-    } = req.body as DepositRequest
+      publicKey
+    } = req.body as DepositRecordRequest
 
-    console.log(`\n🔗 DEPOSIT FINALIZE ENDPOINT`)
-    console.log(`⏰ Request at: ${new Date().toISOString()}`)
-    console.log(`📋 Deposit Details:`)
+    console.log(`\n🔗 DEPOSIT RECORD ENDPOINT`)
+    console.log(`📋 Recording deposit:`)
     console.log(`   Link ID: ${linkId}`)
     console.log(`   User: ${publicKey}`)
     console.log(`   Amount: ${amount} SOL (${lamports} lamports)`)
-    console.log(`   Signed TX: ${signedTransaction ? signedTransaction.substring(0, 30) + '...' : 'N/A'}`)
+    console.log(`   Transaction: ${transactionHash}`)
 
     // ✅ VALIDATE INPUT
     if (!linkId || typeof linkId !== 'string') {
@@ -212,11 +65,11 @@ router.post('/', async (req: Request<{}, {}, any>, res: Response) => {
       return res.status(400).json({ error: 'publicKey required' })
     }
 
-    if (!signedTransaction || typeof signedTransaction !== 'string') {
-      console.error('❌ Missing signedTransaction')
+    if (!transactionHash || typeof transactionHash !== 'string') {
+      console.error('❌ Missing transactionHash')
       return res.status(400).json({ 
-        error: 'signedTransaction required',
-        details: 'Frontend must sign the transaction with user wallet'
+        error: 'transactionHash required',
+        details: 'Frontend must provide the transaction signature'
       })
     }
 
@@ -260,15 +113,25 @@ router.post('/', async (req: Request<{}, {}, any>, res: Response) => {
 
     const amountSOL = typeof amount === 'string' ? parseFloat(amount) : amount
 
-    console.log(`\n📤 Relaying signed transaction to blockchain...`)
-    console.log(`   User signed with: ${publicKey}`)
-    console.log(`   Transaction: ${signedTransaction.substring(0, 50)}...`)
-    
-    // Transaction signature is the base64 signed transaction sent by user
-    const transactionSignature = signedTransaction
-    
-    console.log(`✅ Transaction signature: ${transactionSignature.substring(0, 30)}...`)
-    console.log(`✅ Transaction relayed (user-signed, user pays fees)`)
+    // ✅ OPTIONAL: Verify transaction on blockchain
+    console.log(`\n🔍 Verifying transaction on blockchain...`)
+    try {
+      const rpcUrl = process.env.RPC_URL || 'https://mainnet.helius-rpc.com/?api-key=c455719c-354b-4a44-98d4-27f8a18aa79c'
+      const connection = new Connection(rpcUrl)
+      
+      const txInfo = await connection.getTransaction(transactionHash, {
+        maxSupportedTransactionVersion: 0
+      })
+      
+      if (txInfo) {
+        console.log(`   ✅ Transaction verified on blockchain`)
+        console.log(`   Block: ${txInfo.slot}`)
+      } else {
+        console.log(`   ⚠️  Transaction not found yet (might still be processing)`)
+      }
+    } catch (verifyErr) {
+      console.log(`   ⚠️  Could not verify transaction (will still record)`)
+    }
 
     // ✅ RECORD DEPOSIT IN DATABASE
     console.log(`\n💾 Recording transaction in database...`)
@@ -276,14 +139,14 @@ router.post('/', async (req: Request<{}, {}, any>, res: Response) => {
       prisma.paymentLink.update({
         where: { id: linkId },
         data: { 
-          depositTx: transactionSignature,
+          depositTx: transactionHash,
         },
       }),
       prisma.transaction.create({
         data: {
           type: 'deposit',
           linkId,
-          transactionHash: transactionSignature,
+          transactionHash: transactionHash,
           amount: amountSOL,
           assetType: link.assetType,
           status: 'confirmed',
@@ -294,36 +157,31 @@ router.post('/', async (req: Request<{}, {}, any>, res: Response) => {
 
     console.log(`✅ Transaction recorded in database`)
 
-    const duration = Date.now() - startTime
-    console.log(`\n✅ DEPOSIT COMPLETE`)
-    console.log(`⏱️  Duration: ${duration}ms`)
+    console.log(`\n✅ DEPOSIT RECORDED`)
     console.log(`   Amount: ${amountSOL} SOL`)
     console.log(`   User wallet: ${publicKey}`)
-    console.log(`   User paid all fees`)
+    console.log(`   Transaction: ${transactionHash}`)
 
     return res.status(200).json({
       success: true,
-      tx: transactionSignature,
-      transactionHash: transactionSignature,
+      tx: transactionHash,
+      transactionHash: transactionHash,
       amount: amountSOL,
-      message: 'Deposit completed. User-signed transaction submitted to Privacy Cash pool.',
+      message: 'Deposit recorded. User paid all fees.',
       status: 'confirmed',
       details: {
-        userSigned: true,
+        userPaid: true,
         userWallet: publicKey,
         amountSOL: amountSOL,
-        userPaid: true,
-        description: 'Your wallet signed and paid for this deposit. It is now encrypted in the Privacy Cash pool.'
+        description: 'Your wallet signed and paid for this deposit. Funds are encrypted in Privacy Cash pool.'
       },
     })
   } catch (error: any) {
-    console.error('\n❌ DEPOSIT FAILED:', error.message)
+    console.error('\n❌ RECORD DEPOSIT FAILED:', error.message)
     console.error('❌ Full error:', error)
-    const duration = Date.now() - startTime
-    console.log(`⏱️  Duration: ${duration}ms`)
     
     return res.status(500).json({
-      error: error instanceof Error ? error.message : 'Failed to finalize deposit',
+      error: error instanceof Error ? error.message : 'Failed to record deposit',
       details: String(error),
     })
   }
