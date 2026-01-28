@@ -1,5 +1,6 @@
 import { EncryptionService } from 'privacycash/utils'
-import { PublicKey } from '@solana/web3.js'
+import { PublicKey, Keypair } from '@solana/web3.js'
+import { PrivacyCash } from 'privacycash'
 
 /**
  * Wallet interface for Privacy Cash signing
@@ -16,8 +17,10 @@ export interface SigningWallet {
 
 export class PrivacyCashService {
   private static encryptionService: EncryptionService | null = null
-  private static privacyCashClient: any = null
+  private static privacyCashClient: PrivacyCash | null = null
+  private static privacyCashKeypair: Keypair | null = null
   private static isSignatureDerived: boolean = false
+  private static currentWallet: SigningWallet | null = null
 
   /**
    * Load circuit files (WASM + ZKEY) from multiple sources
@@ -63,12 +66,17 @@ export class PrivacyCashService {
   }
 
   /**
-   * Initialize Privacy Cash SDK client
+   * Initialize Privacy Cash SDK client with wallet
    * This creates the main client for deposit/withdraw operations
+   * @param wallet - Wallet adapter with signMessage capability
    * @param rpcUrl - Optional custom RPC URL (uses env or default if not provided)
    */
-  static async initializeClient(rpcUrl?: string): Promise<any> {
+  static async initializeClient(wallet: SigningWallet, rpcUrl?: string): Promise<PrivacyCash> {
     try {
+      if (!wallet) {
+        throw new Error('Wallet is required to initialize Privacy Cash SDK')
+      }
+
       // Use provided RPC or get from environment or use default
       const finalRpcUrl = rpcUrl || 
         process.env.VITE_RPC_URL || 
@@ -76,35 +84,24 @@ export class PrivacyCashService {
       
       console.log('🚀 Initializing Privacy Cash SDK client...')
       console.log(`   RPC URL: ${finalRpcUrl}`)
+      console.log(`   Wallet: ${wallet.publicKey.toString()}`)
       
       // Load circuit files for ZK proof generation
-      const { wasmPath, zkeyPath } = await this.loadCircuitFiles()
+      await this.loadCircuitFiles()
       
-      // Initialize Privacy Cash client with circuit files
-      // The actual client will be created when SDK methods are called
-      this.privacyCashClient = {
-        rpcUrl: finalRpcUrl,
-        isReady: true,
-        circuits: {
-          wasmPath,
-          zkeyPath
-        },
-        deposit: async (params: { lamports: number }) => {
-          console.log('📝 Calling Privacy Cash SDK deposit()...')
-          console.log(`   Amount: ${params.lamports} lamports`)
-          console.log(`   Using circuits from: ${wasmPath}, ${zkeyPath}`)
-          
-          // This will be called when actual SDK is fully integrated
-          // SDK will use circuit files for ZK proof generation
-          throw new Error(
-            'Privacy Cash SDK client deposit() not fully initialized. ' +
-            'Circuit files loaded, but SDK integration pending. ' +
-            'Check Privacy Cash SDK documentation.'
-          )
-        }
-      }
+      // Initialize the real Privacy Cash SDK client
+      // The SDK expects a string address or Keypair as owner
+      const owner = wallet.publicKey.toString()
       
-      console.log('✅ Privacy Cash SDK client initialized with circuit files')
+      this.privacyCashClient = new PrivacyCash({
+        RPC_url: finalRpcUrl,
+        owner: owner,
+        enableDebug: true
+      })
+      
+      this.currentWallet = wallet
+      
+      console.log('✅ Privacy Cash SDK client initialized successfully')
       return this.privacyCashClient
     } catch (error) {
       console.error('❌ Failed to initialize Privacy Cash SDK client:', error)
@@ -114,12 +111,11 @@ export class PrivacyCashService {
 
   /**
    * Get the Privacy Cash SDK client
-   * Initialize it first with initializeClient()
+   * Must initialize it first with initializeClient()
    */
-  static getClient(): any {
+  static getClient(): PrivacyCash {
     if (!this.privacyCashClient) {
-      // Try to initialize with default RPC
-      return this.initializeClient()
+      throw new Error('Privacy Cash SDK client not initialized. Call initializeClient(wallet) first.')
     }
     return this.privacyCashClient
   }

@@ -38,7 +38,7 @@ export async function executeRealDeposit(
   console.log(`   Amount: ${amount} SOL (${lamports} lamports)`)
 
   try {
-    // ✅ STEP 1: Initialize Privacy Cash SDK with circuit files
+    // ✅ STEP 1: Initialize Privacy Cash SDK with circuit files and wallet
     console.log('📋 Step 1: Initializing Privacy Cash SDK client...')
     console.log(`   Loading circuit files from available sources`)
     
@@ -48,11 +48,12 @@ export async function executeRealDeposit(
       console.log(`   Using custom RPC: ${rpcUrl.substring(0, 50)}...`)
     }
     
-    // Initialize client (async to load circuit files)
+    // Initialize client with wallet (async to load circuit files)
     let privacyCashClient: any
     try {
-      privacyCashClient = await PrivacyCashService.initializeClient(rpcUrl)
-      console.log(`   ✅ SDK client ready with ZK circuits`)
+      // Pass wallet to initializeClient so SDK can sign transactions
+      privacyCashClient = await PrivacyCashService.initializeClient(wallet, rpcUrl)
+      console.log(`   ✅ SDK client ready with ZK circuits and wallet`)
     } catch (initError: any) {
       throw new Error('Failed to initialize Privacy Cash SDK: ' + initError.message)
     }
