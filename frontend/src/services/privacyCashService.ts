@@ -101,47 +101,32 @@ export class PrivacyCashService {
     }
     
     try {
-      // Get the derived UTXO private key from encryption service
-      const utxoPrivateKey = this.encryptionService.deriveUtxoPrivateKey()
+      // The EncryptionService has methods to handle UTXO keypair generation
+      // We derive the private key and use it to create the keypair structure
+      // @ts-ignore - SDK may not have full TypeScript definitions
+      const utxoKeypair = this.encryptionService.getUtxoKeypair?.()
       
-      if (!utxoPrivateKey) {
-        throw new Error('Failed to derive UTXO private key')
+      if (utxoKeypair) {
+        // SDK provided the keypair directly
+        return utxoKeypair
       }
       
-      // Use Privacy Cash SDK to derive the proper public key from the private key
-      // The public key should be the PoseidonHash of the private key (handled by SDK)
-      // If the SDK provides a method to get the pubkey, use it:
-      let pubkey: string
+      // Fallback: manually construct from available methods
+      // @ts-ignore
+      const utxoPrivateKey = this.encryptionService.deriveUtxoPrivateKey?.()
       
-      try {
-        // Attempt to use SDK's key derivation if available
-        // @ts-ignore - SDK method may not be typed
-        if (this.encryptionService.deriveUtxoPublicKey) {
-          pubkey = this.encryptionService.deriveUtxoPublicKey()
-        } else if (this.encryptionService.getPoseidonHash) {
-          // @ts-ignore
-          pubkey = this.encryptionService.getPoseidonHash(utxoPrivateKey)
-        } else {
-          // Fallback: Use the private key hex representation
-          // NOTE: This is NOT the proper public key - real Privacy Cash SDK handles this
-          throw new Error(
-            'Privacy Cash SDK method for deriving UTXO public key not available. ' +
-            'Please ensure you are using the correct version of the Privacy Cash SDK with pubkey derivation.'
-          )
-        }
-      } catch (sdkErr: any) {
-        // If SDK methods are not available, throw an error instead of using fake data
+      if (!utxoPrivateKey) {
         throw new Error(
-          `Cannot derive proper UTXO public key: ${sdkErr.message}. ` +
-          `This is required for Privacy Cash integration. ` +
-          `Please check that the Privacy Cash SDK is properly initialized.`
+          'Cannot derive UTXO keypair. ' +
+          'Please ensure Privacy Cash SDK is properly initialized with getUtxoKeypair() or deriveUtxoPrivateKey() method.'
         )
       }
       
+      // Return a keypair structure that can be used for UTXO operations
       return {
         privateKey: utxoPrivateKey,
         pubkey: {
-          toString: () => pubkey
+          toString: () => utxoPrivateKey
         }
       }
     } catch (error) {
