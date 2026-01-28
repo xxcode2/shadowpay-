@@ -111,11 +111,6 @@ router.post('/', async (req: Request<{}, {}, any>, res: Response) => {
         where: { id: linkId },
         data: { 
           depositTx: privacyCashTx,
-          // Store UTXO commitment in memo field (encrypted reference)
-          memo: JSON.stringify({
-            privacy_commitment: utxo.pubkey,
-            encrypted: true
-          })
         },
       }),
       prisma.transaction.create({
