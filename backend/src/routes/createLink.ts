@@ -27,7 +27,7 @@ const router = Router()
  */
 router.post('/', async (req: Request<{}, {}, any>, res: Response) => {
   try {
-    const { amount, assetType, paymentTxHash } = req.body
+    const { amount, assetType } = req.body
 
     // ✅ Validation
     if (!amount || amount <= 0) {
@@ -39,23 +39,15 @@ router.post('/', async (req: Request<{}, {}, any>, res: Response) => {
       return res.status(400).json({ error: `Asset must be one of: ${validAssets.join(', ')}` })
     }
 
-    // ✅ Payment tx hash is now REQUIRED
-    if (!paymentTxHash || typeof paymentTxHash !== 'string') {
-      return res.status(400).json({ 
-        error: 'Payment required',
-        details: 'paymentTxHash is required. User must send SOL payment before creating link.'
-      })
-    }
-
     // ✅ Generate secure linkId
     const linkId = crypto.randomBytes(16).toString('hex')
-    console.log('DEBUG: About to create link:', { linkId, amount, assetType, paymentTxHash })
+    console.log('📝 Creating payment link:', { linkId, amount, assetType })
 
     // ✅ Calculate lamports (source of truth for on-chain amount)
     const lamports = BigInt(Math.round(amount * LAMPORTS_PER_SOL))
 
-    // ✅ Create link record with payment tx hash
-    // depositTx is set to the payment tx hash (user's actual SOL transfer)
+    // ✅ Create link record
+    // depositTx will be set by the deposit endpoint when user deposits to Privacy Cash pool
     const link = await prisma.paymentLink.create({
       data: {
         id: linkId,
@@ -63,29 +55,26 @@ router.post('/', async (req: Request<{}, {}, any>, res: Response) => {
         lamports,
         assetType,
         claimed: false,
-        depositTx: paymentTxHash, // Store the payment transaction hash
-        // claimedBy and withdrawTx will be set later
+        depositTx: '', // Will be updated when deposit to Privacy Cash happens
       } as any,
     })
 
-    console.log(`✅ Created payment link ${linkId} for ${amount} ${assetType}`)
-    console.log(`   Payment TX: ${paymentTxHash}`)
-    console.log('DEBUG: Link created:', link)
+    console.log(`✅ Payment link created: ${linkId} for ${amount} ${assetType}`)
 
     return res.status(201).json({
       success: true,
       linkId,
       amount,
       assetType,
-      paymentTx: paymentTxHash,
-      shareUrl: `https://shadowpayy.vercel.app?link=${linkId}`,
+      message: 'Link created. User should now deposit to Privacy Cash pool.',
+      shareUrl: `https://shadowpay.app/claim/${linkId}`,
     })
   } catch (err) {
     const error = err instanceof Error ? err.message : String(err)
     console.error('❌ Create link error:', error)
     return res.status(500).json({ 
       error: 'Failed to create link',
-      details: error  // Always include details for debugging
+      details: error
     })
   }
 })

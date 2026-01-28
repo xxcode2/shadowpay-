@@ -1,7 +1,7 @@
-# 💳 Real SOL Payment Integration
+# � Privacy Cash SDK Deposit Flow
 
 ## Problem Yang Diperbaiki
-User sebelumnya hanya menandatangani pesan (2x sign) tanpa benar-benar membayar SOL. Akibatnya link dibuat tapi penerima tidak bisa claim karena tidak ada balance di Privacy Cash pool.
+User sebelumnya hanya menandatangani pesan (2x sign) tanpa benar-benar deposit SOL. Akibatnya link dibuat tapi penerima tidak bisa claim karena tidak ada balance di Privacy Cash pool.
 
 **Sebelumnya:**
 ```
@@ -9,140 +9,224 @@ User: Bikin link 0.01 SOL → Sign 2x → Link dibuat ✅
 Penerima: Claim → "No enough balance to withdraw" ❌
 ```
 
-## Solusi: Real SOL Payment Flow
+## Solusi: Privacy Cash SDK Deposit Flow
 
-**Sekarang:**
+**Sekarang (BENAR):**
 ```
 User: Bikin link 0.01 SOL 
   ↓
-1️⃣ Frontend minta address wallet operator dari backend (/api/config)
+1️⃣ Frontend buat link ID
   ↓
-2️⃣ Phantom popup: "Kirim 0.01 SOL ke operator?" 
+2️⃣ Phantom popup: "Sign message untuk privacy?"
   ↓
-3️⃣ User approve → SOL transfer terjadi di blockchain ✅
+3️⃣ User sign → Encryption key derived ✅
   ↓
-4️⃣ Link dibuat dengan paymentTxHash disimpan
+4️⃣ UTXO dibuat (encrypted dengan user key)
+  ↓
+5️⃣ Phantom popup: "Sign UTXO untuk deposit?"
+  ↓
+6️⃣ User sign → Encrypted UTXO signed ✅
+  ↓
+7️⃣ Frontend kirim encrypted UTXO ke backend
+  ↓
+8️⃣ Backend relay ke Privacy Cash pool ✅
+  ↓
+Link created dengan Privacy Cash deposit TX
   ↓
 Penerima: Claim → Withdraw dari Privacy Cash pool ✅
 ```
 
+## Perbedaan: Manual Transfer vs Privacy Cash SDK
+
+| Aspek | Manual Transfer (❌ SALAH) | Privacy Cash SDK (✅ BENAR) |
+|-------|----------|-----------|
+| **User signature** | 1x sign (transfer) | 2x sign (encryption + deposit) |
+| **Privacy** | Public blockchain | Encrypted shielded pool |
+| **Recipient claim** | Dapat langsung | Harus withdraw dari pool |
+| **Only you can see** | Semua orang bisa lihat | Only encrypted UTXO |
+| **Fee structure** | Hanya network fee | Pool fees + withdrawal fees |
+
 ## Files Yang Diubah
 
-### 1. `frontend/src/utils/solTransfer.ts` (NEW)
-Utility untuk handle SOL transfer via Phantom wallet:
+### 1. `frontend/src/utils/solTransfer.ts` (DIUBAH)
+Bukan untuk manual transfer, tapi untuk **Privacy Cash SDK deposit**:
+
 ```typescript
-export async function sendSolPayment(
+export async function depositViaPriVacyCash(
   wallet: any,
-  recipientAddress: string,  // Backend operator wallet
-  amountSOL: number          // Jumlah yang user mau bayar
-): Promise<{ txHash: string; amount: number }>
+  amount: string,
+  linkId: string,
+  publicKey: string
+): Promise<{ depositTxHash: string; amount: string }>
 ```
 
-**Cara kerja:**
-- Validasi recipient address & amount
-- Create transaction dengan SystemProgram.transfer
-- Request user signature via `wallet.signTransaction()`
-- Send signed transaction ke blockchain
-- Wait untuk confirmation
-- Return transaction hash
+**Flow:**
+1. Initialize Privacy Cash SDK
+   - User sign message untuk derive encryption key
+   - Encryption key = kunci untuk encrypt UTXO
+   
+2. Create encrypted UTXO
+   - Amount, blinding factor, pubkey
+   - Fully encrypted dengan user's key
+   
+3. Sign UTXO data
+   - User sign pesan UTXO
+   - Proof bahwa user authorized deposit
+   
+4. Send to backend
+   - Backend relay encrypted UTXO ke Privacy Cash API
+   - Privacy Cash pool menerima deposit
+   
+5. Get deposit TX hash
+   - Return Privacy Cash transaction hash
+   - Link dibuat dengan deposit TX
 
 ### 2. `index.html` - `handleCreateLink()` Function
-Updated untuk request payment sebelum membuat link:
+Flow sekarang:
 
-**Langkah-langkah:**
-1. User input amount & memo
-2. Fetch `/api/config` untuk dapat operator wallet address
-3. Call `sendSolPayment()` → Phantom popup muncul
-4. User approve payment
-5. Jika payment success → call `/api/create-link` dengan `paymentTxHash`
-6. Link dibuat & ditampilkan
+```javascript
+// 1. Create link metadata
+const linkData = await fetch('/api/create-link', { amount, memo })
+const linkId = linkData.id
+
+// 2. Deposit to Privacy Cash pool via SDK
+const deposit = await depositViaPriVacyCash(
+  wallet,
+  amount,
+  linkId,
+  walletAddress
+)
+// Returns: depositTxHash (Privacy Cash pool TX)
+
+// 3. Link ready untuk di-share
+const linkUrl = `https://shadowpay.app/claim/${linkId}`
+```
 
 ### 3. `backend/src/routes/createLink.ts`
-Updated untuk require `paymentTxHash`:
+Simplified (tidak perlu paymentTxHash lagi):
 
-**Validasi:**
-- Amount harus > 0 ✅
-- Asset type valid (SOL/USDC/USDT) ✅
-- **paymentTxHash REQUIRED** (baru) ✅
-
-**Penyimpanan:**
-- `depositTx` field sekarang menyimpan payment transaction hash
-- Link tidak bisa dibuat tanpa proof of payment
+- Buat link metadata dengan linkId
+- `depositTx` field akan diset oleh endpoint `/api/deposit` later
+- Privacy Cash deposit bukan bagian dari create-link
 
 ### 4. `backend/src/routes/config.ts`
-Added `operatorAddress` ke public config:
+Removed operatorAddress (tidak diperlukan):
 
-```json
-{
-  "operatorAddress": "9CdPAz7MaQfryVvthB9dHX4ttcFtAAKeckMD5J7S3crX",
-  "minAmount": 0.01,
-  "network": "mainnet-beta",
-  "fees": {...}
-}
-```
-
-**Env variable diperlukan:**
-```bash
-OPERATOR_ADDRESS=9CdPAz7MaQfryVvthB9dHX4ttcFtAAKeckMD5J7S3crX
-```
+- Dulu: user transfer SOL ke operator → butuh operatorAddress
+- Sekarang: user deposit ke Privacy Cash via SDK → tidak perlu operatorAddress
 
 ## Keuntungan
 
-✅ **Real Payment** - User benar-benar bayar SOL, bukan hanya sign
-✅ **Proof on Blockchain** - Setiap link punya transaction hash di blockchain
-✅ **Recipients Can Claim** - Balance ada di Privacy Cash pool
-✅ **Operator Revenue** - Backend receive actual SOL payments
-✅ **No Double-Spend** - Atomic database update prevents double claims
-✅ **User Friendly** - Clear Phantom popup approval flow
+✅ **True Privacy** - SOL encrypted di Privacy Cash pool, tidak public
+✅ **User Control** - Only user (with private key) bisa claim
+✅ **Operator Agnostic** - Tidak perlu trust operator wallet address
+✅ **Shielded Pool** - Blinding factors hide transaction amount
+✅ **Cryptographic Proof** - Signature proves user authorized deposit
+✅ **Compatible** - Penerima claim via SDK withdraw juga
+
+## User Experience
+
+```
+1️⃣ User input amount: "0.01 SOL"
+2️⃣ Click "Create Link"
+3️⃣ Phantom popup: "Sign message to enable privacy" → Approve
+4️⃣ Phantom popup: "Sign UTXO deposit" → Approve  
+5️⃣ Link created ✅
+6️⃣ Share link: "https://shadowpay.app/claim/..."
+7️⃣ Recipient click link
+8️⃣ Recipient claim → Phantom popup: "Withdraw 0.01 SOL" → Approve
+9️⃣ Recipient receive SOL ✅
+```
+
+## Technical Requirements
+
+### Frontend
+- ✅ Privacy Cash SDK (privacycash package)
+- ✅ Phantom wallet dengan signMessage support
+- ✅ BN.js untuk big number handling
+
+### Backend
+- ✅ Privacy Cash API endpoint (untuk relay)
+- ✅ Database to store link + deposit TX
+- ✅ /api/deposit endpoint untuk receive encrypted UTXO
+
+### Environment
+```bash
+# Backend
+SOLANA_NETWORK=mainnet-beta  # or devnet untuk testing
+OPERATOR_KEYPAIR=[...secret key...]  # untuk relay/withdraw
+
+# Frontend
+VITE_BACKEND_URL=https://backend.example.com
+```
 
 ## Testing
 
-### Local Testing Setup
+### Local Setup
 ```bash
-# Set environment variable
-export OPERATOR_ADDRESS="YOUR_SOLANA_WALLET_ADDRESS"
-
-# Run backend
+# 1. Start backend
 cd backend && npm run dev
 
-# Run frontend
+# 2. Start frontend
 cd frontend && npm run dev
+
+# 3. Connect Phantom wallet (devnet)
+- Settings → Network → Devnet
+- Get test SOL: https://faucet.solana.com
+
+# 4. Create link
+- Enter amount: 0.01
+- Click "Create Link"
+- Approve 2 signatures di Phantom
+- Link dibuat ✅
 ```
 
-### Test Flow
-1. Open http://localhost:5173
-2. Click "Connect Wallet" → Connect Phantom (devnet)
-3. Enter amount: `0.01`
-4. Click "Create Link"
-5. Phantom popup appears → "Kirim 0.01 SOL ke OPERATOR_ADDRESS?"
-6. Approve → Transaction confirmed
-7. Link appears → Share to recipient
-8. Recipient claim → Balance transferred from Privacy Cash pool ✅
+### Monitor Deposits
+```bash
+# Check backend logs
+grep "Privacy Cash" backend.log
 
-### Phantom DevNet Setup
-1. Install Phantom: https://phantom.app
-2. Create/import wallet
-3. Switch to Devnet: Settings → Network → Devnet
-4. Get test SOL: https://faucet.solana.com
+# Check database
+SELECT id, amount, depositTx FROM payment_links WHERE id='...';
 
-## Error Handling
-
-User-friendly error messages:
-- "You cancelled the payment request" → User reject di Phantom
-- "Insufficient SOL balance" → User tidak punya cukup SOL
-- "Backend not properly configured" → OPERATOR_ADDRESS tidak set
+# Verify Privacy Cash pool
+# https://privacycash.mintlify.app
+```
 
 ## Security Notes
 
-⚠️ **IMPORTANT:**
-- Set `OPERATOR_ADDRESS` env var di backend (wajib!)
-- Private key operator harus aman di backend
-- Frontend hanya menggunakan public address
-- Payment validation via blockchain confirmation
+🔒 **Private Key Safety**
+- User private key NEVER sent to backend
+- Only signature sent untuk prove authorization
+- Backend relay signature & encrypted UTXO
 
-## Next Steps
+🔒 **UTXO Encryption**
+- Encryption key derived dari user signature
+- Only user (dengan matching private key) bisa decrypt
+- Backend hanya lihat encrypted blob
 
-1. Deploy backend dengan `OPERATOR_ADDRESS` env var set
-2. Test dengan Phantom wallet devnet
-3. Monitor transaction hashes di explorer
-4. Implement refund mechanism jika diperlukan
+🔒 **Operator Trust**
+- Operator relay encrypted UTXO tanpa buka isi
+- Operator tidak perlu trust user
+- Cryptography guarantee fairness
+
+## Troubleshooting
+
+### "User rejected the deposit"
+- User clicked "Reject" di Phantom popup
+- Nothing wrong, user can try again
+
+### "Insufficient SOL balance"
+- User tidak punya cukup SOL untuk network fees
+- Solusi: Add more SOL di Phantom
+
+### "Privacy Cash deposit failed"
+- Backend OPERATOR_KEYPAIR not configured
+- Atau Privacy Cash API endpoint not available
+- Check backend logs
+
+### "Link created but recipient can't claim"
+- Deposit TX tidak confirm di Privacy Cash yet
+- Wait beberapa detik dan retry
+- Check Privacy Cash pool status
+

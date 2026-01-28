@@ -503,43 +503,10 @@
       try {
         const amountSOL = parseFloat(amount);
         
-        // ✅ STEP 1: Get recipient (backend) wallet address for payment
-        showLoadingModal('🔍 Getting backend wallet address...<br><small class="text-gray-500">Preparing payment</small>');
+        // ✅ STEP 1: Create the link metadata first
+        showLoadingModal('📝 Creating payment link...<br><small class="text-gray-500">Generating link ID</small>');
         
         const BACKEND_URL = 'https://shadowpay-backend-production.up.railway.app' || 'http://localhost:3000';
-        
-        const configResponse = await fetch(`${BACKEND_URL}/api/config`);
-        if (!configResponse.ok) {
-          throw new Error('Failed to get backend wallet address');
-        }
-        const configData = await configResponse.json();
-        const backendWallet = configData.operatorAddress || configData.walletAddress;
-        
-        if (!backendWallet) {
-          throw new Error('Backend wallet address not configured');
-        }
-
-        // ✅ STEP 2: Request real SOL payment from user via Phantom
-        showLoadingModal(`💳 Requesting payment approval from Phantom...<br><small class="text-gray-500">You need to send ${amountSOL} SOL to create this link</small>`);
-        
-        console.log(`💳 Requesting SOL payment from user...`);
-        console.log(`   Amount: ${amountSOL} SOL`);
-        console.log(`   To: ${backendWallet}`);
-        
-        // Dynamically import the payment function
-        const solTransfer = await import('./utils/solTransfer.ts');
-        
-        const paymentResult = await solTransfer.sendSolPayment(
-          walletState.wallet,
-          backendWallet,
-          amountSOL
-        );
-        
-        console.log(`✅ Payment successful!`);
-        console.log(`   Transaction: ${paymentResult.txHash}`);
-
-        // ✅ STEP 3: Create the link with payment tx hash
-        showLoadingModal('📝 Creating payment link...<br><small class="text-gray-500">Recording payment on blockchain</small>');
         
         const linkResponse = await fetch(`${BACKEND_URL}/api/create-link`, {
           method: 'POST',
@@ -547,8 +514,7 @@
           body: JSON.stringify({
             amount: amountSOL,
             memo: memo || '',
-            assetType: 'SOL',
-            paymentTxHash: paymentResult.txHash
+            assetType: 'SOL'
           })
         });
 
@@ -560,25 +526,26 @@
         const linkData = await linkResponse.json();
         const linkId = linkData.id;
 
-        // ✅ STEP 4: Deposit to Privacy Cash (optional, if Privacy Cash is configured)
-        showLoadingModal('🔐 Finalizing Privacy Cash pool deposit...<br><small class="text-gray-500">Encrypting with your key</small>');
-
-        try {
-          const depositFlow = window.depositFlow || {};
-          
-          if (depositFlow.executeRealDeposit) {
-            await depositFlow.executeRealDeposit(
-              {
-                linkId: linkId,
-                amount: amount,
-                publicKey: walletState.address
-              },
-              walletState.wallet
-            );
-          }
-        } catch (privacyErr) {
-          console.warn('Privacy Cash deposit optional - continuing:', privacyErr);
-        }
+        // ✅ STEP 2: Deposit to Privacy Cash pool via SDK (not manual transfer!)
+        showLoadingModal(`🔐 Depositing ${amountSOL} SOL to Privacy Cash pool...<br><small class="text-gray-500">Sign messages to enable privacy</small>`);
+        
+        console.log(`🚀 Depositing to Privacy Cash pool...`);
+        console.log(`   Link: ${linkId}`);
+        console.log(`   Amount: ${amountSOL} SOL`);
+        
+        // Dynamically import the deposit function
+        const privacyCashDeposit = await import('./utils/solTransfer.ts');
+        
+        const depositResult = await privacyCashDeposit.depositViaPriVacyCash(
+          walletState.wallet,
+          amount,
+          linkId,
+          walletState.address
+        );
+        
+        console.log(`✅ Privacy Cash deposit successful!`);
+        console.log(`   Deposit TX: ${depositResult.depositTxHash}`);
+        console.log(`   Amount: ${depositResult.amount} SOL`);
 
         // ✅ SUCCESS: Show the link
         const linkUrl = `https://shadowpay.app/claim/${linkId}`;
@@ -590,7 +557,7 @@
           status: 'confirmed',
           date: Date.now(),
           linkId: linkId,
-          paymentTx: paymentResult.txHash
+          depositTx: depositResult.depositTxHash
         });
 
         walletState.isProcessing = false;
@@ -598,7 +565,7 @@
 
         document.getElementById('generated-link').value = linkUrl;
         document.getElementById('link-result').classList.remove('hidden');
-        document.getElementById('success-message').textContent = `✅ Payment confirmed! Link created with ${amountSOL} SOL. Share this link with the recipient.`;
+        document.getElementById('success-message').textContent = `✅ Success! Deposited ${amountSOL} SOL to Privacy Cash pool. Share this link with the recipient to claim privately.`;
         showSuccessModal();
 
         document.getElementById('create-form').reset();
@@ -606,15 +573,15 @@
         walletState.isProcessing = false;
         hideLoadingModal();
         
-        let errorMsg = error.message || 'Link creation failed';
+        let errorMsg = error.message || 'Deposit failed';
         
         // Friendly error messages
         if (errorMsg.includes('User rejected')) {
-          errorMsg = '❌ You cancelled the payment request. No SOL was sent.';
-        } else if (errorMsg.includes('insufficient funds')) {
+          errorMsg = '❌ You cancelled the deposit. No SOL was sent to Privacy Cash pool.';
+        } else if (errorMsg.includes('insufficient')) {
           errorMsg = '❌ Insufficient SOL balance. Please add SOL to your Phantom wallet.';
-        } else if (errorMsg.includes('backend wallet')) {
-          errorMsg = '❌ Backend not properly configured. Please try again later.';
+        } else if (errorMsg.includes('Privacy Cash')) {
+          errorMsg = '❌ Privacy Cash deposit failed. Please try again or check the backend logs.';
         }
         
         showErrorModal(errorMsg);

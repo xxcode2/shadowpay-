@@ -10,20 +10,12 @@ const router = Router()
  * - Fee structure
  * - Min amount
  * - Network info
- * - Operator wallet address (for user payments)
  */
 router.get('/', (req: Request, res: Response) => {
   try {
-    const operatorAddress = process.env.OPERATOR_ADDRESS || process.env.OPERATOR_PUBKEY
-    
-    if (!operatorAddress) {
-      console.warn('⚠️  OPERATOR_ADDRESS not configured in environment')
-    }
-    
     res.json({
       minAmount: 0.01,
       network: process.env.SOLANA_NETWORK || 'mainnet-beta',
-      operatorAddress: operatorAddress || 'NOT_CONFIGURED',
       fees: {
         depositFee: 0,
         baseFee: 0.006,
@@ -31,7 +23,7 @@ router.get('/', (req: Request, res: Response) => {
         description: '0.006 SOL + 0.35% of withdrawal amount',
         note: 'Fees charged when recipient claims the link',
       },
-      operator: 'ShadowPay relayer service',
+      operator: 'ShadowPay Privacy Cash relayer service',
       operatorEmail: process.env.OPERATOR_EMAIL || 'support@shadowpay.app',
     })
   } catch (err: any) {
