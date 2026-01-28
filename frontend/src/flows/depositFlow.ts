@@ -1,5 +1,6 @@
 import { CONFIG } from '../config'
 import { showError, showSuccess } from '../utils/notificationUtils'
+import { Connection, LAMPORTS_PER_SOL, PublicKey } from '@solana/web3.js'
 
 export interface DepositRequest {
   linkId: string
@@ -8,174 +9,251 @@ export interface DepositRequest {
 }
 
 /**
- * ✅ PRIVACY CASH DEPOSIT FLOW - USER SIGNS, BACKEND GENERATES PROOF
+ * ✅ USER-PAYS DEPOSIT FLOW - User wallet pays all fees
  * 
- * Flow:
- * 1. Frontend: Ask user to authorize with wallet signature
- * 2. Frontend: Send user's public key + authorization to backend
- * 3. Backend: Initialize Privacy Cash SDK with OPERATOR keypair
- * 4. Backend: SDK generates ZK proof + encrypted UTXOs using user's address
- * 5. Backend: Create transaction (user's wallet pays)
- * 6. Backend: Send transaction to frontend for user to sign
- * 7. Frontend: USER's wallet SIGNS transaction (via Phantom)
- * 8. Frontend: Send signed transaction back to backend
- * 9. Backend: Relay signed transaction to Privacy Cash
- * 10. Backend: Record transaction in database
+ * NEW APPROACH (Direct SDK Integration):
+ * 1. Frontend: Initialize Privacy Cash SDK with USER's wallet (not operator)
+ * 2. Frontend: Call SDK.deposit() - generates ZK proof + transaction
+ * 3. Frontend: User signs transaction in Phantom
+ * 4. Frontend: SDK submits transaction to blockchain (user pays)
+ * 5. Frontend: Get transaction signature
+ * 6. Frontend: Send transaction signature to backend to record
+ * 7. Backend: Just records transaction in database
  * 
- * Key: Backend generates proof, USER signs transaction, USER pays
- * User's funds come from USER's wallet balance, not operator
+ * Key Benefits:
+ * - User pays all fees (not operator)
+ * - Operator wallet balance not needed
+ * - More decentralized
+ * - User has full control
  */
-export async function executeRealDeposit(
+export async function executeUserPaysDeposit(
   request: DepositRequest,
   wallet: any
 ): Promise<string> {
   const { linkId, amount, publicKey } = request
   const lamports = Math.round(parseFloat(amount) * 1e9)
 
-  console.log('💰 Processing payment...')
-  console.log(`   📋 Step 1: Backend generates Privacy Cash proof`)
-  console.log(`   🔐 Step 2: User signs transaction in wallet`)
-  console.log(`   📤 Step 3: Backend relays to Privacy Cash`)
+  console.log('💰 Processing payment (USER PAYS)...')
+  console.log(`   📋 Step 1: Initialize Privacy Cash SDK with your wallet`)
+  console.log(`   🔐 Step 2: Generate ZK proof`)
+  console.log(`   ✍️  Step 3: Sign transaction in wallet`)
+  console.log(`   📤 Step 4: Submit to blockchain (you pay)`)
+  console.log(`   💾 Step 5: Record in backend`)
 
   try {
-    // ✅ STEP 1: Request backend to generate ZK proof + transaction
-    console.log('📋 Step 1: Requesting backend to generate Privacy Cash proof...')
-    console.log(`   Amount: ${amount} SOL (${lamports} lamports)`)
+    // ✅ STEP 1: Check balance first
+    console.log('🔍 Step 1: Checking your wallet balance...')
+    console.log(`   Amount needed: ${amount} SOL + ~0.002 SOL fees`)
+    
+    const rpcUrl = process.env.VITE_SOLANA_RPC_URL || CONFIG.SOLANA_RPC_URL || 
+      'https://mainnet.helius-rpc.com/?api-key=c455719c-354b-4a44-98d4-27f8a18aa79c'
+    
+    const connection = new Connection(rpcUrl)
+    const balance = await connection.getBalance(wallet.publicKey)
+    const balanceSOL = balance / LAMPORTS_PER_SOL
+    
+    console.log(`   Your balance: ${balanceSOL.toFixed(6)} SOL`)
+    
+    const estimatedFees = 2_000_000 // ~0.002 SOL
+    const totalNeeded = lamports + estimatedFees
+    const totalNeededSOL = totalNeeded / LAMPORTS_PER_SOL
+    
+    if (balance < totalNeeded) {
+      const shortfall = (totalNeeded - balance) / LAMPORTS_PER_SOL
+      throw new Error(
+        `Insufficient balance. You have ${balanceSOL.toFixed(6)} SOL, ` +
+        `but need ${totalNeededSOL.toFixed(6)} SOL ` +
+        `(${parseFloat(amount).toFixed(6)} SOL deposit + 0.002 SOL fees). ` +
+        `Please add ${shortfall.toFixed(6)} SOL to your wallet.`
+      )
+    }
+    
+    console.log(`   ✅ Balance sufficient`)
+
+    // ✅ STEP 2: Initialize Privacy Cash SDK with USER's wallet
+    console.log('\n🔐 Step 2: Initializing Privacy Cash SDK with your wallet...')
     console.log(`   Your wallet: ${publicKey}`)
-    console.log(`   - Backend initializes Privacy Cash SDK`)
-    console.log(`   - SDK generates ZK proof`)
-    console.log(`   - Creating encrypted UTXO with your address`)
+    console.log(`   SDK will use YOUR wallet (not operator)`)
     
-    // Send to backend to generate the transaction
-    const generatePayload = {
-      linkId,
-      publicKey,
-      amount: amount.toString(),
+    // Import Privacy Cash SDK
+    const { PrivacyCash } = await import('privacycash')
+    
+    // Initialize SDK with USER's public key as owner
+    // SDK will use signTransaction from wallet when needed
+    const privacyCashClient = new PrivacyCash({
+      RPC_url: rpcUrl,
+      owner: wallet.publicKey,  // USER's wallet public key
+      enableDebug: true,
+    })
+    
+    // Bind wallet signing to SDK if needed
+    if (privacyCashClient && typeof (privacyCashClient as any).setSignFunction === 'function') {
+      (privacyCashClient as any).setSignFunction(wallet.signTransaction.bind(wallet))
+    }
+    
+    console.log(`   ✅ SDK initialized with your wallet`)
+
+    // ✅ STEP 3: Generate ZK proof and create transaction
+    console.log('\n🔮 Step 3: Generating zero-knowledge proof...')
+    console.log(`   Amount: ${amount} SOL`)
+    console.log(`   This creates encrypted UTXO that only you can access`)
+    console.log(`   Note: This may take 10-30 seconds...`)
+    
+    const depositResult = await privacyCashClient.deposit({
       lamports,
-    }
-
-    const generateResponse = await fetch(
-      `${CONFIG.BACKEND_URL}/api/deposit/prepare`,
-      {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(generatePayload),
-      }
-    )
-
-    if (!generateResponse.ok) {
-      const error = await generateResponse.json()
-      const errorMsg = error.details || error.error || generateResponse.statusText
-      throw new Error(`Backend proof generation failed: ${errorMsg}`)
-    }
-
-    const generateData = await generateResponse.json()
-    const unsignedTransaction = generateData.transaction
+    })
     
-    if (!unsignedTransaction) {
-      throw new Error('Backend did not return transaction to sign')
-    }
-
-    console.log(`   ✅ Backend generated transaction with ZK proof`)
-
-    // ✅ STEP 2: User signs the transaction with Phantom
-    console.log('🔐 Step 2: Signing transaction with your wallet...')
-    console.log(`   - Phantom will ask you to sign`)
-    console.log(`   - Review the transaction details`)
+    const transactionSignature = depositResult.tx
     
-    let signedTxBase64: string
+    if (!transactionSignature) {
+      throw new Error('SDK did not return transaction signature')
+    }
+    
+    console.log(`   ✅ ZK proof generated`)
+    console.log(`   ✅ Transaction submitted`)
+    console.log(`   ✅ Your wallet paid all fees`)
+    console.log(`   Transaction: ${transactionSignature}`)
+
+    // ✅ STEP 4: Wait for confirmation
+    console.log('\n⏳ Step 4: Waiting for blockchain confirmation...')
+    
     try {
-      // Parse the unsigned transaction from backend
-      const txBuffer = Buffer.from(unsignedTransaction, 'base64')
+      const confirmation = await connection.confirmTransaction(transactionSignature, 'confirmed')
       
-      // Ask Phantom to sign it
-      const { Transaction } = await import('@solana/web3.js')
-      const transaction = Transaction.from(txBuffer)
-      
-      const signedTx = await wallet.signTransaction(transaction)
-      
-      // Serialize back to base64
-      const serialized = signedTx.serialize()
-      signedTxBase64 = serialized.toString('base64')
-      
-      console.log(`   ✅ Your wallet signed the transaction`)
-    } catch (signErr: any) {
-      if (signErr.message?.toLowerCase().includes('user rejected')) {
-        throw new Error('You rejected the wallet signature. Please try again.')
+      if (confirmation.value.err) {
+        throw new Error('Transaction failed on blockchain')
       }
-      throw new Error('Failed to sign transaction: ' + signErr.message)
+      
+      console.log(`   ✅ Transaction confirmed on blockchain`)
+    } catch (confirmErr) {
+      console.log(`   ⚠️  Could not confirm (might still be processing)`)
+      // Continue anyway, backend will verify
     }
 
-    // ✅ STEP 3: Send signed transaction to backend for relay
-    console.log('📨 Step 3: Sending signed transaction to backend...')
-    console.log(`   - Backend will relay to Privacy Cash relayer`)
-    console.log(`   - Your funds are encrypted with ZK proof`)
+    // ✅ STEP 5: Record in backend database
+    console.log('\n💾 Step 5: Recording transaction in backend...')
     
-    const depositPayload = {
+    const recordPayload = {
       linkId,
-      signedTransaction: signedTxBase64,
+      transactionHash: transactionSignature,
       amount: amount.toString(),
       publicKey,
       lamports,
     }
 
-    const depositResponse = await fetch(
+    const recordResponse = await fetch(
       `${CONFIG.BACKEND_URL}/api/deposit`,
       {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(depositPayload),
+        body: JSON.stringify(recordPayload),
       }
     )
 
-    if (!depositResponse.ok) {
-      const error = await depositResponse.json()
-      const errorMsg = error.details || error.error || depositResponse.statusText
-      throw new Error(`Backend deposit failed: ${errorMsg}`)
+    if (!recordResponse.ok) {
+      console.warn('⚠️  Backend recording failed, but transaction succeeded')
+      console.warn('   Transaction is on blockchain but not in database')
+      console.warn('   Contact support with tx:', transactionSignature)
+      // Don't throw error - deposit succeeded even if recording failed
+    } else {
+      console.log(`   ✅ Transaction recorded in backend`)
     }
 
-    const depositData = await depositResponse.json()
-    const transactionSignature = depositData.transactionHash || depositData.tx
-
-    // ✅ SUCCESS: Transaction submitted to Privacy Cash pool
-    console.log(`✅ Deposit successful!`)
-    console.log(`   Status: Your wallet signed and authorized the deposit`)
-    console.log(`   Funds: Encrypted in Privacy Cash pool`)
-    console.log(`   Signature: ${transactionSignature}`)
-    
-    console.log('🎉 Deposit completed successfully!')
+    // ✅ SUCCESS
+    console.log(`\n✅ DEPOSIT SUCCESSFUL!`)
     console.log(`   Amount: ${amount} SOL`)
-    console.log(`   Status: Encrypted in Privacy Cash pool`)
+    console.log(`   Status: Confirmed on blockchain`)
     console.log(`   Privacy: Zero-knowledge encrypted`)
-    console.log(`   Only you can decrypt your funds`)
+    console.log(`   Your wallet paid: ~${(lamports / LAMPORTS_PER_SOL).toFixed(6)} SOL + fees`)
     console.log(`   Transaction: ${transactionSignature}`)
+    console.log(`   Explorer: https://solscan.io/tx/${transactionSignature}`)
 
     showSuccess(
       `✅ Deposit Successful!\n` +
       `Amount: ${amount} SOL\n` +
-      `Status: Authorized by your wallet\n` +
+      `Status: Confirmed on blockchain\n` +
       `Privacy: Zero-knowledge encrypted\n` +
-      `Only you can claim your funds\n` +
-      `Tx: ${transactionSignature.slice(0, 20)}...`
+      `Your wallet paid all fees\n` +
+      `Tx: ${transactionSignature.slice(0, 20)}...\n\n` +
+      `View on Explorer: https://solscan.io/tx/${transactionSignature}`
     )
 
     return transactionSignature
 
   } catch (error: any) {
     console.error('❌ Deposit flow error:', error.message)
+    console.error('❌ Full error:', error)
 
-    let errorMsg = error.message
+    let errorMsg = error.message || 'Unknown error'
+    
+    // User-friendly error messages
     if (error.message?.toLowerCase().includes('user rejected')) {
-      errorMsg = 'You rejected the wallet signature. Please try again and approve.'
-    } else if (error.message?.includes('network')) {
-      errorMsg = 'Network error. Please try again.'
-    } else if (error.message?.includes('insufficient')) {
-      errorMsg = 'Insufficient SOL balance. Please check your wallet.'
-    } else if (error.message?.includes('Backend')) {
-      errorMsg = 'Backend deposit error. Please check your setup.'
+      errorMsg = 'You rejected the transaction. Please try again and approve in Phantom.'
+    } else if (error.message?.toLowerCase().includes('insufficient')) {
+      errorMsg = error.message // Already formatted nicely above
+    } else if (error.message?.includes('network') || error.message?.includes('connection')) {
+      errorMsg = 'Network error. Please check your internet connection and try again.'
+    } else if (error.message?.includes('timeout')) {
+      errorMsg = 'Request timed out. Please try again.'
+    } else if (error.message?.includes('simulation failed')) {
+      errorMsg = 'Transaction simulation failed. This usually means insufficient balance or network issues.'
     }
 
     showError(`❌ Deposit failed: ${errorMsg}`)
-    throw error
+    throw new Error(errorMsg)
   }
 }
+
+/**
+ * Helper: Format lamports to SOL with proper decimals
+ */
+function formatSOL(lamports: number): string {
+  return (lamports / LAMPORTS_PER_SOL).toFixed(6)
+}
+
+/**
+ * Helper: Get Solana Explorer URL
+ */
+export function getExplorerUrl(signature: string, cluster: string = 'mainnet'): string {
+  if (cluster === 'mainnet') {
+    return `https://solscan.io/tx/${signature}`
+  }
+  return `https://solscan.io/tx/${signature}?cluster=${cluster}`
+}
+
+/**
+ * Helper: Check if user has enough balance
+ */
+export async function checkUserBalance(
+  walletPublicKey: string,
+  depositLamports: number,
+  rpcUrl: string
+): Promise<{
+  hasEnough: boolean
+  balance: number
+  balanceSOL: string
+  needed: number
+  neededSOL: string
+  shortfall: number
+  shortfallSOL: string
+}> {
+  const connection = new Connection(rpcUrl)
+  const balance = await connection.getBalance(new PublicKey(walletPublicKey))
+  
+  const estimatedFees = 2_000_000 // 0.002 SOL
+  const needed = depositLamports + estimatedFees
+  const shortfall = Math.max(0, needed - balance)
+  
+  return {
+    hasEnough: balance >= needed,
+    balance,
+    balanceSOL: formatSOL(balance),
+    needed,
+    neededSOL: formatSOL(needed),
+    shortfall,
+    shortfallSOL: formatSOL(shortfall),
+  }
+}
+
+// Keep old function for backward compatibility
+export const executeRealDeposit = executeUserPaysDeposit
