@@ -1,6 +1,5 @@
 import { CONFIG } from '../config'
 import { showError, showSuccess } from '../utils/notificationUtils'
-import { PrivacyCashService } from '../services/privacyCashService'
 
 export interface DepositRequest {
   linkId: string
