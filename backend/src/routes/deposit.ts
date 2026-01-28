@@ -150,9 +150,22 @@ router.post('/prepare', async (req: Request<{}, {}, any>, res: Response) => {
     } catch (sdkErr: any) {
       console.error('❌ SDK Error:', sdkErr.message)
       console.error('❌ Full error:', sdkErr)
+      
+      // Check if it's an insufficient balance error
+      const errorMsg = sdkErr.message || String(sdkErr)
+      if (errorMsg.includes('insufficient lamports') || errorMsg.includes('insufficient balance')) {
+        return res.status(500).json({
+          error: 'Operator wallet has insufficient SOL to process deposit',
+          details: errorMsg,
+          action: 'The operator wallet needs SOL to generate the Privacy Cash proof. Please fund the operator wallet.',
+          operatorWallet: operatorKeypair.publicKey.toString(),
+          requiredAmount: `At least ${lamports / 1e9} SOL`,
+        })
+      }
+      
       return res.status(500).json({
         error: 'Failed to generate Privacy Cash transaction',
-        details: sdkErr.message || String(sdkErr),
+        details: errorMsg,
       })
     }
   } catch (error: any) {
