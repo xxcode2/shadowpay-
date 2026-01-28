@@ -224,55 +224,77 @@ router.get('/debug', async (req: Request, res: Response) => {
 })
 
 /**
- * ✅ ENDPOINT 1: Prepare deposit (with detailed error handling)
+ * ✅ ENDPOINT 1: Prepare deposit (with AGGRESSIVE error logging for production debugging)
  */
 router.post('/prepare', async (req: Request<{}, {}, any>, res: Response) => {
   const requestId = Math.random().toString(36).substring(7)
   
+  console.log(`\n${'='.repeat(80)}`)
+  console.log(`🚀 [${requestId}] DEPOSIT PREPARE REQUEST START`)
+  console.log(`${'='.repeat(80)}`)
+  
   try {
     const { linkId, amount, publicKey, lamports } = req.body as PrepareDepositRequest
 
-    console.log(`\n🔗 [${requestId}] PREPARE DEPOSIT`)
-    console.log(`   Link: ${linkId}`)
-    console.log(`   Amount: ${amount} SOL`)
+    console.log(`📋 REQUEST DATA:`)
+    console.log(`   linkId: ${linkId}`)
+    console.log(`   amount: ${amount} SOL`)
+    console.log(`   publicKey: ${publicKey?.slice(0, 10)}...`)
+    console.log(`   lamports: ${lamports}`)
 
     // ✅ Validate input
     if (!linkId || !publicKey || !amount || lamports === undefined) {
+      console.error(`❌ VALIDATION FAILED: Missing required fields`)
       return res.status(400).json({ error: 'Missing required fields' })
     }
 
     try {
       new PublicKey(publicKey)
     } catch {
+      console.error(`❌ VALIDATION FAILED: Invalid publicKey format`)
       return res.status(400).json({ error: 'Invalid publicKey format' })
     }
 
     // ✅ Find link
+    console.log(`\n🔍 STEP 1: Finding payment link...`)
     const link = await prisma.paymentLink.findUnique({
       where: { id: linkId },
     })
 
     if (!link) {
+      console.error(`❌ LINK NOT FOUND: ${linkId}`)
       return res.status(404).json({ error: 'Link not found' })
     }
 
     if (link.depositTx && link.depositTx !== '') {
+      console.error(`❌ DEPOSIT ALREADY EXISTS for ${linkId}`)
       return res.status(400).json({ error: 'Deposit already recorded' })
     }
+    console.log(`✅ Link found and valid`)
 
     // ✅ Load operator keypair
-    console.log(`   🔐 Loading operator keypair...`)
+    console.log(`\n🔐 STEP 2: Loading operator keypair...`)
     let operatorKeypair: any
     
     try {
       operatorKeypair = loadKeypairFromEnv()
-      console.log(`   ✅ Keypair loaded`)
+      console.log(`✅ Operator keypair loaded successfully`)
+      console.log(`   Public key: ${operatorKeypair.publicKey.toBase58()}`)
+      console.log(`   Secret key length: ${operatorKeypair.secretKey.length} bytes`)
     } catch (err: any) {
-      console.error(`   ❌ Keypair error: ${err.message}`)
+      console.error(`❌ KEYPAIR LOADING FAILED`)
+      console.error(`   Error: ${err.message}`)
+      console.error(`   Stack: ${err.stack}`)
       return res.status(500).json({
         error: 'Operator configuration error',
         details: 'Could not load operator keypair',
         suggestion: 'Set OPERATOR_SECRET_KEY in environment variables',
+        env_vars_set: {
+          OPERATOR_PRIVATE_KEY: !!process.env.OPERATOR_PRIVATE_KEY,
+          OPERATOR_SECRET_KEY: !!process.env.OPERATOR_SECRET_KEY,
+          RPC_URL: !!process.env.RPC_URL,
+          SOLANA_RPC_URL: !!process.env.SOLANA_RPC_URL,
+        }
       })
     }
 
@@ -280,67 +302,132 @@ router.post('/prepare', async (req: Request<{}, {}, any>, res: Response) => {
     const rpcUrl = process.env.RPC_URL || process.env.SOLANA_RPC_URL || 
       'https://mainnet.helius-rpc.com/?api-key=c455719c-354b-4a44-98d4-27f8a18aa79c'
 
-    console.log(`   🌐 RPC: ${rpcUrl.substring(0, 40)}...`)
+    console.log(`\n🌐 STEP 3: Testing RPC connection...`)
+    console.log(`   RPC URL: ${rpcUrl.substring(0, 60)}...`)
 
     // ✅ Initialize Connection
     let connection: Connection
     try {
       connection = new Connection(rpcUrl, 'confirmed')
-      await connection.getLatestBlockhash()
-      console.log(`   ✅ RPC verified`)
+      const version = await connection.getVersion()
+      console.log(`✅ RPC connection successful`)
+      console.log(`   Solana version: ${version['solana-core']}`)
     } catch (rpcErr: any) {
-      console.error(`   ❌ RPC error: ${rpcErr.message}`)
+      console.error(`❌ RPC CONNECTION FAILED`)
+      console.error(`   Error: ${rpcErr.message}`)
+      console.error(`   Stack: ${rpcErr.stack}`)
       return res.status(500).json({
         error: 'RPC connection error',
         details: rpcErr.message,
+        rpc_url: rpcUrl.substring(0, 60) + '...',
       })
     }
 
-    // ✅ Initialize SDK and generate proof
-    console.log(`   🔮 Generating proof...`)
+    // ✅ Try importing Privacy Cash SDK
+    console.log(`\n🔮 STEP 4: Initializing Privacy Cash SDK...`)
+    
+    let privacyCashClient: any
+    try {
+      console.log(`   Attempting to import PrivacyCash...`)
+      // Try importing
+      const PrivacyCashModule = await import('privacycash')
+      console.log(`✅ PrivacyCash module imported`)
+      
+      console.log(`   Creating SDK instance with:`)
+      console.log(`     - Owner keypair: ${operatorKeypair.publicKey.toBase58()}`)
+      console.log(`     - RPC URL: ${rpcUrl.substring(0, 50)}...`)
+      console.log(`     - Debug mode: true`)
+      
+      privacyCashClient = initializePrivacyCash(operatorKeypair, rpcUrl, true)
+      console.log(`✅ SDK instance created successfully`)
+      console.log(`   SDK type: ${typeof privacyCashClient}`)
+      console.log(`   SDK methods: ${Object.getOwnPropertyNames(Object.getPrototypeOf(privacyCashClient)).slice(0, 5).join(', ')}...`)
+    } catch (sdkInitErr: any) {
+      console.error(`❌ SDK INITIALIZATION FAILED`)
+      console.error(`   Error name: ${sdkInitErr.name}`)
+      console.error(`   Error message: ${sdkInitErr.message}`)
+      console.error(`   Stack: ${sdkInitErr.stack}`)
+      console.error(`   Full error object: ${JSON.stringify(sdkInitErr, null, 2)}`)
+      
+      return res.status(500).json({
+        error: 'Privacy Cash SDK initialization failed',
+        details: sdkInitErr.message,
+        error_type: sdkInitErr.constructor.name,
+        has_deposit_method: privacyCashClient && typeof privacyCashClient.deposit === 'function',
+      })
+    }
+
+    // ✅ Call SDK deposit method
+    console.log(`\n💰 STEP 5: Calling SDK.deposit() method...`)
+    console.log(`   Deposit amount: ${lamports} lamports`)
     
     let depositResult: any
     try {
-      const privacyCashClient = initializePrivacyCash(operatorKeypair, rpcUrl, true)
-      
+      console.log(`   Executing SDK deposit...`)
       depositResult = await privacyCashClient.deposit({
         lamports,
       })
       
+      console.log(`✅ SDK.deposit() returned successfully`)
+      console.log(`   Response type: ${typeof depositResult}`)
+      console.log(`   Response keys: ${Object.keys(depositResult).join(', ')}`)
+      console.log(`   Response size: ${JSON.stringify(depositResult).length} bytes`)
+      
       if (!depositResult || (!(depositResult as any).tx && !(depositResult as any).transaction)) {
-        throw new Error('SDK returned invalid response')
+        console.error(`❌ INVALID SDK RESPONSE`)
+        console.error(`   Response: ${JSON.stringify(depositResult).substring(0, 200)}`)
+        throw new Error('SDK returned invalid transaction structure')
       }
       
-      console.log(`   ✅ Proof generated`)
+      console.log(`✅ SDK response contains valid transaction`)
     } catch (depositErr: any) {
-      console.error(`   ❌ Proof error: ${depositErr.message}`)
+      console.error(`❌ SDK DEPOSIT CALL FAILED`)
+      console.error(`   Error name: ${depositErr.name}`)
+      console.error(`   Error message: ${depositErr.message}`)
+      console.error(`   Stack: ${depositErr.stack}`)
+      console.error(`   Full error: ${JSON.stringify(depositErr, null, 2)}`)
+      
       return res.status(500).json({
-        error: 'Failed to generate deposit',
+        error: 'Failed to generate deposit proof',
         details: depositErr.message,
+        error_type: depositErr.constructor.name,
       })
     }
 
-    // ✅ Prepare transaction
-    console.log(`   🔧 Preparing transaction...`)
+    // ✅ Process transaction for user signing
+    console.log(`\n✍️  STEP 6: Preparing transaction for user signature...`)
     
     try {
-      const txBuffer = Buffer.from((depositResult as any).tx || (depositResult as any).transaction, 'base64')
+      const txField = (depositResult as any).tx || (depositResult as any).transaction
+      console.log(`   Transaction field found: ${txField ? 'tx' in depositResult ? 'tx' : 'transaction' : 'NONE'}`)
+      console.log(`   Transaction size: ${txField?.length} chars`)
+      
+      const txBuffer = Buffer.from(txField, 'base64')
+      console.log(`   Decoded buffer size: ${txBuffer.length} bytes`)
+      
       const transaction = Transaction.from(txBuffer)
+      console.log(`✅ Transaction deserialized successfully`)
+      console.log(`   Original fee payer: ${transaction.feePayer?.toBase58() || 'NOT SET'}`)
       
       const userPubkey = new PublicKey(publicKey)
       transaction.feePayer = userPubkey
+      console.log(`   New fee payer set to: ${userPubkey.toBase58()}`)
       
-      const { blockhash } = await connection.getLatestBlockhash()
-      transaction.recentBlockhash = blockhash
-      
-      console.log(`   ✅ Ready for user signature`)
+      const blockHashData = await connection.getLatestBlockhash()
+      transaction.recentBlockhash = blockHashData.blockhash
+      console.log(`✅ Blockhash updated: ${blockHashData.blockhash.substring(0, 10)}...`)
       
       const modifiedTxBase64 = transaction.serialize({
         requireAllSignatures: false,
         verifySignatures: false,
       }).toString('base64')
       
-      console.log(`\n✅ [${requestId}] PREPARED`)
+      console.log(`✅ Transaction serialized for user signature`)
+      console.log(`   Serialized size: ${modifiedTxBase64.length} chars`)
+      
+      console.log(`\n${'='.repeat(80)}`)
+      console.log(`✅ [${requestId}] DEPOSIT PREPARE SUCCESS`)
+      console.log(`${'='.repeat(80)}`)
       
       return res.status(200).json({
         success: true,
@@ -349,20 +436,30 @@ router.post('/prepare', async (req: Request<{}, {}, any>, res: Response) => {
       })
       
     } catch (txErr: any) {
-      console.error(`   ❌ Transaction error: ${txErr.message}`)
+      console.error(`❌ TRANSACTION PROCESSING FAILED`)
+      console.error(`   Error: ${txErr.message}`)
+      console.error(`   Stack: ${txErr.stack}`)
+      
       return res.status(500).json({
-        error: 'Failed to prepare transaction',
+        error: 'Failed to prepare transaction for user signature',
         details: txErr.message,
       })
     }
     
   } catch (error: any) {
-    console.error(`\n❌ [${requestId}] ERROR:`, error.message)
+    console.error(`\n${'='.repeat(80)}`)
+    console.error(`❌ [${requestId}] UNCAUGHT ERROR IN DEPOSIT PREPARE`)
+    console.error(`${'='.repeat(80)}`)
+    console.error(`   Error name: ${error.name}`)
+    console.error(`   Error message: ${error.message}`)
+    console.error(`   Stack trace:\n${error.stack}`)
+    console.error(`${'='.repeat(80)}`)
     
     return res.status(500).json({
       error: 'Internal server error',
       message: error.message,
       requestId,
+      error_type: error.constructor.name,
     })
   }
 })
