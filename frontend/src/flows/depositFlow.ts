@@ -120,32 +120,43 @@ export async function executeRealDeposit(
     
     let transactionSignature: string
     try {
-      // Try signAndSendTransaction first (many wallets support this)
+      let sent = false
+      
+      // Try signAndSendTransaction first (some wallets support this)
       if (wallet.signAndSendTransaction && typeof wallet.signAndSendTransaction === 'function') {
-        const result = await wallet.signAndSendTransaction(transaction)
-        transactionSignature = result?.signature || result
-        console.log(`   ✅ Transaction signed and sent`)
+        try {
+          const result = await wallet.signAndSendTransaction(transaction)
+          transactionSignature = result?.signature || result
+          console.log(`   ✅ Transaction signed and sent`)
+          sent = true
+        } catch (e) {
+          console.warn(`   ⚠️  signAndSendTransaction failed, trying alternative...`)
+        }
       }
-      // Fall back to sign then send
-      else if (wallet.signTransaction && wallet.sendTransaction) {
+      
+      // If not sent yet, try sign + send
+      if (!sent) {
+        if (!wallet.signTransaction) {
+          throw new Error('Wallet does not support signTransaction')
+        }
+        if (!wallet.sendTransaction) {
+          throw new Error('Wallet does not support sendTransaction - cannot send real transaction')
+        }
+        
+        console.log(`   Signing transaction...`)
         const signedTx = await wallet.signTransaction(transaction)
         console.log(`   ✅ Transaction signed`)
         
+        console.log(`   Sending to Solana network...`)
         transactionSignature = await wallet.sendTransaction(signedTx, {
           preflightCommitment: 'confirmed',
         })
-        console.log(`   ✅ Transaction sent`)
+        console.log(`   ✅ Transaction sent to network`)
+        sent = true
       }
-      // Try just signTransaction if send is not available
-      else if (wallet.signTransaction) {
-        const signedTx = await wallet.signTransaction(transaction)
-        // Create a mock signature from the signed transaction
-        transactionSignature = Buffer.from(signedTx.signature || '').toString('base64').slice(0, 88) || 
-                             `tx_${linkId}_${Date.now()}`
-        console.log(`   ✅ Transaction signed (mock send)`)
-      }
-      else {
-        throw new Error('Wallet does not support transaction operations')
+      
+      if (!sent || !transactionSignature) {
+        throw new Error('Failed to send transaction - no signature returned')
       }
       
       console.log(`   Signature: ${transactionSignature}`)
