@@ -3,7 +3,7 @@
  * Updated for USER-PAYS architecture
  */
 
-import { executeRealDeposit } from './depositFlow'
+import { executeUserPaysDeposit } from './depositFlow'
 
 /**
  * Example 1: Basic Deposit
@@ -15,7 +15,7 @@ export async function exampleBasicDeposit(wallet: any, linkId: string) {
     const amountSOL = 0.1
     console.log(`💰 Depositing ${amountSOL} SOL`)
 
-    const tx = await executeRealDeposit(
+    const tx = await executeUserPaysDeposit(
       {
         linkId,
         amount: amountSOL.toString(),
@@ -46,7 +46,7 @@ export async function exampleMultipleDeposits(wallet: any) {
     try {
       console.log(`📍 Depositing ${deposit.amount} SOL for link ${deposit.linkId}...`)
 
-      const tx = await executeRealDeposit(
+      const tx = await executeUserPaysDeposit(
         {
           linkId: deposit.linkId,
           amount: deposit.amount.toString(),
@@ -84,7 +84,7 @@ export async function examplePrivacyOptimizedDeposit(
     const amountSOL = 1.0
     console.log(`🔐 Depositing round amount: ${amountSOL} SOL (good for privacy)`)
 
-    const tx = await executeRealDeposit(
+    const tx = await executeUserPaysDeposit(
       {
         linkId,
         amount: amountSOL.toString(),
@@ -112,7 +112,7 @@ export async function exampleVariableAmountDeposit(
   try {
     console.log(`💰 Depositing ${amountSOL} SOL`)
 
-    const tx = await executeRealDeposit(
+    const tx = await executeUserPaysDeposit(
       {
         linkId,
         amount: amountSOL.toString(),
@@ -136,7 +136,7 @@ export async function exampleErrorHandling(wallet: any, linkId: string) {
   try {
     const amountSOL = 0.001
 
-    const tx = await executeRealDeposit(
+    const tx = await executeUserPaysDeposit(
       {
         linkId,
         amount: amountSOL.toString(),
@@ -179,7 +179,7 @@ export async function exampleBatchDeposits(
 
       console.log(`[${i + 1}/${batchSize}] Depositing ${amountPerDepositSOL} SOL...`)
 
-      const tx = await executeRealDeposit(
+      const tx = await executeUserPaysDeposit(
         {
           linkId,
           amount: amountPerDepositSOL.toString(),

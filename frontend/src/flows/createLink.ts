@@ -11,7 +11,7 @@
  */
 
 import { LAMPORTS_PER_SOL } from '@solana/web3.js'
-import { executeRealDeposit } from './depositFlow'
+import { executeUserPaysDeposit } from './depositFlow'
 
 export interface SigningWallet {
   publicKey: { toString(): string }
@@ -57,7 +57,7 @@ export async function createLink({
     const amountStr = amountSOL.toString()
 
     // ✅ USER SIGNS & DEPOSITS - FUNDS GO DIRECTLY TO PRIVACY CASH POOL
-    const depositTx = await executeRealDeposit(
+    const depositTx = await executeUserPaysDeposit(
       {
         linkId,
         amount: amountStr,
