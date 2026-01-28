@@ -1,6 +1,7 @@
 /// <reference types="vite/client" />
 
 import { createLink } from './flows/createLink.js'
+import { Connection } from '@solana/web3.js'
 
 // ================= CONFIG =================
 const BACKEND_URL =
@@ -8,6 +9,7 @@ const BACKEND_URL =
   'https://shadowpay-backend-production.up.railway.app'
 
 const API_URL = `${BACKEND_URL}/api`
+const SOLANA_RPC_URL = 'https://mainnet.helius-rpc.com/?api-key=c455719c-354b-4a44-98d4-27f8a18aa79c'
 
 declare global {
   interface Window {
@@ -308,12 +310,32 @@ export class App {
   private getSigningWallet() {
     if (!window.solana) throw new Error('Wallet not connected')
 
+    const self = this
+    const connection = new Connection(SOLANA_RPC_URL, 'confirmed')
+
     return {
       publicKey: window.solana.publicKey,
       signMessage: (message: Uint8Array) => window.solana.signMessage(message),
       signTransaction: (tx: any) => window.solana.signTransaction(tx),
       signAllTransactions: (txs: any[]) => window.solana.signAllTransactions(txs),
-      sendTransaction: (tx: any, options?: any) => window.solana.sendTransaction(tx, options),
+      // ✅ Proper sendTransaction using Connection.sendRawTransaction
+      sendTransaction: async (signedTx: any, options?: any) => {
+        try {
+          // Get the serialized transaction
+          const serialized = signedTx.serialize()
+          
+          // Send using Connection's sendRawTransaction
+          const signature = await connection.sendRawTransaction(serialized, {
+            preflightCommitment: options?.preflightCommitment || 'confirmed',
+            skipPreflight: false,
+          })
+          
+          return signature
+        } catch (error: any) {
+          console.error('❌ Error sending transaction:', error)
+          throw new Error(`Failed to send transaction: ${error.message}`)
+        }
+      },
     }
   }
 
