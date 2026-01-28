@@ -6,6 +6,77 @@ import crypto from 'crypto'
 const router = Router()
 
 /**
+ * ✅ REAL PRIVACY CASH API RELAY
+ * 
+ * Relays encrypted UTXOs to Privacy Cash pool
+ * This is the real integration - not mocking
+ */
+async function relayToPrivacyCash(payload: {
+  linkId: string
+  utxo: any
+  signature: number[]
+  amount: number
+  publicKey: string
+}): Promise<{ transactionHash: string }> {
+  console.log(`🔗 Calling Privacy Cash API...`)
+  
+  // Privacy Cash API endpoint
+  const PRIVACY_CASH_API = process.env.PRIVACY_CASH_API_URL || 'https://api.privacycash.org/deposit'
+  const API_KEY = process.env.PRIVACY_CASH_API_KEY
+  
+  if (!API_KEY) {
+    throw new Error(
+      'PRIVACY_CASH_API_KEY environment variable not set. ' +
+      'Cannot relay to Privacy Cash without credentials.'
+    )
+  }
+
+  try {
+    const response = await fetch(PRIVACY_CASH_API, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${API_KEY}`,
+        'X-Link-ID': payload.linkId,
+      },
+      body: JSON.stringify({
+        type: 'deposit',
+        utxo: payload.utxo,
+        signature: payload.signature,
+        amount: payload.amount,
+        publicKey: payload.publicKey,
+        timestamp: Date.now(),
+      }),
+    })
+
+    if (!response.ok) {
+      const errorText = await response.text()
+      console.error(`Privacy Cash API Error (${response.status}):`, errorText)
+      
+      throw new Error(
+        `Privacy Cash API error (${response.status}): ${errorText || response.statusText}`
+      )
+    }
+
+    const result = await response.json() as { transactionHash?: string; [key: string]: any }
+
+    if (!result.transactionHash) {
+      throw new Error('Privacy Cash API did not return transaction hash')
+    }
+
+    console.log(`✅ Privacy Cash API accepted deposit`)
+    console.log(`   Transaction Hash: ${result.transactionHash}`)
+    
+    return {
+      transactionHash: result.transactionHash,
+    }
+  } catch (error: any) {
+    console.error('❌ Privacy Cash API Error:', error.message)
+    throw new Error(`Privacy Cash relay failed: ${error.message}`)
+  }
+}
+
+/**
  * POST /api/deposit
  *
  * ✅ PRIVACY CASH SDK DEPOSIT RELAY:
@@ -80,25 +151,16 @@ router.post('/', async (req: Request<{}, {}, any>, res: Response) => {
     
     let privacyCashTx: string
     try {
-      // Check environment mode
-      const isDevMode = process.env.NODE_ENV === 'development' || process.env.ALLOW_MOCK_DEPOSITS === 'true'
+      // Relay encrypted UTXO to Privacy Cash pool
+      const relayResponse = await relayToPrivacyCash({
+        linkId,
+        utxo,
+        signature,
+        amount: typeof amount === 'string' ? parseFloat(amount) : amount,
+        publicKey,
+      })
       
-      if (isDevMode) {
-        // Development/testing mode: Generate mock Privacy Cash TX
-        // In production, this calls the actual Privacy Cash API
-        console.warn('⚠️  DEV MODE: Using generated Privacy Cash TX (not real relay)')
-        privacyCashTx = 'PrivacyCash_dev_' + crypto.randomBytes(16).toString('hex')
-        
-        console.log(`✅ Generated Privacy Cash TX (development mode)`)
-        console.log(`   TX: ${privacyCashTx}`)
-        console.log(`   Note: In production, this would relay to actual Privacy Cash pool`)
-      } else {
-        // Production mode: Require real Privacy Cash API integration
-        throw new Error(
-          'Privacy Cash API integration required for production. ' +
-          'Set NODE_ENV=development or ALLOW_MOCK_DEPOSITS=true for testing.'
-        )
-      }
+      privacyCashTx = relayResponse.transactionHash
       
       console.log(`✅ Relayed to Privacy Cash`)
       console.log(`   Privacy Cash TX: ${privacyCashTx}`)
