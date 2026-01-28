@@ -386,70 +386,42 @@ router.post('/prepare', async (req: Request<{}, {}, any>, res: Response) => {
     // ✅ Call SDK deposit method
     console.log(`\n💰 STEP 5: Calling SDK.deposit() method...`)
     console.log(`   Deposit amount: ${lamports} lamports`)
+    console.log(`   Calling: SDK.deposit({ lamports: ${lamports} })`)
     
     let depositResult: any
     try {
-      console.log(`   Executing SDK deposit...`)
-      
-      // Wrap in timeout to catch hanging requests
-      const timeoutPromise = new Promise((_, reject) => 
-        setTimeout(() => reject(new Error('SDK deposit call timed out after 30 seconds')), 30000)
-      )
-      
-      const depositPromise = privacyCashClient.deposit({
+      depositResult = await privacyCashClient.deposit({
         lamports,
       })
       
-      depositResult = await Promise.race([depositPromise, timeoutPromise])
-      
-      console.log(`✅ SDK.deposit() returned successfully`)
-      console.log(`   Response type: ${typeof depositResult}`)
-      console.log(`   Response keys: ${Object.keys(depositResult).join(', ')}`)
-      console.log(`   Response size: ${JSON.stringify(depositResult).length} bytes`)
+      console.log(`✅ SDK.deposit() returned`)
       
       if (!depositResult || (!(depositResult as any).tx && !(depositResult as any).transaction)) {
-        console.error(`❌ INVALID SDK RESPONSE`)
-        console.error(`   Response was: ${JSON.stringify(depositResult).substring(0, 300)}`)
-        throw new Error('SDK returned invalid transaction structure - missing tx or transaction field')
+        console.error(`   Response type: ${typeof depositResult}`)
+        console.error(`   Response: ${JSON.stringify(depositResult).substring(0, 200)}`)
+        throw new Error('SDK returned invalid transaction structure')
       }
       
-      console.log(`✅ SDK response contains valid transaction`)
+      const txField = (depositResult as any).tx || (depositResult as any).transaction
+      console.log(`✅ Transaction field: ${txField ? 'present' : 'MISSING'}`)
+      console.log(`   Size: ${txField?.length} chars`)
+      
     } catch (depositErr: any) {
-      console.error(`❌ SDK DEPOSIT CALL FAILED`)
-      console.error(`   Error name: ${depositErr.name}`)
-      console.error(`   Error message: ${depositErr.message}`)
-      console.error(`   Error string: ${String(depositErr)}`)
+      console.error(`❌ SDK.deposit() FAILED`)
+      console.error(`   Message: ${depositErr.message}`)
       
-      // Try to extract more info
-      if (depositErr.response) {
-        console.error(`   HTTP Status: ${depositErr.response.status}`)
-        console.error(`   HTTP Data: ${JSON.stringify(depositErr.response.data)}`)
+      if (depositErr.message?.includes('Insufficient')) {
+        return res.status(500).json({
+          error: 'Operator wallet has insufficient balance',
+          details: 'The operator wallet needs SOL to generate proofs',
+        })
       }
       
-      if (depositErr.statusCode) {
-        console.error(`   Status code: ${depositErr.statusCode}`)
-      }
-      
-      console.error(`   Stack: ${depositErr.stack}`)
-      console.error(`   Full error object keys: ${Object.keys(depositErr).join(', ')}`)
-      
-      // Provide helpful error message
-      let userMessage = 'Failed to generate deposit proof'
-      let suggestion = 'Check backend logs for details'
-      
-      if (depositErr.message.includes('response not ok')) {
-        suggestion = 'RPC endpoint or Privacy Cash API might be temporarily unavailable'
-      } else if (depositErr.message.includes('timeout')) {
-        suggestion = 'Request took too long - network might be slow'
-      } else if (depositErr.message.includes('network')) {
-        suggestion = 'Network connection issue - please try again'
-      }
-      
+      // For any other error, provide detailed info
       return res.status(500).json({
-        error: userMessage,
+        error: 'Failed to generate deposit proof via SDK',
         details: depositErr.message,
         error_type: depositErr.constructor.name,
-        suggestion: suggestion,
       })
     }
 

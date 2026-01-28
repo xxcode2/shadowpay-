@@ -9,27 +9,30 @@ export interface DepositRequest {
 }
 
 /**
- * ✅ REAL PRIVACY CASH SDK - FRONTEND DIRECT
+ * ✅ HYBRID BACKEND-ASSISTED DEPOSIT - USER PAYS FEES
  * 
- * This is the CORRECT way to use Privacy Cash SDK.
- * SDK must run where the user's wallet is (Frontend with Phantom)
+ * Why Backend must initialize SDK:
+ * - Privacy Cash SDK requires actual Keypair object with private key
+ * - Phantom wallet adapter does NOT expose private key
+ * - We cannot pass Phantom adapter to SDK constructor
  * 
- * Flow:
- * 1. Frontend: Initialize Privacy Cash SDK with User's wallet
- * 2. Frontend: Call SDK.deposit() - SDK generates ZK proof + creates transaction
- * 3. SDK: Prompts user to sign in Phantom
- * 4. User: Approves signature
- * 5. SDK: Returns signed transaction
- * 6. Frontend: Get transaction signature
- * 7. Frontend: Send transaction hash to backend for recording
- * 8. Backend: Just records in database
+ * Solution: Backend-assisted flow with proper separation:
+ * 1. Frontend: Request backend to generate proof + unsigned transaction
+ * 2. Backend: Initialize SDK with OPERATOR's keypair (proof generation only)
+ * 3. Backend: Generate ZK proof for user's address  
+ * 4. Backend: Create UNSIGNED transaction with USER as fee payer
+ * 5. Backend: Return unsigned transaction to frontend
+ * 6. Frontend: User signs with Phantom (user's private key)
+ * 7. Frontend: Send signed transaction to backend
+ * 8. Backend: Submit to blockchain (USER PAYS)
+ * 9. Backend: Record transaction
  * 
  * Key Points:
- * - SDK runs on Frontend (where user's Phantom wallet is connected)
- * - User signs transaction locally with their private key
+ * - Operator keypair only for SDK init & proof generation
+ * - Operator does NOT sign the transaction
+ * - User signs with Phantom (proves authorization + pays fees)
  * - User pays all transaction fees
- * - All Privacy Cash ZK logic handled by SDK
- * - Backend just records the confirmed transaction
+ * - Operator wallet not affected
  */
 export async function executeUserPaysDeposit(
   request: DepositRequest,
@@ -38,11 +41,10 @@ export async function executeUserPaysDeposit(
   const { linkId, amount, publicKey } = request
   const lamports = Math.round(parseFloat(amount) * 1e9)
 
-  console.log('\n💰 Processing payment (PRIVACY CASH SDK)...')
-  console.log(`   📋 Step 1: Initialize Privacy Cash SDK`)
-  console.log(`   🔐 Step 2: Generate ZK proof`)
-  console.log(`   ✍️  Step 3: You sign transaction`)
-  console.log(`   📤 Step 4: Backend records`)
+  console.log('\n💰 Processing payment (USER PAYS)...')
+  console.log(`   📋 Step 1: Backend generates Privacy Cash proof`)
+  console.log(`   🔐 Step 2: You sign transaction`)
+  console.log(`   📤 Step 3: Backend submits (you pay fees)`)
 
   try {
     // ✅ STEP 1: Check balance first
@@ -74,120 +76,123 @@ export async function executeUserPaysDeposit(
     
     console.log(`   ✅ Balance sufficient\n`)
 
-    // ✅ STEP 2: Import and initialize Privacy Cash SDK
-    console.log(`🔐 Step 2: Initializing Privacy Cash SDK...`)
+    // ✅ STEP 2: Request backend to generate ZK proof + unsigned transaction
+    console.log(`🔐 Step 2: Requesting backend to generate Privacy Cash proof...`)
+    console.log(`   Backend will:`)
+    console.log(`   - Initialize Privacy Cash SDK with operator keypair`)
+    console.log(`   - Generate ZK proof for your address`)
+    console.log(`   - Create UNSIGNED transaction with YOU as fee payer`)
     
-    let PrivacyCash
-    try {
-      // @ts-ignore - privacycash module types may vary
-      const pcModule = await import('privacycash')
-      // @ts-ignore - trying different export patterns
-      PrivacyCash = pcModule.PrivacyCash || pcModule.default || (pcModule as any)
-      if (!PrivacyCash) {
-        throw new Error('Could not find PrivacyCash in module')
-      }
-      console.log(`   ✅ SDK imported`)
-    } catch (importErr: any) {
-      throw new Error(`Failed to import Privacy Cash SDK: ${importErr.message}`)
-    }
-
-    // Initialize SDK with USER's wallet (not operator's!)
-    console.log(`   Initializing with your Phantom wallet...`)
-    let privacyCashClient
-    try {
-      privacyCashClient = new PrivacyCash({
-        RPC_url: rpcUrl,
-        owner: wallet,  // USER's wallet adapter from Phantom
-        enableDebug: false,
-      })
-      console.log(`   ✅ SDK initialized with your wallet`)
-    } catch (initErr: any) {
-      throw new Error(`SDK initialization failed: ${initErr.message}`)
-    }
-
-    // ✅ STEP 3: Call SDK.deposit() - this will prompt user to sign in Phantom
-    console.log(`\n💰 Step 3: Generating ZK proof and creating transaction...`)
-    console.log(`   Calling SDK.deposit(${lamports} lamports)...`)
-    console.log(`   This will prompt you to sign in Phantom...`)
-    
-    let depositResult
-    try {
-      // Call SDK deposit - this is where user signs locally in Phantom
-      depositResult = await privacyCashClient.deposit({
-        lamports,
-      })
-      
-      console.log(`   ✅ Proof generated and signed`)
-      console.log(`   ✅ Transaction created and signed`)
-      
-      if (!depositResult || (!(depositResult as any).tx && !(depositResult as any).transaction)) {
-        throw new Error('SDK returned invalid response - no transaction')
-      }
-      
-      const txHash = (depositResult as any).tx || (depositResult as any).transaction
-      console.log(`   ✅ Transaction: ${typeof txHash === 'string' ? txHash.substring(0, 20) + '...' : 'received'}`)
-      
-    } catch (sdkErr: any) {
-      // Check if user rejected in Phantom
-      if (sdkErr.message.includes('rejected') || sdkErr.message.includes('Rejected')) {
-        throw new Error('You rejected the transaction in Phantom. Deposit cancelled.')
-      }
-      if (sdkErr.message.includes('timeout')) {
-        throw new Error('Transaction signing timed out - please try again')
-      }
-      throw new Error(`SDK deposit failed: ${sdkErr.message}`)
-    }
-
-    // ✅ STEP 4: Extract transaction and send to backend for recording
-    console.log(`\n📤 Step 4: Recording deposit with backend...`)
-    
-    const txHash = (depositResult as any).tx || (depositResult as any).transaction
-    const recordPayload = {
+    const preparePayload = {
       linkId,
-      amount: parseFloat(amount),
-      lamports,
+      amount: amount.toString(),
       publicKey,
-      signedTransaction: txHash,
+      lamports,
     }
 
-    try {
-      const recordResponse = await fetch(
-        `${CONFIG.BACKEND_URL}/api/deposit`,
-        {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify(recordPayload),
-        }
-      )
-
-      if (!recordResponse.ok) {
-        const errorData = await recordResponse.json().catch(() => ({}))
-        console.warn('⚠️  Backend recording warning:', errorData.error)
-        // Continue anyway - transaction is already on blockchain
-      } else {
-        const recordData = await recordResponse.json()
-        console.log(`   ✅ Backend recorded`)
+    const prepareResponse = await fetch(
+      `${CONFIG.BACKEND_URL}/api/deposit/prepare`,
+      {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(preparePayload),
       }
-    } catch (recordErr) {
-      console.warn('⚠️  Could not record with backend:', recordErr)
-      // Transaction is on blockchain even if recording fails
+    )
+
+    if (!prepareResponse.ok) {
+      const errorData = await prepareResponse.json().catch(() => ({}))
+      throw new Error(
+        errorData.details || 
+        errorData.error ||
+        `Backend error: ${prepareResponse.status}`
+      )
     }
 
-    // ✅ SUCCESS
-    const explorerUrl = `https://solscan.io/tx/${txHash}`
-    const successMsg = `✅ Deposit successful! ${amount} SOL deposited to Privacy Cash.`
-    console.log(`\n✅ DEPOSIT COMPLETE`)
+    const prepareData = await prepareResponse.json()
+    if (!prepareData.transaction) {
+      throw new Error('Backend did not return unsigned transaction')
+    }
+
+    console.log(`   ✅ ZK proof generated by backend`)
+    console.log(`   ✅ Unsigned transaction created`)
+    console.log(`   ✅ YOU are set as fee payer\n`)
+
+    // ✅ STEP 3: Deserialize transaction and user signs it
+    console.log(`✍️  Step 3: Signing transaction with your wallet...`)
+    console.log(`   Phantom will ask you to approve`)
+    
+    // Import web3 classes
+    const { Transaction } = await import('@solana/web3.js')
+    
+    // Deserialize the unsigned transaction
+    const transactionBuffer = Buffer.from(prepareData.transaction, 'base64')
+    const transaction = Transaction.from(transactionBuffer)
+    
+    // User signs with Phantom (their private key)
+    console.log(`   Waiting for your signature in Phantom...`)
+    let signedTransaction: any
+    try {
+      signedTransaction = await wallet.signTransaction(transaction)
+    } catch (signErr: any) {
+      if (signErr.message?.includes('rejected') || signErr.message?.includes('Rejected')) {
+        throw new Error('You rejected the transaction. Please try again and click "Approve" in Phantom.')
+      }
+      throw signErr
+    }
+
+    // Serialize signed transaction back to base64
+    const signedTxBase64 = signedTransaction.serialize().toString('base64')
+    
+    console.log(`   ✅ Transaction signed by your wallet`)
+    console.log(`   ✅ Your signature applied\n`)
+
+    // ✅ STEP 4: Send signed transaction to backend for submission
+    console.log(`📤 Step 4: Submitting signed transaction to blockchain...`)
+    console.log(`   Backend will submit your signed transaction`)
+    console.log(`   Your wallet will pay all transaction fees`)
+    
+    const submitPayload = {
+      linkId,
+      amount: amount.toString(),
+      publicKey,
+      lamports,
+      signedTransaction: signedTxBase64,
+    }
+
+    const submitResponse = await fetch(
+      `${CONFIG.BACKEND_URL}/api/deposit`,
+      {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(submitPayload),
+      }
+    )
+
+    if (!submitResponse.ok) {
+      const errorData = await submitResponse.json().catch(() => ({}))
+      throw new Error(
+        errorData.details || 
+        errorData.error ||
+        `Backend error: ${submitResponse.status}`
+      )
+    }
+
+    const submitData = await submitResponse.json()
+    
+    console.log(`\n✅ SUCCESS`)
     console.log(`   Amount: ${amount} SOL`)
-    console.log(`   Transaction: ${txHash.substring(0, 20)}...`)
-    console.log(`   Explorer: ${explorerUrl}`)
+    console.log(`   Transaction: ${submitData.tx || submitData.transactionHash}`)
     
-    showSuccess(`${successMsg} View transaction: ${explorerUrl}`)
+    const explorerUrl = `https://solscan.io/tx/${submitData.tx || submitData.transactionHash}`
+    const message = `${amount} SOL successfully deposited to Privacy Cash!`
     
-    return txHash
+    showSuccess(`${message} View on Solscan: ${explorerUrl}`)
+    
+    return submitData.tx || submitData.transactionHash
 
   } catch (error: any) {
     const errorMsg = error.message || 'Deposit failed'
-    console.error(`\n❌ DEPOSIT ERROR:`, errorMsg)
+    console.error(`\n❌ DEPOSIT ERROR: ${errorMsg}`)
     showError(`❌ Deposit failed: ${errorMsg}`)
     throw error
   }
