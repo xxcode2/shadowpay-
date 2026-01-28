@@ -128,26 +128,48 @@ router.post('/prepare', async (req: Request<{}, {}, any>, res: Response) => {
       // Initialize SDK with operator keypair
       // SDK uses this for proof generation, not for user's transaction
       console.log(`   - Initializing Privacy Cash SDK with operator keypair`)
+      console.log(`   - Using RPC: ${rpcUrl.substring(0, 60)}...`)
       const privacyCashClient = initializePrivacyCash(operatorKeypair, rpcUrl, true)
       console.log(`   ✅ SDK initialized`)
 
-      console.log(`   - Generating ZK proof for user: ${publicKey}`)
-      console.log(`   - Amount: ${amountSOL} SOL`)
+      console.log(`\n   - Generating ZK proof for user: ${publicKey}`)
+      console.log(`   - Amount: ${amountSOL} SOL (${lamports} lamports)`)
 
       // SDK generates transaction
       // This transaction will be signed by USER later
       console.log(`   - Calling SDK.deposit()...`)
-      const depositResult = await privacyCashClient.deposit({
-        lamports,
-      })
+      console.log(`   - This will: generate ZK proof, create transaction, relay to indexer`)
+      
+      let depositResult: any
+      try {
+        depositResult = await privacyCashClient.deposit({
+          lamports,
+        })
+        console.log(`   ✅ SDK.deposit() returned successfully`)
+      } catch (depositErr: any) {
+        console.error(`\n❌ SDK.deposit() failed`)
+        console.error(`   Error: ${depositErr.message}`)
+        console.error(`   Stack:`, depositErr.stack?.split('\n').slice(0, 5).join('\n'))
+        
+        // Check if it's an indexer relay error
+        if (depositErr.message.includes('relay') || depositErr.message.includes('indexer')) {
+          console.error(`\n   💡 This looks like a Privacy Cash indexer issue`)
+          console.error(`   Try:`)
+          console.error(`   1. Check Privacy Cash indexer service status`)
+          console.error(`   2. Verify RPC endpoint is working`)
+          console.error(`   3. Try with a different RPC URL (mainnet vs testnet)`)
+        }
+        throw depositErr
+      }
 
       const transactionBase64 = depositResult.tx
       if (!transactionBase64) {
-        throw new Error('SDK did not return transaction')
+        throw new Error('SDK did not return transaction - depositResult.tx is missing')
       }
 
-      console.log(`   ✅ ZK proof generated`)
-      console.log(`   ✅ Transaction created (waiting for user signature)`)
+      console.log(`\n   ✅ ZK proof generated`)
+      console.log(`   ✅ Transaction created (base64 length: ${transactionBase64.length})`)
+      console.log(`   ⏳ Waiting for user signature...`)
 
       return res.status(200).json({
         success: true,
@@ -156,11 +178,25 @@ router.post('/prepare', async (req: Request<{}, {}, any>, res: Response) => {
         message: 'Transaction prepared. Please sign with your wallet.',
       })
     } catch (sdkErr: any) {
-      console.error('❌ SDK Error:', sdkErr.message)
+      console.error('\n❌ SDK Error:', sdkErr.message)
       console.error('❌ Full error:', sdkErr)
+      
+      let errorMessage = 'Failed to generate Privacy Cash transaction'
+      let errorDetails = sdkErr.message || String(sdkErr)
+      
+      // Provide specific guidance based on error
+      if (sdkErr.message.includes('response not ok')) {
+        errorMessage = 'Privacy Cash indexer service error'
+        errorDetails = 'The Privacy Cash indexer is not responding. This might be temporary. Please try again.'
+      } else if (sdkErr.message.includes('network')) {
+        errorMessage = 'Network connectivity error'
+        errorDetails = 'Cannot reach Privacy Cash service. Check your network connection.'
+      }
+      
       return res.status(500).json({
-        error: 'Failed to generate Privacy Cash transaction',
-        details: sdkErr.message || String(sdkErr),
+        error: errorMessage,
+        details: errorDetails,
+        hint: 'Check Railway logs for more details or contact support',
       })
     }
   } catch (error: any) {
