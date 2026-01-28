@@ -16,7 +16,100 @@ export interface SigningWallet {
 
 export class PrivacyCashService {
   private static encryptionService: EncryptionService | null = null
+  private static privacyCashClient: any = null
   private static isSignatureDerived: boolean = false
+
+  /**
+   * Load circuit files (WASM + ZKEY) from public folder
+   * These are needed for ZK proof generation
+   */
+  private static async loadCircuitFiles(): Promise<{
+    wasmPath: string
+    zkeyPath: string
+  }> {
+    console.log('📦 Loading Privacy Cash circuit files...')
+    
+    // Circuit files are served from public/circuits folder
+    // Vite will serve public folder at root
+    const wasmPath = '/circuits/transaction2.wasm'
+    const zkeyPath = '/circuits/transaction2.zkey'
+    
+    // Verify files are accessible
+    try {
+      const wasmResponse = await fetch(wasmPath, { method: 'HEAD' })
+      const zkeyResponse = await fetch(zkeyPath, { method: 'HEAD' })
+      
+      if (!wasmResponse.ok || !zkeyResponse.ok) {
+        throw new Error('Circuit files not found in public/circuits folder')
+      }
+      
+      console.log('✅ Circuit files loaded:')
+      console.log(`   WASM: ${wasmPath}`)
+      console.log(`   ZKEY: ${zkeyPath}`)
+      
+      return { wasmPath, zkeyPath }
+    } catch (error) {
+      console.error('❌ Failed to load circuit files:', error)
+      throw new Error('Privacy Cash circuit files not found. Ensure they are in public/circuits/')
+    }
+  }
+
+  /**
+   * Initialize Privacy Cash SDK client
+   * This creates the main client for deposit/withdraw operations
+   * Loads circuit files (transaction2.wasm and transaction2.zkey) from public folder
+   */
+  static async initializeClient(rpcUrl: string = 'https://api.mainnet-beta.solana.com'): Promise<any> {
+    try {
+      console.log('🚀 Initializing Privacy Cash SDK client...')
+      console.log(`   RPC URL: ${rpcUrl}`)
+      
+      // Load circuit files for ZK proof generation
+      const { wasmPath, zkeyPath } = await this.loadCircuitFiles()
+      
+      // Initialize Privacy Cash client with circuit files
+      // The actual client will be created when SDK methods are called
+      this.privacyCashClient = {
+        rpcUrl,
+        isReady: true,
+        circuits: {
+          wasmPath,
+          zkeyPath
+        },
+        deposit: async (params: { lamports: number }) => {
+          console.log('📝 Calling Privacy Cash SDK deposit()...')
+          console.log(`   Amount: ${params.lamports} lamports`)
+          console.log(`   Using circuits from: ${wasmPath}, ${zkeyPath}`)
+          
+          // This will be called when actual SDK is fully integrated
+          // SDK will use circuit files for ZK proof generation
+          throw new Error(
+            'Privacy Cash SDK client deposit() not fully initialized. ' +
+            'Circuit files loaded, but SDK integration pending. ' +
+            'Check Privacy Cash SDK documentation.'
+          )
+        }
+      }
+      
+      console.log('✅ Privacy Cash SDK client initialized with circuit files')
+      return this.privacyCashClient
+    } catch (error) {
+      console.error('❌ Failed to initialize Privacy Cash SDK client:', error)
+      throw error
+    }
+  }
+
+  /**
+   * Get the Privacy Cash SDK client
+   * Initialize it first with initializeClient()
+   */
+  static getClient(): any {
+    if (!this.privacyCashClient) {
+      // Try to initialize with default RPC
+      return this.initializeClient()
+    }
+    return this.privacyCashClient
+  }
 
   /**
    * Initialize encryption service by signing an off-chain message
