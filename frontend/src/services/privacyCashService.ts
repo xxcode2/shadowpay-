@@ -108,16 +108,40 @@ export class PrivacyCashService {
         throw new Error('Failed to derive UTXO private key')
       }
       
-      // In a full implementation, create a Keypair from the private key
-      // For now, return a mock keypair structure that has the pubkey
+      // Use Privacy Cash SDK to derive the proper public key from the private key
+      // The public key should be the PoseidonHash of the private key (handled by SDK)
+      // If the SDK provides a method to get the pubkey, use it:
+      let pubkey: string
+      
+      try {
+        // Attempt to use SDK's key derivation if available
+        // @ts-ignore - SDK method may not be typed
+        if (this.encryptionService.deriveUtxoPublicKey) {
+          pubkey = this.encryptionService.deriveUtxoPublicKey()
+        } else if (this.encryptionService.getPoseidonHash) {
+          // @ts-ignore
+          pubkey = this.encryptionService.getPoseidonHash(utxoPrivateKey)
+        } else {
+          // Fallback: Use the private key hex representation
+          // NOTE: This is NOT the proper public key - real Privacy Cash SDK handles this
+          throw new Error(
+            'Privacy Cash SDK method for deriving UTXO public key not available. ' +
+            'Please ensure you are using the correct version of the Privacy Cash SDK with pubkey derivation.'
+          )
+        }
+      } catch (sdkErr: any) {
+        // If SDK methods are not available, throw an error instead of using fake data
+        throw new Error(
+          `Cannot derive proper UTXO public key: ${sdkErr.message}. ` +
+          `This is required for Privacy Cash integration. ` +
+          `Please check that the Privacy Cash SDK is properly initialized.`
+        )
+      }
+      
       return {
         privateKey: utxoPrivateKey,
         pubkey: {
-          toString: () => {
-            // This would be PoseidonHash of the private key
-            // For now, return a placeholder
-            return 'utxo_pubkey_' + utxoPrivateKey.slice(0, 16)
-          }
+          toString: () => pubkey
         }
       }
     } catch (error) {

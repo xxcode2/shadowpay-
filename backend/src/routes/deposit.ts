@@ -75,25 +75,25 @@ router.post('/', async (req: Request<{}, {}, any>, res: Response) => {
 
     // ✅ RELAY TO PRIVACY CASH
     // In production, this would call Privacy Cash indexer API
-    // For now, we generate a transaction ID
     console.log(`🔄 Relaying to Privacy Cash...`)
     
     let privacyCashTx: string
     try {
-      // TODO: Call actual Privacy Cash API endpoint
-      // const privacyCashResponse = await fetch('https://api.privacycash.org/deposit', {
-      //   method: 'POST',
-      //   headers: { 'Content-Type': 'application/json' },
-      //   body: JSON.stringify({
-      //     utxo,
-      //     signature: Buffer.from(signature).toString('hex'),
-      //     senderAddress: publicKey,
-      //   })
-      // })
-
-      // For now, generate a mock transaction hash
-      // In production, this comes from Privacy Cash API
-      privacyCashTx = 'PrivacyCash_' + Buffer.from(signature).toString('hex').slice(0, 44)
+      // TODO: Implement actual Privacy Cash API endpoint call
+      // For now, require a mock flag to be explicitly set
+      // This ensures users don't accidentally use fake deposits
+      if (process.env.ALLOW_MOCK_DEPOSITS === 'true') {
+        // DANGER: Mock mode only for development/testing
+        console.warn('⚠️  WARNING: Using mock deposits! This is for development only.')
+        privacyCashTx = 'PrivacyCash_' + Buffer.from(signature).toString('hex').slice(0, 44)
+      } else {
+        // Production mode: require real Privacy Cash integration
+        throw new Error(
+          'Privacy Cash API integration required. ' +
+          'UTXO relaying to Privacy Cash pool is not yet implemented. ' +
+          'Please implement the actual Privacy Cash API call at https://api.privacycash.org/deposit'
+        )
+      }
       
       console.log(`✅ Relayed to Privacy Cash`)
       console.log(`   Privacy Cash TX: ${privacyCashTx}`)

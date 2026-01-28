@@ -438,25 +438,38 @@
       });
     }
 
-    function connectWallet() {
+    async function connectWallet() {
       if (walletState.isProcessing) return;
       
       walletState.isProcessing = true;
-      showLoadingModal('Connecting to wallet...');
+      showLoadingModal('Connecting to Phantom wallet...');
 
-      setTimeout(() => {
-        const mockAddress = generateMockAddress();
+      try {
+        // Check if Phantom wallet is available
+        const provider = window.phantom?.solana || window.solana;
+        if (!provider) {
+          throw new Error('Phantom wallet not installed. Please install Phantom from https://phantom.app');
+        }
+
+        // Request wallet connection
+        const response = await provider.connect();
         walletState.connected = true;
-        walletState.address = mockAddress;
+        walletState.address = response.publicKey.toString();
+        walletState.wallet = provider;
         walletState.isProcessing = false;
 
         document.getElementById('connect-wallet-btn').classList.add('hidden');
         document.getElementById('wallet-connected').classList.remove('hidden');
-        document.getElementById('wallet-address').textContent = formatAddress(mockAddress);
+        document.getElementById('wallet-address').textContent = formatAddress(walletState.address);
 
         hideLoadingModal();
-        showNotification('Wallet connected successfully!');
-      }, 1500);
+        showNotification('✅ Phantom wallet connected successfully!');
+      } catch (error) {
+        walletState.isProcessing = false;
+        hideLoadingModal();
+        showErrorModal(`❌ Wallet connection failed: ${error.message}`);
+        console.error('Wallet connection error:', error);
+      }
     }
 
     function disconnectWallet() {
@@ -467,11 +480,11 @@
       document.getElementById('wallet-connected').classList.add('hidden');
     }
 
-    function handleCreateLink(event) {
+    async function handleCreateLink(event) {
       event.preventDefault();
 
       if (!walletState.connected) {
-        showErrorModal('Please connect your wallet first');
+        showErrorModal('❌ Please connect your Phantom wallet first');
         return;
       }
 
@@ -481,22 +494,82 @@
       const memo = document.getElementById('memo-input').value;
 
       if (!amount || parseFloat(amount) <= 0) {
-        showErrorModal('Please enter a valid amount');
+        showErrorModal('❌ Please enter a valid amount');
         return;
       }
 
       walletState.isProcessing = true;
-      showLoadingModal('Depositing SOL to Privacy Cash pool...<br><small class="text-gray-500">Backend processing with shielded transaction</small>');
+      showLoadingModal('🔐 Creating payment link...<br><small class="text-gray-500">Preparing Privacy Cash deposit</small>');
 
-      setTimeout(() => {
-        const linkId = generateLinkId();
+      try {
+        // Call the real backend API to create a link
+        const BACKEND_URL = 'https://shadowpay-backend-production.up.railway.app' || 'http://localhost:3000';
+        
+        const linkResponse = await fetch(`${BACKEND_URL}/api/create-link`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            amount: parseFloat(amount),
+            memo: memo || '',
+            assetType: 'SOL'
+          })
+        });
+
+        if (!linkResponse.ok) {
+          const err = await linkResponse.json();
+          throw new Error(err.error || 'Failed to create link');
+        }
+
+        const linkData = await linkResponse.json();
+        const linkId = linkData.id;
+
+        // Now deposit to the link using Privacy Cash SDK
+        showLoadingModal('💳 Requesting signature from Phantom...<br><small class="text-gray-500">Sign the transaction</small>');
+
+        // Import the deposit flow (assumes it's available globally)
+        // In production, use proper module imports
+        const depositFlow = window.depositFlow || {};
+        
+        if (depositFlow.executeRealDeposit) {
+          await depositFlow.executeRealDeposit(
+            {
+              linkId: linkId,
+              amount: amount,
+              publicKey: walletState.address
+            },
+            walletState.wallet
+          );
+        } else {
+          // Fallback: show link and wait for deposit
+          const linkUrl = `https://shadowpay.app/claim/${linkId}`;
+          transactionHistory.sent.unshift({
+            id: Date.now().toString(),
+            amount: parseFloat(amount),
+            memo: memo || 'No memo',
+            status: 'pending',
+            date: Date.now(),
+            linkId: linkId
+          });
+
+          walletState.isProcessing = false;
+          hideLoadingModal();
+
+          document.getElementById('generated-link').value = linkUrl;
+          document.getElementById('link-result').classList.remove('hidden');
+          document.getElementById('success-message').textContent = `✅ Payment link created! Share this link with the recipient.`;
+          showSuccessModal();
+
+          document.getElementById('create-form').reset();
+          return;
+        }
+
         const linkUrl = `https://shadowpay.app/claim/${linkId}`;
 
         transactionHistory.sent.unshift({
           id: Date.now().toString(),
           amount: parseFloat(amount),
           memo: memo || 'No memo',
-          status: 'pending',
+          status: 'confirmed',
           date: Date.now(),
           linkId: linkId
         });
@@ -506,73 +579,138 @@
 
         document.getElementById('generated-link').value = linkUrl;
         document.getElementById('link-result').classList.remove('hidden');
-        document.getElementById('success-message').textContent = `Successfully deposited ${amount} SOL! Share this link with the recipient.`;
+        document.getElementById('success-message').textContent = `✅ Successfully deposited ${amount} SOL to Privacy Cash! Share this link with the recipient.`;
         showSuccessModal();
 
         document.getElementById('create-form').reset();
-      }, 2500);
+      } catch (error) {
+        walletState.isProcessing = false;
+        hideLoadingModal();
+        showErrorModal(`❌ Deposit failed: ${error.message}`);
+        console.error('Deposit error:', error);
+      }
     }
 
-    function handleCheckLink(event) {
+    async function handleCheckLink(event) {
       event.preventDefault();
 
       const linkId = document.getElementById('link-id-input').value.trim();
 
       if (!linkId) {
-        showErrorModal('Please enter a payment link ID');
+        showErrorModal('❌ Please enter a payment link ID');
         return;
       }
 
-      showLoadingModal('Checking link validity...');
+      showLoadingModal('🔍 Checking link validity...');
 
-      setTimeout(() => {
+      try {
+        const BACKEND_URL = 'https://shadowpay-backend-production.up.railway.app' || 'http://localhost:3000';
+        
+        const response = await fetch(`${BACKEND_URL}/api/link/${linkId}`, {
+          method: 'GET',
+          headers: { 'Content-Type': 'application/json' }
+        });
+
+        if (!response.ok) {
+          const err = await response.json();
+          throw new Error(err.error || 'Link not found or expired');
+        }
+
+        const linkData = await response.json();
+        
+        if (linkData.claimed) {
+          throw new Error('This link has already been claimed');
+        }
+
+        const amount = (linkData.amount / 1e9).toFixed(9); // Convert lamports to SOL
+        const memo = linkData.memo || 'Payment';
+        const expiresAt = new Date(linkData.expiresAt || Date.now() + 24 * 60 * 60 * 1000);
+        const now = new Date();
+        const diffMs = expiresAt - now;
+        const diffHours = Math.floor(diffMs / (1000 * 60 * 60));
+        const diffMins = Math.floor((diffMs % (1000 * 60 * 60)) / (1000 * 60));
+        
         hideLoadingModal();
 
-        const success = Math.random() > 0.2;
-
-        if (success) {
-          const amount = (Math.random() * 5 + 0.5).toFixed(3);
-          const memo = ['Payment for services', 'Tip for great work', 'Freelance payment', 'Gift'][Math.floor(Math.random() * 4)];
-          
-          document.getElementById('preview-amount').textContent = amount;
-          document.getElementById('preview-memo').textContent = memo;
-          document.getElementById('preview-expiry').textContent = '23h 45m';
-          document.getElementById('preview-card').classList.remove('hidden');
-          
-          document.getElementById('preview-card').dataset.amount = amount;
-          document.getElementById('preview-card').dataset.memo = memo;
-        } else {
-          showErrorModal('Invalid link ID or link has expired');
-        }
-      }, 1500);
+        document.getElementById('preview-amount').textContent = amount;
+        document.getElementById('preview-memo').textContent = memo;
+        document.getElementById('preview-expiry').textContent = `${diffHours}h ${diffMins}m`;
+        document.getElementById('preview-card').classList.remove('hidden');
+        
+        document.getElementById('preview-card').dataset.amount = amount;
+        document.getElementById('preview-card').dataset.memo = memo;
+        document.getElementById('preview-card').dataset.linkId = linkId;
+      } catch (error) {
+        hideLoadingModal();
+        showErrorModal(`❌ ${error.message}`);
+        console.error('Check link error:', error);
+      }
     }
 
-    function handleConfirmClaim() {
+    async function handleConfirmClaim() {
       if (!walletState.connected) {
-        showErrorModal('Please connect your wallet first');
+        showErrorModal('❌ Please connect your Phantom wallet first');
         return;
       }
 
+      if (walletState.isProcessing) return;
+
+      const linkId = document.getElementById('preview-card').dataset.linkId;
       const amount = document.getElementById('preview-card').dataset.amount;
-      const memo = document.getElementById('preview-card').dataset.memo;
 
-      showLoadingModal('Processing claim...<br><small class="text-gray-500">Backend executing private withdrawal</small>');
+      walletState.isProcessing = true;
+      showLoadingModal('🔐 Executing withdrawal...<br><small class="text-gray-500">Requesting signature from Phantom</small>');
 
-      setTimeout(() => {
+      try {
+        // Import the claim link flow (assumes it's available globally)
+        const claimFlow = window.claimFlow || {};
+        
+        if (claimFlow.executeClaimLink) {
+          await claimFlow.executeClaimLink({
+            linkId: linkId,
+            recipientAddress: walletState.address
+          });
+        } else {
+          // Fallback: direct API call
+          const BACKEND_URL = 'https://shadowpay-backend-production.up.railway.app' || 'http://localhost:3000';
+          
+          const claimResponse = await fetch(`${BACKEND_URL}/api/claim-link`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              linkId: linkId,
+              recipientAddress: walletState.address
+            })
+          });
+
+          if (!claimResponse.ok) {
+            const err = await claimResponse.json();
+            throw new Error(err.error || 'Failed to claim link');
+          }
+
+          const claimData = await claimResponse.json();
+        }
+
         transactionHistory.received.unshift({
           id: Date.now().toString(),
           amount: parseFloat(amount),
-          memo: memo,
+          memo: document.getElementById('preview-card').dataset.memo,
           date: Date.now()
         });
 
+        walletState.isProcessing = false;
         hideLoadingModal();
         document.getElementById('preview-card').classList.add('hidden');
         document.getElementById('link-result').classList.add('hidden');
-        document.getElementById('success-message').textContent = `Successfully claimed ${amount} SOL! Funds sent to your wallet privately.`;
+        document.getElementById('success-message').textContent = `✅ Successfully claimed ${amount} SOL! Funds sent to your wallet.`;
         showSuccessModal();
         document.getElementById('claim-form').reset();
-      }, 2500);
+      } catch (error) {
+        walletState.isProcessing = false;
+        hideLoadingModal();
+        showErrorModal(`❌ Claim failed: ${error.message}`);
+        console.error('Claim error:', error);
+      }
     }
 
     function showSuccessModal() {
@@ -618,15 +756,6 @@
       }).catch(() => {
         showNotification('Failed to copy link');
       });
-    }
-
-    function generateMockAddress() {
-      const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz123456789';
-      let address = '';
-      for (let i = 0; i < 44; i++) {
-        address += chars.charAt(Math.floor(Math.random() * chars.length));
-      }
-      return address;
     }
 
     function formatAddress(address) {
