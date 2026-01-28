@@ -58,18 +58,22 @@ router.post('/prepare', async (req: Request<{}, {}, any>, res: Response) => {
 
     // ✅ VALIDATE INPUT
     if (!linkId || typeof linkId !== 'string') {
+      console.error('❌ Missing linkId')
       return res.status(400).json({ error: 'linkId required' })
     }
 
     if (!publicKey || typeof publicKey !== 'string') {
+      console.error('❌ Missing publicKey')
       return res.status(400).json({ error: 'publicKey required' })
     }
 
     if (typeof amount !== 'string' && typeof amount !== 'number') {
+      console.error('❌ Missing amount')
       return res.status(400).json({ error: 'amount required' })
     }
 
     if (typeof lamports !== 'number') {
+      console.error('❌ Missing lamports')
       return res.status(400).json({ error: 'lamports required' })
     }
 
@@ -77,6 +81,7 @@ router.post('/prepare', async (req: Request<{}, {}, any>, res: Response) => {
     try {
       new PublicKey(publicKey)
     } catch {
+      console.error('❌ Invalid publicKey format')
       return res.status(400).json({ error: 'Invalid publicKey format' })
     }
 
@@ -86,10 +91,12 @@ router.post('/prepare', async (req: Request<{}, {}, any>, res: Response) => {
     })
 
     if (!link) {
+      console.error(`❌ Link not found: ${linkId}`)
       return res.status(404).json({ error: 'Link not found' })
     }
 
     if (link.depositTx && link.depositTx !== '') {
+      console.error(`❌ Deposit already recorded: ${linkId}`)
       return res.status(400).json({ error: 'Deposit already recorded for this link' })
     }
 
@@ -98,21 +105,38 @@ router.post('/prepare', async (req: Request<{}, {}, any>, res: Response) => {
     // ✅ GENERATE ZK PROOF + TRANSACTION WITH SDK
     console.log(`\n🔐 Generating ZK proof with Privacy Cash SDK...`)
     
+    // Step 1: Load and validate operator keypair
+    let operatorKeypair: any
     try {
-      // Get operator keypair (for SDK initialization - NOT for signing user tx)
-      const operatorKeypair = loadKeypairFromEnv()
-      const rpcUrl = process.env.RPC_URL || 'https://api.mainnet-beta.solana.com'
+      console.log(`   - Loading operator keypair from OPERATOR_SECRET_KEY env...`)
+      operatorKeypair = loadKeypairFromEnv()
+      console.log(`   ✅ Operator keypair loaded successfully`)
+      console.log(`   📍 Operator wallet: ${operatorKeypair.publicKey.toString()}`)
+    } catch (keypairErr: any) {
+      console.error(`\n❌ KEYPAIR LOADING FAILED`)
+      console.error(`   Error: ${keypairErr.message}`)
+      return res.status(400).json({
+        error: 'Invalid OPERATOR_SECRET_KEY configuration',
+        details: keypairErr.message,
+        hint: 'Check that OPERATOR_SECRET_KEY is properly set on Railway. See QUICK_FIX.md for help.',
+      })
+    }
+
+    try {
+      const rpcUrl = process.env.RPC_URL || 'https://mainnet.helius-rpc.com/?api-key=c455719c-354b-4a44-98d4-27f8a18aa79c'
 
       // Initialize SDK with operator keypair
       // SDK uses this for proof generation, not for user's transaction
       console.log(`   - Initializing Privacy Cash SDK with operator keypair`)
       const privacyCashClient = initializePrivacyCash(operatorKeypair, rpcUrl, true)
+      console.log(`   ✅ SDK initialized`)
 
       console.log(`   - Generating ZK proof for user: ${publicKey}`)
       console.log(`   - Amount: ${amountSOL} SOL`)
 
       // SDK generates transaction
       // This transaction will be signed by USER later
+      console.log(`   - Calling SDK.deposit()...`)
       const depositResult = await privacyCashClient.deposit({
         lamports,
       })
@@ -125,7 +149,7 @@ router.post('/prepare', async (req: Request<{}, {}, any>, res: Response) => {
       console.log(`   ✅ ZK proof generated`)
       console.log(`   ✅ Transaction created (waiting for user signature)`)
 
-      return res.json({
+      return res.status(200).json({
         success: true,
         transaction: transactionBase64,
         amount: amountSOL,
@@ -133,15 +157,18 @@ router.post('/prepare', async (req: Request<{}, {}, any>, res: Response) => {
       })
     } catch (sdkErr: any) {
       console.error('❌ SDK Error:', sdkErr.message)
+      console.error('❌ Full error:', sdkErr)
       return res.status(500).json({
         error: 'Failed to generate Privacy Cash transaction',
-        details: sdkErr.message,
+        details: sdkErr.message || String(sdkErr),
       })
     }
   } catch (error: any) {
     console.error('❌ Prepare deposit error:', error)
+    console.error('❌ Full error:', error)
     return res.status(500).json({
       error: error instanceof Error ? error.message : 'Failed to prepare deposit',
+      details: String(error),
     })
   }
 })
@@ -294,11 +321,13 @@ router.post('/', async (req: Request<{}, {}, any>, res: Response) => {
     })
   } catch (error: any) {
     console.error('\n❌ DEPOSIT FAILED:', error.message)
+    console.error('❌ Full error:', error)
     const duration = Date.now() - startTime
     console.log(`⏱️  Duration: ${duration}ms`)
     
     return res.status(500).json({
       error: error instanceof Error ? error.message : 'Failed to finalize deposit',
+      details: String(error),
     })
   }
 })

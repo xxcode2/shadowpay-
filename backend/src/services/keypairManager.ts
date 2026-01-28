@@ -14,7 +14,10 @@ export function generateKeypair(): Keypair {
 
 /**
  * Load keypair from environment variable (OPERATOR_SECRET_KEY)
- * Expected format: JSON array of 64 bytes [1,2,3,...,64]
+ * Expected formats:
+ *   - JSON array: [1,2,3,...,64]
+ *   - Comma-separated: 1,2,3,...,64
+ *   - Comma-separated with spaces: 1, 2, 3,..., 64
  */
 export function loadKeypairFromEnv(secretKeyJson?: string): Keypair {
   const envSecret = secretKeyJson || process.env.OPERATOR_SECRET_KEY
@@ -25,18 +28,50 @@ export function loadKeypairFromEnv(secretKeyJson?: string): Keypair {
   }
 
   try {
-    const secretKeyArray = JSON.parse(envSecret)
+    let secretKeyArray: number[]
+
+    const trimmed = envSecret.trim()
+
+    // Try JSON parsing first
+    if (trimmed.startsWith('[') && trimmed.endsWith(']')) {
+      secretKeyArray = JSON.parse(trimmed)
+    } else {
+      // Parse as comma-separated numbers (handles spaces)
+      secretKeyArray = trimmed
+        .split(',')
+        .map((num) => {
+          const parsed = parseInt(num.trim(), 10)
+          if (isNaN(parsed)) {
+            throw new Error(`Invalid number: "${num.trim()}"`)
+          }
+          if (parsed < 0 || parsed > 255) {
+            throw new Error(`Number out of range (0-255): ${parsed}`)
+          }
+          return parsed
+        })
+    }
+
+    if (!Array.isArray(secretKeyArray)) {
+      throw new Error('OPERATOR_SECRET_KEY must be an array or comma-separated numbers')
+    }
+
     const secretKey = new Uint8Array(secretKeyArray)
-    
+
     if (secretKey.length !== 64) {
       throw new Error(`Invalid secret key length: ${secretKey.length}. Expected 64 bytes.`)
     }
 
     const keypair = Keypair.fromSecretKey(secretKey)
     return keypair
-  } catch (err) {
-    console.error('Failed to parse OPERATOR_SECRET_KEY:', err)
-    console.error('Expected format: JSON array of 64 bytes')
+  } catch (err: any) {
+    console.error('❌ Failed to parse OPERATOR_SECRET_KEY')
+    console.error('   Error:', err.message)
+    console.error('   Value length:', (envSecret || '').length, 'characters')
+    console.error('\n✅ Expected formats:')
+    console.error('   Option 1 (JSON array): [200,228,213,157,...,188]')
+    console.error('   Option 2 (comma-separated): 200,228,213,157,...,188')
+    console.error('   Option 3 (comma+spaces): 200, 228, 213, 157,..., 188')
+    console.error('\n⚠️  Your value:', envSecret?.substring(0, 100) + (envSecret && envSecret.length > 100 ? '...' : ''))
     throw err
   }
 }
