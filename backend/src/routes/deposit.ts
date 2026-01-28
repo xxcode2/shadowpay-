@@ -1,7 +1,8 @@
 import { Router, Request, Response } from 'express'
 import { PublicKey } from '@solana/web3.js'
 import prisma from '../lib/prisma.js'
-import { parseOperatorKeypair, initializePrivacyCash } from '../services/privacyCash.js'
+import { loadKeypairFromEnv, validateOperatorBalance, canAffordTransaction } from '../services/keypairManager.js'
+import { initializePrivacyCash } from '../services/privacyCash.js'
 
 const router = Router()
 
@@ -99,11 +100,7 @@ router.post('/prepare', async (req: Request<{}, {}, any>, res: Response) => {
     
     try {
       // Get operator keypair (for SDK initialization - NOT for signing user tx)
-      if (!process.env.OPERATOR_SECRET_KEY) {
-        throw new Error('OPERATOR_SECRET_KEY not configured')
-      }
-
-      const operatorKeypair = parseOperatorKeypair(process.env.OPERATOR_SECRET_KEY)
+      const operatorKeypair = loadKeypairFromEnv()
       const rpcUrl = process.env.RPC_URL || 'https://api.mainnet-beta.solana.com'
 
       // Initialize SDK with operator keypair
