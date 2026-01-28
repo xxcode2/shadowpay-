@@ -48,25 +48,13 @@ export async function executeRealDeposit(
       throw new Error('Failed to derive encryption key: User rejected signature')
     }
 
-    // ✅ STEP 2: Use Privacy Cash SDK to create shielded deposit
-    console.log('🔐 Step 2: Creating shielded deposit transaction with Privacy Cash SDK...')
+    // ✅ STEP 2: Create shielded deposit transaction
+    console.log('🔐 Step 2: Creating shielded deposit transaction...')
     
     let transactionSignature: string
     try {
-      // Try to use Privacy Cash SDK
-      if (!window.PrivacyCash) {
-        // Fallback: If SDK not available, dynamically import
-        try {
-          // Use dynamic import
-          const pcModule = await import('privacycash-sdk')
-          console.log('   📦 Privacy Cash SDK loaded dynamically')
-        } catch (e) {
-          console.warn('   ⚠️ Privacy Cash SDK not available, using direct transfer')
-        }
-      }
-
-      // Build transaction using Privacy Cash SDK
-      // The SDK handles all encryption and contract interactions
+      // Transfer directly to Privacy Cash pool address
+      // The pool contract handles all encryption and privacy operations
       console.log(`   ℹ️ Building transaction to deposit ${amount} SOL to privacy pool...`)
       
       // Privacy Cash pool address from config
