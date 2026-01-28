@@ -24,10 +24,20 @@ async function relayToPrivacyCash(payload: {
   const PRIVACY_CASH_API = process.env.PRIVACY_CASH_API_URL || 'https://api.privacycash.org/deposit'
   const API_KEY = process.env.PRIVACY_CASH_API_KEY
   
+  // Check if we have API credentials
   if (!API_KEY) {
+    // Allow fallback to mock for development only
+    if (process.env.ALLOW_MOCK_DEPOSITS === 'true') {
+      console.warn('⚠️  ALLOW_MOCK_DEPOSITS=true: Generating mock Privacy Cash TX')
+      return {
+        transactionHash: 'PrivacyCash_dev_' + crypto.randomBytes(16).toString('hex'),
+      }
+    }
+    
     throw new Error(
       'PRIVACY_CASH_API_KEY environment variable not set. ' +
-      'Cannot relay to Privacy Cash without credentials.'
+      'Cannot relay to Privacy Cash without credentials. ' +
+      'For development only: Set ALLOW_MOCK_DEPOSITS=true'
     )
   }
 
