@@ -323,6 +323,32 @@ router.post('/prepare', async (req: Request<{}, {}, any>, res: Response) => {
       })
     }
 
+    // ✅ Check operator wallet balance
+    console.log(`\n💰 STEP 3.5: Checking operator wallet balance...`)
+    try {
+      const operatorBalance = await connection.getBalance(operatorKeypair.publicKey)
+      const operatorBalanceSOL = operatorBalance / 1_000_000_000
+      console.log(`   Operator balance: ${operatorBalanceSOL} SOL`)
+      
+      if (operatorBalance === 0) {
+        console.error(`❌ OPERATOR WALLET HAS ZERO BALANCE`)
+        return res.status(500).json({
+          error: 'Operator wallet has insufficient balance',
+          details: 'Operator needs some SOL to generate proofs',
+          operator_wallet: operatorKeypair.publicKey.toBase58(),
+          balance: operatorBalanceSOL,
+          minimum_required: 0.01,
+        })
+      } else if (operatorBalanceSOL < 0.001) {
+        console.warn(`⚠️  WARNING: Operator balance very low: ${operatorBalanceSOL} SOL`)
+      } else {
+        console.log(`✅ Operator balance sufficient`)
+      }
+    } catch (balErr: any) {
+      console.error(`⚠️  Could not check balance: ${balErr.message}`)
+      // Continue anyway, might be a temporary issue
+    }
+
     // ✅ Try importing Privacy Cash SDK
     console.log(`\n🔮 STEP 4: Initializing Privacy Cash SDK...`)
     
@@ -364,9 +390,17 @@ router.post('/prepare', async (req: Request<{}, {}, any>, res: Response) => {
     let depositResult: any
     try {
       console.log(`   Executing SDK deposit...`)
-      depositResult = await privacyCashClient.deposit({
+      
+      // Wrap in timeout to catch hanging requests
+      const timeoutPromise = new Promise((_, reject) => 
+        setTimeout(() => reject(new Error('SDK deposit call timed out after 30 seconds')), 30000)
+      )
+      
+      const depositPromise = privacyCashClient.deposit({
         lamports,
       })
+      
+      depositResult = await Promise.race([depositPromise, timeoutPromise])
       
       console.log(`✅ SDK.deposit() returned successfully`)
       console.log(`   Response type: ${typeof depositResult}`)
@@ -375,8 +409,8 @@ router.post('/prepare', async (req: Request<{}, {}, any>, res: Response) => {
       
       if (!depositResult || (!(depositResult as any).tx && !(depositResult as any).transaction)) {
         console.error(`❌ INVALID SDK RESPONSE`)
-        console.error(`   Response: ${JSON.stringify(depositResult).substring(0, 200)}`)
-        throw new Error('SDK returned invalid transaction structure')
+        console.error(`   Response was: ${JSON.stringify(depositResult).substring(0, 300)}`)
+        throw new Error('SDK returned invalid transaction structure - missing tx or transaction field')
       }
       
       console.log(`✅ SDK response contains valid transaction`)
@@ -384,13 +418,38 @@ router.post('/prepare', async (req: Request<{}, {}, any>, res: Response) => {
       console.error(`❌ SDK DEPOSIT CALL FAILED`)
       console.error(`   Error name: ${depositErr.name}`)
       console.error(`   Error message: ${depositErr.message}`)
+      console.error(`   Error string: ${String(depositErr)}`)
+      
+      // Try to extract more info
+      if (depositErr.response) {
+        console.error(`   HTTP Status: ${depositErr.response.status}`)
+        console.error(`   HTTP Data: ${JSON.stringify(depositErr.response.data)}`)
+      }
+      
+      if (depositErr.statusCode) {
+        console.error(`   Status code: ${depositErr.statusCode}`)
+      }
+      
       console.error(`   Stack: ${depositErr.stack}`)
-      console.error(`   Full error: ${JSON.stringify(depositErr, null, 2)}`)
+      console.error(`   Full error object keys: ${Object.keys(depositErr).join(', ')}`)
+      
+      // Provide helpful error message
+      let userMessage = 'Failed to generate deposit proof'
+      let suggestion = 'Check backend logs for details'
+      
+      if (depositErr.message.includes('response not ok')) {
+        suggestion = 'RPC endpoint or Privacy Cash API might be temporarily unavailable'
+      } else if (depositErr.message.includes('timeout')) {
+        suggestion = 'Request took too long - network might be slow'
+      } else if (depositErr.message.includes('network')) {
+        suggestion = 'Network connection issue - please try again'
+      }
       
       return res.status(500).json({
-        error: 'Failed to generate deposit proof',
+        error: userMessage,
         details: depositErr.message,
         error_type: depositErr.constructor.name,
+        suggestion: suggestion,
       })
     }
 
