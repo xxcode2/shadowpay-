@@ -38,6 +38,38 @@ interface DepositRecordRequest {
 }
 
 /**
+ * DEBUG: Health check for deposit service
+ */
+router.get('/health', async (req: Request, res: Response) => {
+  try {
+    console.log(`\n🏥 DEPOSIT SERVICE HEALTH CHECK`)
+    
+    // Check operator keypair
+    let operatorKeyOk = false
+    try {
+      loadKeypairFromEnv()
+      operatorKeyOk = true
+      console.log(`   ✅ Operator keypair loaded`)
+    } catch (err: any) {
+      console.error(`   ❌ Operator keypair issue:`, err.message)
+    }
+
+    return res.status(200).json({
+      status: 'ok',
+      service: 'deposit',
+      operatorKeyOk,
+      rpcUrl: (process.env.RPC_URL || 'Using default').substring(0, 50) + '...',
+    })
+  } catch (error: any) {
+    console.error(`❌ Health check failed:`, error)
+    return res.status(500).json({
+      status: 'error',
+      error: error.message,
+    })
+  }
+})
+
+/**
  * ✅ ENDPOINT 1: Prepare deposit (generate proof, create transaction for user to sign)
  */
 router.post('/prepare', async (req: Request<{}, {}, any>, res: Response) => {
