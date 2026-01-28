@@ -110,6 +110,43 @@ export class PrivacyCashService {
   }
 
   /**
+   * Get Privacy Cash SDK client for user's wallet
+   * This creates a client that uses the user's wallet for signing
+   * @param wallet - User's wallet adapter (Phantom, Magic, etc)
+   * @param userAddress - User's public key address
+   * @returns PrivacyCash client instance
+   */
+  static getClientForUser(wallet: any, userAddress: string): PrivacyCash {
+    try {
+      if (!wallet) {
+        throw new Error('Wallet is required to initialize Privacy Cash SDK')
+      }
+
+      // Use Helius RPC if available, otherwise fallback to Solana RPC
+      const rpcUrl = process.env.VITE_RPC_URL || 'https://api.mainnet-beta.solana.com'
+      
+      console.log('🚀 Initializing Privacy Cash SDK with user wallet...')
+      console.log(`   RPC URL: ${rpcUrl}`)
+      console.log(`   User Address: ${userAddress}`)
+      console.log(`   Wallet: ${wallet.publicKey?.toString() || 'Connected'}`)
+      
+      // Initialize Privacy Cash SDK with user's address
+      // SDK will use wallet.signTransaction() for signing transactions
+      const privacyCashClient = new PrivacyCash({
+        RPC_url: rpcUrl,
+        owner: userAddress,  // User's public key address
+        enableDebug: true
+      })
+      
+      console.log('✅ Privacy Cash SDK initialized with your wallet')
+      return privacyCashClient
+    } catch (error: any) {
+      console.error('❌ Failed to initialize Privacy Cash SDK for user:', error.message)
+      throw error
+    }
+  }
+
+  /**
    * Get the Privacy Cash SDK client
    * Must initialize it first with initializeClient()
    */

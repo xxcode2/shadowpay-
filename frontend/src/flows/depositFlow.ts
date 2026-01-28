@@ -1,5 +1,6 @@
 import { CONFIG } from '../config'
 import { showError, showSuccess } from '../utils/notificationUtils'
+import { PrivacyCashService } from '../services/privacyCashService'
 
 export interface DepositRequest {
   linkId: string
@@ -8,18 +9,19 @@ export interface DepositRequest {
 }
 
 /**
- * ✅ PRIVACY CASH SDK DEPOSIT FLOW - BACKEND RELAY
+ * ✅ PRIVACY CASH SDK DEPOSIT FLOW - USER SIGNS
  * 
- * Flow (Using Privacy Cash SDK on Backend):
- * 1. Frontend: Send deposit request to backend (amount + user address)
- * 2. Backend: Initialize Privacy Cash SDK with operator keypair
- * 3. Backend: Call SDK.deposit({ lamports })
- * 4. Backend: Relay signed transaction to Privacy Cash relayer API
- * 5. Backend: Record in database
+ * Flow (Using Privacy Cash SDK with User's Wallet):
+ * 1. Frontend: Initialize Privacy Cash SDK with USER's wallet adapter
+ * 2. Frontend: Call SDK.deposit({ lamports })
+ * 3. SDK handles: ZK proof generation, encrypted UTXOs, USER signs transaction
+ * 4. Frontend: Gets signed transaction from SDK
+ * 5. Frontend: Send signed transaction to backend for relay
+ * 6. Backend: Relay to Privacy Cash relayer API
+ * 7. Backend: Record in database
  * 
- * Key: Backend handles all crypto (ZK proof, encryption, signing)
- * Frontend just sends request and shows status
- * Backend relays signed transaction to Privacy Cash relayer
+ * Key: USER's wallet signs the deposit (not operator!)
+ * SDK handles all crypto with user's signing wallet
  */
 export async function executeRealDeposit(
   request: DepositRequest,
@@ -34,35 +36,57 @@ export async function executeRealDeposit(
   console.log(`   📤 Step 3: Backend relays to Privacy Cash`)
 
   try {
-    // ✅ STEP 1: User signs wallet message (for identity verification)
-    console.log('🔐 Step 1: Requesting wallet signature...')
+    // ✅ STEP 1: Initialize Privacy Cash SDK with USER's wallet
+    console.log('📋 Step 1: Initializing Privacy Cash SDK with your wallet...')
+    console.log(`   Amount: ${amount} SOL (${lamports} lamports)`)
     
-    let signature: Uint8Array | undefined
+    let privacyCashClient: any
     try {
-      // Request user to sign a message for verification
-      const message = new TextEncoder().encode(`Privacy Cash Deposit - ${linkId}`)
-      signature = await wallet.signMessage(message)
-      console.log(`   ✅ Wallet signature obtained`)
-    } catch (signErr: any) {
-      if (signErr.message?.toLowerCase().includes('user rejected')) {
-        throw new Error('User rejected wallet signature. Please try again.')
-      }
-      console.warn('⚠️  Signature optional for some wallets, continuing...')
+      // Initialize SDK with USER's wallet (not operator!)
+      // The SDK will use wallet.signTransaction() for signing
+      privacyCashClient = PrivacyCashService.getClientForUser(wallet, publicKey)
+      console.log(`   ✅ SDK initialized with your wallet`)
+    } catch (initError: any) {
+      throw new Error('Failed to initialize Privacy Cash SDK: ' + initError.message)
     }
 
-    // ✅ STEP 2: Send deposit request to backend
-    console.log('📨 Step 2: Sending deposit request to backend...')
-    console.log(`   Amount: ${amount} SOL (${lamports} lamports)`)
-    console.log(`   User: ${publicKey}`)
+    // ✅ STEP 2: User's wallet signs the deposit transaction via SDK
+    console.log('🔐 Step 2: Your wallet will sign the deposit transaction...')
+    console.log(`   - Generating ZK proof`)
+    console.log(`   - Creating encrypted UTXOs`)
+    console.log(`   - Waiting for your wallet signature...`)
+    
+    let depositResult: any
+    try {
+      // Call Privacy Cash SDK deposit with user's wallet
+      // This will trigger wallet signature request (Phantom, Magic, etc)
+      depositResult = await privacyCashClient.deposit({
+        lamports,
+      })
+      console.log(`   ✅ Transaction signed by YOUR wallet`)
+    } catch (sdkErr: any) {
+      if (sdkErr.message?.toLowerCase().includes('user rejected')) {
+        throw new Error('You rejected the wallet signature. Please try again.')
+      }
+      throw new Error('Privacy Cash SDK deposit failed: ' + sdkErr.message)
+    }
+
+    const signedTransaction = depositResult.tx
+    if (!signedTransaction) {
+      throw new Error('SDK did not return signed transaction')
+    }
+
+    // ✅ STEP 3: Send signed transaction to backend for relay
+    console.log('📨 Step 3: Sending signed transaction to backend...')
+    console.log(`   - Backend will relay to Privacy Cash relayer`)
+    console.log(`   - Transaction already signed by YOUR wallet`)
     
     const depositPayload = {
       linkId,
+      signedTransaction,
       amount: amount.toString(),
       publicKey,
       lamports,
-      signature: signature ? Array.from(signature) : undefined,
-      // Optional: referrer for affiliate tracking
-      referrer: undefined,
     }
 
     const depositResponse = await fetch(
@@ -84,8 +108,8 @@ export async function executeRealDeposit(
     const transactionSignature = depositData.transactionHash || depositData.tx
 
     // ✅ SUCCESS: Transaction relayed to Privacy Cash pool
-    console.log(`✅ Transaction relayed to Privacy Cash!`)
-    console.log(`   Status: Submitted to Privacy Cash relayer`)
+    console.log(`✅ Deposit successful!`)
+    console.log(`   Status: Signed by YOUR wallet and relayed to Privacy Cash`)
     console.log(`   Signature: ${transactionSignature}`)
     
     console.log('🎉 Deposit completed successfully!')
@@ -98,7 +122,7 @@ export async function executeRealDeposit(
     showSuccess(
       `✅ Deposit Successful!\n` +
       `Amount: ${amount} SOL\n` +
-      `Status: Relayed to Privacy Cash\n` +
+      `Status: Signed by YOUR wallet\n` +
       `Privacy: Zero-knowledge encrypted\n` +
       `Only you can claim your funds\n` +
       `Tx: ${transactionSignature.slice(0, 20)}...`
@@ -110,8 +134,8 @@ export async function executeRealDeposit(
     console.error('❌ Deposit flow error:', error.message)
 
     let errorMsg = error.message
-    if (error.message?.includes('User rejected')) {
-      errorMsg = 'You rejected the operation. Please try again and approve to continue.'
+    if (error.message?.toLowerCase().includes('user rejected')) {
+      errorMsg = 'You rejected the wallet signature. Please try again and approve.'
     } else if (error.message?.includes('network')) {
       errorMsg = 'Network error. Please try again.'
     } else if (error.message?.includes('insufficient')) {
