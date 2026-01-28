@@ -8,18 +8,21 @@ export interface DepositRequest {
 }
 
 /**
- * ✅ PRIVACY CASH SDK DEPOSIT FLOW - USER WALLET SIGNS TX
+ * ✅ PRIVACY CASH DEPOSIT FLOW - USER SIGNS, BACKEND GENERATES PROOF
  * 
- * Flow (User's wallet executes and signs the deposit):
- * 1. Frontend: Initialize Privacy Cash SDK with USER's public key
- * 2. Frontend: SDK generates ZK proof + encrypted UTXOs
- * 3. Frontend: SDK creates transaction
- * 4. Frontend: USER's wallet SIGNS transaction (via Phantom)
- * 5. Frontend: Send signed transaction to backend
- * 6. Backend: Relay signed transaction to Privacy Cash
- * 7. Backend: Record transaction in database
+ * Flow:
+ * 1. Frontend: Ask user to authorize with wallet signature
+ * 2. Frontend: Send user's public key + authorization to backend
+ * 3. Backend: Initialize Privacy Cash SDK with OPERATOR keypair
+ * 4. Backend: SDK generates ZK proof + encrypted UTXOs using user's address
+ * 5. Backend: Create transaction (user's wallet pays)
+ * 6. Backend: Send transaction to frontend for user to sign
+ * 7. Frontend: USER's wallet SIGNS transaction (via Phantom)
+ * 8. Frontend: Send signed transaction back to backend
+ * 9. Backend: Relay signed transaction to Privacy Cash
+ * 10. Backend: Record transaction in database
  * 
- * Key: USER's wallet signs and pays, backend only relays
+ * Key: Backend generates proof, USER signs transaction, USER pays
  * User's funds come from USER's wallet balance, not operator
  */
 export async function executeRealDeposit(
@@ -30,70 +33,87 @@ export async function executeRealDeposit(
   const lamports = Math.round(parseFloat(amount) * 1e9)
 
   console.log('💰 Processing payment...')
-  console.log(`   📋 Step 1: Building deposit transaction`)
-  console.log(`   🔐 Step 2: User signs in wallet`)
+  console.log(`   📋 Step 1: Backend generates Privacy Cash proof`)
+  console.log(`   🔐 Step 2: User signs transaction in wallet`)
   console.log(`   📤 Step 3: Backend relays to Privacy Cash`)
 
   try {
-    // ✅ STEP 1: Initialize Privacy Cash SDK with user's public key
-    console.log('📋 Step 1: Initializing Privacy Cash SDK...')
+    // ✅ STEP 1: Request backend to generate ZK proof + transaction
+    console.log('📋 Step 1: Requesting backend to generate Privacy Cash proof...')
     console.log(`   Amount: ${amount} SOL (${lamports} lamports)`)
     console.log(`   Your wallet: ${publicKey}`)
+    console.log(`   - Backend initializes Privacy Cash SDK`)
+    console.log(`   - SDK generates ZK proof`)
+    console.log(`   - Creating encrypted UTXO with your address`)
     
-    let privacyCashClient: any
-    try {
-      // Import PrivacyCash SDK
-      // @ts-ignore
-      const { PrivacyCash } = await import('privacycash')
-      
-      const rpcUrl = process.env.VITE_RPC_URL || 'https://api.mainnet-beta.solana.com'
-      
-      // Initialize SDK with USER's public key
-      // SDK will use wallet.signTransaction() for signing
-      privacyCashClient = new PrivacyCash({
-        RPC_url: rpcUrl,
-        owner: publicKey,  // USER's public key (not operator!)
-        enableDebug: true
-      })
-      console.log(`   ✅ SDK initialized with your wallet`)
-    } catch (initErr: any) {
-      throw new Error('Failed to initialize Privacy Cash SDK: ' + initErr.message)
+    // Send to backend to generate the transaction
+    const generatePayload = {
+      linkId,
+      publicKey,
+      amount: amount.toString(),
+      lamports,
     }
 
-    // ✅ STEP 2: SDK generates transaction + USER signs with wallet
-    console.log('🔐 Step 2: Generating transaction for your signature...')
-    console.log(`   - Privacy Cash SDK generating ZK proof`)
-    console.log(`   - Creating encrypted UTXOs`)
-    console.log(`   - Waiting for your wallet signature...`)
+    const generateResponse = await fetch(
+      `${CONFIG.BACKEND_URL}/api/deposit/prepare`,
+      {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(generatePayload),
+      }
+    )
+
+    if (!generateResponse.ok) {
+      const error = await generateResponse.json()
+      const errorMsg = error.details || error.error || generateResponse.statusText
+      throw new Error(`Backend proof generation failed: ${errorMsg}`)
+    }
+
+    const generateData = await generateResponse.json()
+    const unsignedTransaction = generateData.transaction
     
-    let depositResult: any
+    if (!unsignedTransaction) {
+      throw new Error('Backend did not return transaction to sign')
+    }
+
+    console.log(`   ✅ Backend generated transaction with ZK proof`)
+
+    // ✅ STEP 2: User signs the transaction with Phantom
+    console.log('🔐 Step 2: Signing transaction with your wallet...')
+    console.log(`   - Phantom will ask you to sign`)
+    console.log(`   - Review the transaction details`)
+    
+    let signedTxBase64: string
     try {
-      // SDK.deposit() returns transaction that SDK created
-      // User's wallet will be asked to sign it (Phantom popup)
-      depositResult = await privacyCashClient.deposit({
-        lamports,
-      })
+      // Parse the unsigned transaction from backend
+      const txBuffer = Buffer.from(unsignedTransaction, 'base64')
+      
+      // Ask Phantom to sign it
+      const { Transaction } = await import('@solana/web3.js')
+      const transaction = Transaction.from(txBuffer)
+      
+      const signedTx = await wallet.signTransaction(transaction)
+      
+      // Serialize back to base64
+      const serialized = signedTx.serialize()
+      signedTxBase64 = serialized.toString('base64')
+      
       console.log(`   ✅ Your wallet signed the transaction`)
-    } catch (sdkErr: any) {
-      if (sdkErr.message?.toLowerCase().includes('user rejected')) {
+    } catch (signErr: any) {
+      if (signErr.message?.toLowerCase().includes('user rejected')) {
         throw new Error('You rejected the wallet signature. Please try again.')
       }
-      throw new Error('Privacy Cash SDK deposit failed: ' + sdkErr.message)
-    }
-
-    const userTxSignature = depositResult.tx
-    if (!userTxSignature) {
-      throw new Error('SDK did not return transaction signature')
+      throw new Error('Failed to sign transaction: ' + signErr.message)
     }
 
     // ✅ STEP 3: Send signed transaction to backend for relay
     console.log('📨 Step 3: Sending signed transaction to backend...')
     console.log(`   - Backend will relay to Privacy Cash relayer`)
-    console.log(`   - Only relaying, not signing`)
+    console.log(`   - Your funds are encrypted with ZK proof`)
     
     const depositPayload = {
       linkId,
-      signedTransaction: userTxSignature,
+      signedTransaction: signedTxBase64,
       amount: amount.toString(),
       publicKey,
       lamports,
