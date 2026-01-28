@@ -31,5 +31,12 @@ export default defineConfig({
       },
     },
   },
+  server: {
+    // ✅ Serve node_modules so circuit files are accessible at /node_modules/...
+    middlewareMode: true,
+    fs: {
+      allow: ['..', 'node_modules']
+    }
+  }
 })
 

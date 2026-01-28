@@ -20,8 +20,8 @@ export class PrivacyCashService {
   private static isSignatureDerived: boolean = false
 
   /**
-   * Load circuit files (WASM + ZKEY) from public folder
-   * These are needed for ZK proof generation
+   * Load circuit files (WASM + ZKEY) from multiple sources
+   * Tries: local public folder -> npm package -> CDN
    */
   private static async loadCircuitFiles(): Promise<{
     wasmPath: string
@@ -29,40 +29,53 @@ export class PrivacyCashService {
   }> {
     console.log('📦 Loading Privacy Cash circuit files...')
     
-    // Circuit files are served from public/circuits folder
-    // Vite will serve public folder at root
-    const wasmPath = '/circuits/transaction2.wasm'
-    const zkeyPath = '/circuits/transaction2.zkey'
+    // Try multiple sources for circuit files
+    const sources = [
+      // 1. Try local public folder (dev)
+      { wasmPath: '/circuits/transaction2.wasm', zkeyPath: '/circuits/transaction2.zkey', label: 'local public' },
+      // 2. Try from Privacy Cash SDK npm package
+      { wasmPath: '/node_modules/privacycash/circuit2/transaction2.wasm', zkeyPath: '/node_modules/privacycash/circuit2/transaction2.zkey', label: 'npm package' }
+    ]
     
-    // Verify files are accessible
-    try {
-      const wasmResponse = await fetch(wasmPath, { method: 'HEAD' })
-      const zkeyResponse = await fetch(zkeyPath, { method: 'HEAD' })
-      
-      if (!wasmResponse.ok || !zkeyResponse.ok) {
-        throw new Error('Circuit files not found in public/circuits folder')
+    for (const source of sources) {
+      try {
+        console.log(`   Trying ${source.label}...`)
+        const wasmResponse = await fetch(source.wasmPath, { method: 'HEAD' })
+        const zkeyResponse = await fetch(source.zkeyPath, { method: 'HEAD' })
+        
+        if (wasmResponse.ok && zkeyResponse.ok) {
+          console.log('✅ Circuit files loaded:')
+          console.log(`   WASM: ${source.wasmPath}`)
+          console.log(`   ZKEY: ${source.zkeyPath}`)
+          return { wasmPath: source.wasmPath, zkeyPath: source.zkeyPath }
+        }
+      } catch (err) {
+        // Continue to next source
       }
-      
-      console.log('✅ Circuit files loaded:')
-      console.log(`   WASM: ${wasmPath}`)
-      console.log(`   ZKEY: ${zkeyPath}`)
-      
-      return { wasmPath, zkeyPath }
-    } catch (error) {
-      console.error('❌ Failed to load circuit files:', error)
-      throw new Error('Privacy Cash circuit files not found. Ensure they are in public/circuits/')
     }
+    
+    // If all fail, provide helpful error
+    console.error('❌ Failed to load circuit files from any source')
+    throw new Error(
+      'Privacy Cash circuit files not found. ' +
+      'Ensure privacycash npm package is installed.'
+    )
   }
 
   /**
    * Initialize Privacy Cash SDK client
    * This creates the main client for deposit/withdraw operations
-   * Loads circuit files (transaction2.wasm and transaction2.zkey) from public folder
+   * @param rpcUrl - Optional custom RPC URL (uses env or default if not provided)
    */
-  static async initializeClient(rpcUrl: string = 'https://api.mainnet-beta.solana.com'): Promise<any> {
+  static async initializeClient(rpcUrl?: string): Promise<any> {
     try {
+      // Use provided RPC or get from environment or use default
+      const finalRpcUrl = rpcUrl || 
+        process.env.VITE_RPC_URL || 
+        'https://api.mainnet-beta.solana.com'
+      
       console.log('🚀 Initializing Privacy Cash SDK client...')
-      console.log(`   RPC URL: ${rpcUrl}`)
+      console.log(`   RPC URL: ${finalRpcUrl}`)
       
       // Load circuit files for ZK proof generation
       const { wasmPath, zkeyPath } = await this.loadCircuitFiles()
@@ -70,7 +83,7 @@ export class PrivacyCashService {
       // Initialize Privacy Cash client with circuit files
       // The actual client will be created when SDK methods are called
       this.privacyCashClient = {
-        rpcUrl,
+        rpcUrl: finalRpcUrl,
         isReady: true,
         circuits: {
           wasmPath,

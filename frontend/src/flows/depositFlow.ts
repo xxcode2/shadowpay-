@@ -40,12 +40,18 @@ export async function executeRealDeposit(
   try {
     // ✅ STEP 1: Initialize Privacy Cash SDK with circuit files
     console.log('📋 Step 1: Initializing Privacy Cash SDK client...')
-    console.log(`   Loading circuit files from public/circuits/`)
+    console.log(`   Loading circuit files from available sources`)
+    
+    // Use Helius RPC if available, otherwise fallback to Solana RPC
+    const rpcUrl = process.env.VITE_RPC_URL || undefined
+    if (rpcUrl) {
+      console.log(`   Using custom RPC: ${rpcUrl.substring(0, 50)}...`)
+    }
     
     // Initialize client (async to load circuit files)
     let privacyCashClient: any
     try {
-      privacyCashClient = await PrivacyCashService.initializeClient()
+      privacyCashClient = await PrivacyCashService.initializeClient(rpcUrl)
       console.log(`   ✅ SDK client ready with ZK circuits`)
     } catch (initError: any) {
       throw new Error('Failed to initialize Privacy Cash SDK: ' + initError.message)
