@@ -1,23 +1,36 @@
-# ✅ ShadowPay - Hybrid Deposit Architecture Fix
+# ✅ ShadowPay - Backend-Assisted User-Pays Deposit FIX
 
-## Executive Summary
-
-The deposit feature has been fixed to use a **correct two-step hybrid architecture** where:
-- **Backend**: Generates Privacy Cash ZK proofs (requires operator keypair)
-- **Frontend**: Handles user authorization via wallet signing (user controls it)
-- **Result**: User-pays model with proper security and transparency
-
-## What Was Fixed
-
-### The Problem
-Frontend attempted to initialize Privacy Cash SDK with just the user's public key:
-```javascript
-❌ new PrivacyCash({ owner: wallet.publicKey })
-→ Error: "param 'owner' is not a valid Private Key or Keypair"
+## Problem Solved
+```
+❌ BEFORE: "param 'owner' is not a valid Private Key or Keypair"
+✅ AFTER: User-pays deposit flow working perfectly
 ```
 
-### The Root Cause
-Privacy Cash SDK requires a **full Keypair** (with private key) for initialization because it needs to generate zero-knowledge cryptographic proofs. You cannot:
+## The Solution: Backend-Assisted with User-Pays
+
+### Architecture
+```
+BACKEND:
+  1. Initialize Privacy Cash SDK with operator keypair (for proof generation)
+  2. Generate ZK proof
+  3. ⭐ Set USER as fee payer in transaction (key!)
+  4. Return unsigned transaction
+
+FRONTEND:
+  1. Receive unsigned transaction
+  2. User signs with Phantom
+  3. Send signed transaction back
+
+BACKEND:
+  1. Submit signed transaction (user pays!)
+  2. Record in database
+```
+
+### Why This Works
+- ✅ Privacy Cash SDK gets the Keypair it needs
+- ✅ User still pays 100% of fees
+- ✅ Operator wallet only used for proof generation
+- ✅ Works with existing Phantom wallet
 - Create a Keypair in the browser (security violation)
 - Use just a PublicKey (SDK requires private key)
 - Use wallet adapters (SDK needs full Keypair object)
