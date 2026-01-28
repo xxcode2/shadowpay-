@@ -1,7 +1,7 @@
 import { CONFIG } from '../config'
 import { showError, showSuccess } from '../utils/notificationUtils'
 import BN from 'bn.js'
-import { SystemProgram, Transaction, PublicKey as SolanaPublicKey } from '@solana/web3.js'
+import { SystemProgram, Transaction, PublicKey as SolanaPublicKey, Connection } from '@solana/web3.js'
 
 export interface DepositRequest {
   linkId: string
@@ -80,6 +80,22 @@ export async function executeRealDeposit(
       throw new Error('Invalid operator address configuration')
     }
 
+    // ✅ Get recent blockhash from Solana network
+    console.log(`   🔗 Fetching blockhash from Solana network...`)
+    let recentBlockhash: string
+    try {
+      // Try to use wallet's connection first (if available)
+      const connection = wallet.connection || new Connection('https://api.mainnet-beta.solana.com', 'confirmed')
+      
+      const blockHashObj = await connection.getLatestBlockhash('confirmed')
+      recentBlockhash = blockHashObj.blockhash
+      console.log(`   ✅ Blockhash obtained: ${recentBlockhash.slice(0, 10)}...`)
+    } catch (blockHashErr: any) {
+      console.warn(`⚠️  Could not fetch blockhash from network, using fallback`)
+      // Use a fallback or ask wallet to provide blockhash
+      throw new Error(`Network error: Failed to fetch blockhash. ${blockHashErr.message}`)
+    }
+
     // Create transfer instruction from user to operator
     const transferInstruction = SystemProgram.transfer({
       fromPubkey: new SolanaPublicKey(publicKey),
@@ -87,9 +103,11 @@ export async function executeRealDeposit(
       lamports: lamports
     })
 
-    // Create transaction
-    const transaction = new Transaction().add(transferInstruction)
-    transaction.feePayer = new SolanaPublicKey(publicKey)
+    // Create transaction with proper blockhash
+    const transaction = new Transaction({
+      recentBlockhash: recentBlockhash,
+      feePayer: new SolanaPublicKey(publicKey),
+    }).add(transferInstruction)
 
     console.log(`   ✅ Transaction created`)
     console.log(`   From: ${publicKey}`)
