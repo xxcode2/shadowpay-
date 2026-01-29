@@ -14,17 +14,38 @@ router.get('/:walletAddress', async (req: Request, res: Response) => {
 
     console.log(`📋 Fetching history for wallet: ${walletAddress}`)
 
-    // ✅ NEW: Get all PaymentLinks created by this wallet (including pending ones with no deposit yet)
-    const sentLinks = await prisma.paymentLink.findMany({
+    // ⚠️ TEMPORARY: creatorAddress field not in production DB yet
+    // Fallback to transaction-based lookup until migration runs
+    const sentTransactions = await prisma.transaction.findMany({
       where: {
-        creatorAddress: walletAddress,
+        fromAddress: walletAddress,
+        type: 'deposit',
       },
       orderBy: {
         createdAt: 'desc',
       },
     })
 
-    console.log(`   Found ${sentLinks.length} links created by this wallet`)
+    console.log(`   Found ${sentTransactions.length} deposit transactions`)
+
+    // Get PaymentLink details for each transaction
+    const sentLinks = await Promise.all(
+      sentTransactions.map(async (tx: any) => {
+        const link = await prisma.paymentLink.findUnique({
+          where: { id: tx.linkId },
+        })
+        return {
+          id: link?.id,
+          amount: link?.amount,
+          createdAt: tx.createdAt,
+          claimed: link?.claimed,
+          depositTx: link?.depositTx,
+          withdrawTx: link?.withdrawTx,
+        }
+      })
+    )
+
+    console.log(`   Found ${sentLinks.length} sent links`)
 
     // Format sent links - include pending (waiting) and claimed ones
     const sent = sentLinks.map((link: any) => ({

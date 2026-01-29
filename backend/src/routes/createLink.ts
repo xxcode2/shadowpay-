@@ -61,7 +61,8 @@ router.post('/', async (req: Request<{}, {}, any>, res: Response) => {
         assetType,
         claimed: false,
         depositTx: '', // Will be updated when deposit to Privacy Cash happens
-        creatorAddress: creatorAddress || null, // ✅ NEW: Track creator for history
+        // ⚠️ TEMPORARY: creatorAddress not in production DB yet - will enable after migration
+        // creatorAddress: creatorAddress || null,
       } as any,
     })
 
