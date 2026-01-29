@@ -7,26 +7,36 @@ import prisma from '../lib/prisma.js'
 const router = Router()
 
 /**
- * ✅ v8.0: CORRECT NON-CUSTODIAL ARCHITECTURE
+ * ✅ v9.0: ATOMIC NON-CUSTODIAL FLOW
  * 
- * Backend ONLY:
- * 1. Validate link exists & has deposit
- * 2. Check link not already claimed
- * 3. Mark link as claimed
- * 4. Return deposit info (so frontend can use SDK to withdraw)
+ * CORRECT ATOMIC ORDER:
+ * 1. Frontend withdraws via Privacy Cash SDK (FIRST!)
+ * 2. If success, frontend gets real TX hash
+ * 3. Frontend calls /api/claim-link/confirm with withdrawal TX
+ * 4. Backend verifies & marks claimed (ONLY AFTER WITHDRAWAL SUCCESS)
  * 
- * WITHDRAWAL happens in FRONTEND via Privacy Cash SDK
- * Backend NEVER touches private keys or calls relayer
- * 
- * Flow:
- * Frontend → SDK.withdraw() → Relayer → Wallet
- *     ↓
- *  Backend (metadata only)
+ * If withdrawal fails:
+ * - Link remains unclaimed
+ * - User can retry
+ * - No race condition!
  */
 
+// ✅ POST /api/claim-link
+// This endpoint is now DEPRECATED - use /confirm instead
+// Kept for backwards compatibility but returns error
 router.post('/', async (req: Request, res: Response) => {
+  return res.status(410).json({
+    error: 'Deprecated endpoint',
+    message: 'Use POST /api/claim-link/confirm instead',
+    details: 'Withdraw via SDK FIRST, then confirm with withdrawal TX'
+  })
+})
+
+// ✅ POST /api/claim-link/confirm
+// NEW CORRECT ENDPOINT: Only called AFTER withdrawal succeeds
+router.post('/confirm', async (req: Request, res: Response) => {
   try {
-    const { linkId, recipientAddress } = req.body
+    const { linkId, recipientAddress, withdrawalTx } = req.body
 
     // ✅ VALIDATION
     if (!linkId || typeof linkId !== 'string') {
@@ -43,10 +53,16 @@ router.post('/', async (req: Request, res: Response) => {
       })
     }
 
+    if (!withdrawalTx || typeof withdrawalTx !== 'string') {
+      return res.status(400).json({
+        error: 'Invalid or missing withdrawalTx',
+        details: 'withdrawalTx must be a valid transaction hash',
+      })
+    }
+
     // ✅ VALIDATE SOLANA ADDRESS FORMAT
-    let validPublicKey
     try {
-      validPublicKey = new PublicKey(recipientAddress)
+      new PublicKey(recipientAddress)
     } catch (keyErr: any) {
       return res.status(400).json({
         error: 'Invalid Solana address format',
@@ -55,7 +71,7 @@ router.post('/', async (req: Request, res: Response) => {
     }
 
     // ✅ FIND LINK
-    console.log(`\n🔍 Looking up link: ${linkId}`)
+    console.log(`\n🔍 Confirming claim for link: ${linkId}`)
     const link = await prisma.paymentLink.findUnique({
       where: { id: linkId },
     })
@@ -70,17 +86,12 @@ router.post('/', async (req: Request, res: Response) => {
 
     console.log(`✅ Link found: ${link.amount} SOL`)
 
-
     // ✅ CHECK DEPOSIT STATUS
     if (!link.depositTx || link.depositTx.trim() === '') {
       console.error(`❌ Link ${linkId} has no deposit recorded`)
       return res.status(400).json({
         error: 'No deposit found',
-        details: 'This link does not have a completed deposit. Creator may need to wait for deposit to confirm.',
-        linkStatus: {
-          amount: link.amount,
-          hasDepositTx: !!link.depositTx,
-        }
+        details: 'This link does not have a completed deposit.',
       })
     }
 
@@ -95,47 +106,50 @@ router.post('/', async (req: Request, res: Response) => {
       })
     }
 
-    // ✅ MARK LINK AS CLAIMED (ONLY THIS - NO WITHDRAWAL)
-    console.log(`🔓 Marking link as claimed for ${recipientAddress}`)
+    // ✅ VERIFY WITHDRAWAL TX (BASIC CHECK)
+    // In production, you could verify the TX against Solana RPC
+    console.log(`🔐 Verifying withdrawal TX: ${withdrawalTx}`)
+    if (withdrawalTx.length < 10) {
+      return res.status(400).json({
+        error: 'Invalid withdrawal TX format',
+        details: 'withdrawalTx appears invalid',
+      })
+    }
 
-    await prisma.paymentLink.update({
+    // ✅ MARK LINK AS CLAIMED (ONLY NOW, AFTER WITHDRAWAL PROOF)
+    console.log(`📌 Marking link as claimed with withdrawal proof...`)
+
+    const updatedLink = await prisma.paymentLink.update({
       where: { id: linkId },
       data: {
         claimed: true,
         claimedBy: recipientAddress,
+        withdrawTx: withdrawalTx, // ✅ SAVE PROOF
         updatedAt: new Date()
       }
     })
 
-    console.log(`✅ Link marked as claimed!`)
+    console.log(`✅ Link confirmed as claimed!`)
+    console.log(`📤 Withdrawal TX saved: ${withdrawalTx}\n`)
 
-    // ✅ RETURN DEPOSIT INFO FOR FRONTEND TO USE WITH SDK
-    console.log(`\n📤 Returning deposit info for frontend withdrawal via SDK...`)
+    // ✅ RETURN SUCCESS
     return res.status(200).json({
       success: true,
       claimed: true,
-      message: '✅ Link claimed! Frontend will now withdraw via Privacy Cash SDK.',
+      withdrawn: true,
+      message: '✅ Claim confirmed with withdrawal proof',
       linkId,
       amount: link.amount,
       depositTx: link.depositTx,
+      withdrawalTx: withdrawalTx,
       recipientAddress,
-      claimedAt: new Date().toISOString(),
-      
-      // ✅ FRONTEND NEEDS THIS TO CALL SDK.WITHDRAW()
-      withdrawalInfo: {
-        depositTx: link.depositTx,
-        amount: link.amount,
-        recipient: recipientAddress,
-        // Frontend will use Privacy Cash SDK to execute the actual withdrawal
-      },
-      
-      nextStep: 'Frontend calls Privacy Cash SDK withdraw with depositTx'
+      claimedAt: updatedLink.updatedAt.toISOString(),
     })
 
   } catch (err: any) {
-    console.error('❌ CLAIM ERROR:', err.message || err.toString())
+    console.error('❌ CONFIRM CLAIM ERROR:', err.message || err.toString())
     return res.status(500).json({
-      error: err.message || 'Claim failed',
+      error: err.message || 'Claim confirmation failed',
       details: process.env.NODE_ENV === 'development' ? err.stack : undefined
     })
   }

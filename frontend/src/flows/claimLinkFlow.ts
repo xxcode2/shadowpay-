@@ -64,35 +64,8 @@ export async function executeClaimLink(input: {
     console.log(`✅ Found: ${linkData.amount} SOL`)
     console.log(`📍 Deposit TX: ${linkData.depositTx}\n`)
 
-    // STEP 2: Mark link as claimed on backend
-    console.log('STEP 2: Marking link as claimed...')
-
-    const claimRes = await fetch(`${BACKEND_URL}/api/claim-link`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        linkId,
-        recipientAddress,
-      }),
-    })
-
-    if (!claimRes.ok) {
-      let errorMsg = `Claim failed with status ${claimRes.status}`
-      try {
-        const contentType = claimRes.headers.get('content-type')
-        if (contentType?.includes('application/json')) {
-          const errorData = await claimRes.json()
-          errorMsg = errorData.error || errorMsg
-        }
-      } catch {}
-      throw new Error(errorMsg)
-    }
-
-    const claimData = await claimRes.json()
-    console.log(`✅ Link marked as claimed!\n`)
-
-    // STEP 3: Execute withdrawal via Privacy Cash SDK
-    console.log('STEP 3: Executing withdrawal via Privacy Cash SDK...')
+    // ✅ STEP 2: WITHDRAW FIRST VIA PRIVACY CASH SDK (BEFORE MARKING CLAIMED!)
+    console.log('STEP 2: Executing withdrawal via Privacy Cash SDK...')
     console.log(`💸 Withdrawing ${linkData.amount} SOL to ${recipientAddress}\n`)
 
     let withdrawalTx = null
@@ -109,7 +82,7 @@ export async function executeClaimLink(input: {
       // ✅ Initialize SDK with user's wallet
       const client = new PrivacyCash({
         RPC_url: 'https://mainnet.helius-rpc.com/?api-key=c455719c-354b-4a44-98d4-27f8a18aa79c',
-        owner: wallet.publicKey, // User's wallet public key (or Keypair if available)
+        owner: wallet.publicKey, // User's wallet public key
       })
 
       // ✅ Execute withdrawal - SDK handles encryption, ZK proof, relayer call
@@ -132,6 +105,34 @@ export async function executeClaimLink(input: {
         `Make sure Privacy Cash SDK is properly installed and configured.`
       )
     }
+
+    // ✅ STEP 3: AFTER WITHDRAWAL SUCCESS, CONFIRM CLAIM ON BACKEND
+    console.log('STEP 3: Confirming claim on backend with withdrawal proof...')
+
+    const confirmRes = await fetch(`${BACKEND_URL}/api/claim-link/confirm`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        linkId,
+        recipientAddress,
+        withdrawalTx, // ✅ PROOF that withdrawal succeeded
+      }),
+    })
+
+    if (!confirmRes.ok) {
+      let errorMsg = `Claim confirmation failed with status ${confirmRes.status}`
+      try {
+        const contentType = confirmRes.headers.get('content-type')
+        if (contentType?.includes('application/json')) {
+          const errorData = await confirmRes.json()
+          errorMsg = errorData.error || errorMsg
+        }
+      } catch {}
+      throw new Error(errorMsg)
+    }
+
+    const claimData = await confirmRes.json()
+    console.log(`✅ Claim confirmed on backend!\n`)
 
     // ✅ SUCCESS
     console.log('='.repeat(70))
