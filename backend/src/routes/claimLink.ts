@@ -22,6 +22,51 @@ const router = Router()
  */
 
 /**
+ * Helper: Check operator balance in Privacy Cash
+ */
+async function checkOperatorBalance(): Promise<number> {
+  try {
+    const { PrivacyCash } = await import('privacycash')
+
+    // Get operator private key from env
+    const operatorKeyStr = process.env.OPERATOR_SECRET_KEY || ''
+    if (!operatorKeyStr) {
+      throw new Error('OPERATOR_SECRET_KEY not configured')
+    }
+
+    // Parse private key (support multiple formats)
+    let operatorKey: number[]
+    
+    if (operatorKeyStr.includes(',')) {
+      operatorKey = operatorKeyStr.split(',').map(n => parseInt(n.trim(), 10))
+    } else if (operatorKeyStr.startsWith('[')) {
+      operatorKey = JSON.parse(operatorKeyStr)
+    } else {
+      const buffer = Buffer.from(operatorKeyStr, 'base64')
+      operatorKey = Array.from(buffer)
+    }
+
+    if (!Array.isArray(operatorKey) || operatorKey.length !== 64) {
+      throw new Error(`Invalid operator key: got ${operatorKey.length} bytes, need 64`)
+    }
+
+    const client = new PrivacyCash({
+      RPC_url: 'https://mainnet.helius-rpc.com/?api-key=c455719c-354b-4a44-98d4-27f8a18aa79c',
+      owner: operatorKey
+    })
+
+    const balance = await client.getPrivateBalance()
+    const balanceSOL = balance.lamports / 1_000_000_000
+    
+    console.log(`💰 Operator Private Cash Balance: ${balanceSOL.toFixed(6)} SOL`)
+    return balanceSOL
+  } catch (err: any) {
+    console.error(`❌ Failed to check balance:`, err.message)
+    throw err
+  }
+}
+
+/**
  * Helper: Withdraw from Privacy Cash to user address
  */
 async function withdrawFromPrivacyCash(
@@ -105,6 +150,26 @@ async function withdrawFromPrivacyCash(
     }
   } catch (err: any) {
     console.error(`❌ Withdrawal failed:`, err.message)
+    
+    // Parse specific Privacy Cash errors
+    const errorMsg = err.message || err.toString()
+    
+    if (errorMsg.includes('no balance') || errorMsg.includes('No enough balance')) {
+      console.error(`\n⚠️ OPERATOR BALANCE ISSUE!`)
+      try {
+        const balance = await checkOperatorBalance()
+        throw new Error(`Insufficient operator balance: ${balance.toFixed(6)} SOL available, need ${amount} SOL. Please top-up operator wallet.`)
+      } catch (balCheckErr: any) {
+        throw new Error(`Balance check error: ${balCheckErr.message}`)
+      }
+    } else if (errorMsg.includes('UTXO') || errorMsg.includes('unspent')) {
+      throw new Error(`No valid UTXOs available in Privacy Cash pool. Deposit may not have confirmed yet. Wait 30-60 seconds and try again.`)
+    } else if (errorMsg.includes('owner.toBuffer')) {
+      throw new Error(`Invalid recipient address format. Please ensure recipient address is correct.`)
+    } else if (errorMsg.includes('ZK proof')) {
+      throw new Error(`ZK proof generation failed. Please try again.`)
+    }
+    
     throw err
   }
 }
