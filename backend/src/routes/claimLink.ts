@@ -140,23 +140,51 @@ router.post('/', async (req: Request, res: Response) => {
       }
 
       let keyArray: number[] = []
+      let parseAttempts = 0
+      
+      // Attempt 1: Try JSON array parsing
       try {
-        // Try to parse as JSON array first
-        keyArray = JSON.parse(secretKeyStr)
-      } catch {
-        // If JSON parsing fails, try comma-separated format
+        const trimmed = secretKeyStr.trim()
+        if (trimmed.startsWith('[') && trimmed.endsWith(']')) {
+          keyArray = JSON.parse(trimmed)
+          parseAttempts++
+        }
+      } catch (e) {
+        // Silently fail and try next method
+      }
+      
+      // Attempt 2: Try comma-separated numbers
+      if (keyArray.length === 0) {
         try {
-          keyArray = secretKeyStr
-            .split(',')
-            .map(num => parseInt(num.trim(), 10))
+          const numbers = secretKeyStr
+            .split(/[,\s\n]+/) // Split on comma, space, or newline
+            .map(str => str.trim())
+            .filter(str => str.length > 0)
+            .map(num => parseInt(num, 10))
             .filter(num => !isNaN(num))
           
-          if (keyArray.length === 0) {
-            throw new Error('No valid key numbers found in OPERATOR_SECRET_KEY')
+          if (numbers.length > 0) {
+            keyArray = numbers
+            parseAttempts++
           }
-        } catch (parseErr: any) {
-          throw new Error(`Invalid OPERATOR_SECRET_KEY format: ${parseErr.message}`)
+        } catch (e) {
+          // Silently fail
         }
+      }
+      
+      // Attempt 3: Try raw JSON array without brackets
+      if (keyArray.length === 0) {
+        try {
+          const arrayStr = `[${secretKeyStr}]`
+          keyArray = JSON.parse(arrayStr)
+          parseAttempts++
+        } catch (e) {
+          // Silently fail
+        }
+      }
+      
+      if (keyArray.length === 0) {
+        throw new Error(`Could not parse OPERATOR_SECRET_KEY after ${parseAttempts} attempts. Please check the environment variable format.`)
       }
 
       if (keyArray.length !== 64) {
