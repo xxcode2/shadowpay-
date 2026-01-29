@@ -5,9 +5,12 @@ import { ensureDbSchema } from './lib/ensureSchema.js'
 
 dotenv.config()
 
-console.log('🚀 Starting ShadowPay Backend...')
+console.log('═'.repeat(60))
+console.log('🚀 STARTING SHADOWPAY BACKEND v2.0 (SIMPLIFIED - NO ENCRYPTION)')
+console.log('═'.repeat(60))
 console.log('NODE_ENV:', process.env.NODE_ENV || 'development')
 console.log('DATABASE_URL:', process.env.DATABASE_URL ? '✓ Set' : '⚠️ Not set (DB operations will fail)')
+console.log('Build: ' + new Date().toISOString())
 
 // ✅ VALIDATE ENVIRONMENT AT STARTUP
 async function validateEnvironment() {
