@@ -9,176 +9,29 @@ const router = Router()
 /**
  * POST /api/claim-link
  *
- * ✅ CLAIM + AUTO-WITHDRAW:
+ * ✅ CORRECT NON-CUSTODIAL FLOW (v5.0):
  * 
- * FLOW:
- * 1. User connects wallet → provides address
- * 2. User clicks "Claim" button
- * 3. Backend validates link + marks claimed
- * 4. Backend withdraws from Privacy Cash (using operator key) → sends to user address
- * 5. Return tx hash to frontend
+ * 1. User A: deposits SOL to Private Cash via FRONTEND SDK
+ *    → saves depositTx hash to backend
  * 
- * ONE CLICK - DONE! SOL in wallet!
+ * 2. User B: claims link via backend
+ *    → backend ONLY validates & marks claimed
+ *    → returns withdrawal instructions
+ * 
+ * 3. User B: withdraws from Private Cash via FRONTEND SDK or web UI
+ *    → NO backend involvement
+ *    → USER has control of their keys
+ * 
+ * Backend = ONLY STORAGE & VALIDATION
+ * No private keys, no withdrawal, no custody!
  */
-
-/**
- * Helper: Check operator balance in Privacy Cash
- */
-async function checkOperatorBalance(): Promise<number> {
-  try {
-    const { PrivacyCash } = await import('privacycash')
-
-    // Get operator private key from env
-    const operatorKeyStr = process.env.OPERATOR_SECRET_KEY || ''
-    if (!operatorKeyStr) {
-      throw new Error('OPERATOR_SECRET_KEY not configured')
-    }
-
-    // Parse private key (support multiple formats)
-    let operatorKey: number[]
-    
-    if (operatorKeyStr.includes(',')) {
-      operatorKey = operatorKeyStr.split(',').map(n => parseInt(n.trim(), 10))
-    } else if (operatorKeyStr.startsWith('[')) {
-      operatorKey = JSON.parse(operatorKeyStr)
-    } else {
-      const buffer = Buffer.from(operatorKeyStr, 'base64')
-      operatorKey = Array.from(buffer)
-    }
-
-    if (!Array.isArray(operatorKey) || operatorKey.length !== 64) {
-      throw new Error(`Invalid operator key: got ${operatorKey.length} bytes, need 64`)
-    }
-
-    const client = new PrivacyCash({
-      RPC_url: 'https://mainnet.helius-rpc.com/?api-key=c455719c-354b-4a44-98d4-27f8a18aa79c',
-      owner: operatorKey
-    })
-
-    const balance = await client.getPrivateBalance()
-    const balanceSOL = balance.lamports / 1_000_000_000
-    
-    console.log(`💰 Operator Private Cash Balance: ${balanceSOL.toFixed(6)} SOL`)
-    return balanceSOL
-  } catch (err: any) {
-    console.error(`❌ Failed to check balance:`, err.message)
-    throw err
-  }
-}
-
-/**
- * Helper: Withdraw from Privacy Cash to user address
- */
-async function withdrawFromPrivacyCash(
-  amount: number,
-  recipientAddress: string,
-  linkId: string
-): Promise<{ success: boolean; tx: string; amountReceived: number; feePaid: number }> {
-  try {
-    console.log(`\n💰 WITHDRAWING FROM PRIVACY CASH`)
-    console.log(`   Amount: ${amount} SOL`)
-    console.log(`   Recipient: ${recipientAddress}`)
-    console.log(`   Link: ${linkId}`)
-
-    const { PrivacyCash } = await import('privacycash')
-
-    // Get operator private key from env
-    const operatorKeyStr = process.env.OPERATOR_SECRET_KEY || ''
-    if (!operatorKeyStr) {
-      throw new Error('OPERATOR_SECRET_KEY not configured')
-    }
-
-    // Parse private key (support multiple formats)
-    let operatorKey: number[]
-    
-    // Try format 1: comma-separated numbers
-    if (operatorKeyStr.includes(',')) {
-      operatorKey = operatorKeyStr.split(',').map(n => parseInt(n.trim(), 10))
-    }
-    // Try format 2: JSON array
-    else if (operatorKeyStr.startsWith('[')) {
-      operatorKey = JSON.parse(operatorKeyStr)
-    }
-    // Try format 3: base64
-    else {
-      const buffer = Buffer.from(operatorKeyStr, 'base64')
-      operatorKey = Array.from(buffer)
-    }
-
-    if (!Array.isArray(operatorKey) || operatorKey.length !== 64) {
-      throw new Error(`Invalid operator key: got ${operatorKey.length} bytes, need 64`)
-    }
-
-    console.log(`🔐 Initializing Privacy Cash with operator key...`)
-
-    const client = new PrivacyCash({
-      RPC_url: 'https://mainnet.helius-rpc.com/?api-key=c455719c-354b-4a44-98d4-27f8a18aa79c',
-      owner: operatorKey
-    })
-
-    const lamports = Math.floor(amount * 1_000_000_000)
-
-    console.log(`⏳ Generating ZK proof and withdrawing...`)
-    
-    // ✅ Privacy Cash SDK accepts string addresses
-    const result = await client.withdraw({
-      lamports,
-      recipientAddress: recipientAddress
-    })
-
-    console.log(`✅ WITHDRAWAL SUCCESS!`)
-    console.log(`   TX: ${result.tx}`)
-    console.log(`   Amount: ${(result.amount_in_lamports / 1_000_000_000).toFixed(6)} SOL`)
-    console.log(`   Fee: ${(result.fee_in_lamports / 1_000_000_000).toFixed(6)} SOL`)
-
-    // Save withdrawal tx in database
-    await prisma.paymentLink.update({
-      where: { id: linkId },
-      data: {
-        withdrawTx: result.tx,
-        updatedAt: new Date()
-      }
-    })
-
-    return {
-      success: true,
-      tx: result.tx,
-      amountReceived: result.amount_in_lamports / 1_000_000_000,
-      feePaid: result.fee_in_lamports / 1_000_000_000
-    }
-  } catch (err: any) {
-    console.error(`❌ Withdrawal failed:`, err.message)
-    
-    // Parse specific Privacy Cash errors
-    const errorMsg = err.message || err.toString()
-    
-    if (errorMsg.includes('no balance') || errorMsg.includes('No enough balance')) {
-      console.error(`\n⚠️ OPERATOR BALANCE ISSUE!`)
-      try {
-        const balance = await checkOperatorBalance()
-        throw new Error(`Insufficient operator balance: ${balance.toFixed(6)} SOL available, need ${amount} SOL. Please top-up operator wallet.`)
-      } catch (balCheckErr: any) {
-        throw new Error(`Balance check error: ${balCheckErr.message}`)
-      }
-    } else if (errorMsg.includes('UTXO') || errorMsg.includes('unspent')) {
-      throw new Error(`No valid UTXOs available in Privacy Cash pool. Deposit may not have confirmed yet. Wait 30-60 seconds and try again.`)
-    } else if (errorMsg.includes('owner.toBuffer')) {
-      throw new Error(`Invalid recipient address format. Please ensure recipient address is correct.`)
-    } else if (errorMsg.includes('ZK proof')) {
-      throw new Error(`ZK proof generation failed. Please try again.`)
-    }
-    
-    throw err
-  }
-}
 
 router.post('/', async (req: Request, res: Response) => {
   try {
     const { linkId, recipientAddress } = req.body
 
-    // ✅ COMPREHENSIVE VALIDATION
+    // ✅ VALIDATION
     if (!linkId || typeof linkId !== 'string') {
-      console.error('❌ Missing or invalid linkId')
       return res.status(400).json({
         error: 'Invalid or missing linkId',
         details: 'linkId must be a non-empty string',
@@ -186,7 +39,6 @@ router.post('/', async (req: Request, res: Response) => {
     }
 
     if (!recipientAddress || typeof recipientAddress !== 'string') {
-      console.error('❌ Missing or invalid recipientAddress')
       return res.status(400).json({
         error: 'Invalid or missing recipientAddress',
         details: 'recipientAddress must be a valid Solana address',
@@ -198,7 +50,6 @@ router.post('/', async (req: Request, res: Response) => {
     try {
       validPublicKey = new PublicKey(recipientAddress)
     } catch (keyErr: any) {
-      console.error('❌ Invalid Solana address:', keyErr.message)
       return res.status(400).json({
         error: 'Invalid Solana address format',
         details: keyErr.message,
@@ -226,7 +77,7 @@ router.post('/', async (req: Request, res: Response) => {
       console.error(`❌ Link ${linkId} has no deposit recorded`)
       return res.status(400).json({
         error: 'No deposit found',
-        details: 'This link does not have a completed deposit. User may need to wait for deposit to confirm.',
+        details: 'This link does not have a completed deposit. Creator may need to wait for deposit to confirm.',
         linkStatus: {
           amount: link.amount,
           hasDepositTx: !!link.depositTx,
@@ -245,9 +96,9 @@ router.post('/', async (req: Request, res: Response) => {
       })
     }
 
+    // ✅ MARK LINK AS CLAIMED (ONLY THIS - NO WITHDRAWAL!)
     console.log(`🔓 Marking link as claimed for ${recipientAddress}`)
 
-    // ✅ MARK LINK AS CLAIMED
     await prisma.paymentLink.update({
       where: { id: linkId },
       data: {
@@ -259,55 +110,58 @@ router.post('/', async (req: Request, res: Response) => {
 
     console.log(`✅ Link marked as claimed!`)
 
-    // ✅ WITHDRAW FROM PRIVACY CASH TO USER WALLET
-    console.log(`\n💳 Step 2: Processing withdrawal to user wallet...`)
-    
-    try {
-      const withdrawResult = await withdrawFromPrivacyCash(
-        link.amount,
-        recipientAddress,
-        linkId
-      )
-
-      // SUCCESS!
-      console.log(`\n✅ CLAIM & WITHDRAW COMPLETE!`)
+    // ✅ RETURN SUCCESS + WITHDRAWAL INSTRUCTIONS
+    return res.status(200).json({
+      success: true,
+      claimed: true,
+      message: 'Link claimed! Now you need to withdraw from Private Cash pool.',
+      linkId,
+      amount: link.amount,
+      depositTx: link.depositTx,
+      recipientAddress,
+      claimedAt: new Date().toISOString(),
       
-      return res.status(200).json({
-        success: true,
-        claimed: true,
-        withdrawn: true,
-        message: 'Link claimed and SOL sent to your wallet!',
-        linkId,
-        amount: link.amount,
-        recipientAddress,
-        withdrawTx: withdrawResult.tx,
-        amountReceived: withdrawResult.amountReceived,
-        feePaid: withdrawResult.feePaid,
-        receipt: {
-          depositTx: link.depositTx,
-          withdrawalTx: withdrawResult.tx,
-          timestamp: new Date().toISOString(),
-          solscan: `https://solscan.io/tx/${withdrawResult.tx}`
-        }
-      })
-    } catch (withdrawErr: any) {
-      console.error(`⚠️ Claim succeeded but withdrawal failed:`, withdrawErr.message)
+      // ✅ WITHDRAWAL OPTIONS FOR FRONTEND/USER
+      withdrawalOptions: {
+        option1: {
+          title: 'Easy: Privacy Cash Web UI',
+          url: 'https://www.privacycash.net',
+          steps: [
+            'Visit https://www.privacycash.net',
+            'Connect your wallet (Phantom/Solflare)',
+            `Withdraw ${link.amount} SOL from pool`,
+            'Funds arrive in 30-60 seconds'
+          ],
+          time: '5 minutes'
+        },
+        option2: {
+          title: 'Advanced: Privacy Cash SDK',
+          code: `
+import { PrivacyCash } from 'privacycash'
 
-      // Link is claimed but withdrawal failed - user should contact support
-      return res.status(500).json({
-        success: false,
-        claimed: true,
-        withdrawn: false,
-        error: 'Withdrawal failed after claim',
-        details: withdrawErr.message,
-        message: 'Your link was claimed but withdrawal failed. Please contact support with Link ID: ' + linkId,
-        linkId,
-        amount: link.amount,
-        recipientAddress,
-        depositTx: link.depositTx,
-        supportEmail: 'support@shadowpay.xyz'
-      })
-    }
+const client = new PrivacyCash({
+  RPC_url: 'https://mainnet.helius-rpc.com/?api-key=YOUR_API_KEY',
+  owner: [your_private_key_array]
+})
+
+const result = await client.withdraw({
+  lamports: ${Math.floor((link.amount || 0) * 1_000_000_000)},
+  recipientAddress: '${recipientAddress}'
+})
+
+console.log('Withdrawal TX:', result.tx)
+          `,
+          time: '10 minutes'
+        }
+      },
+
+      nextSteps: {
+        action: 'User withdraws from Private Cash',
+        responsibility: 'User (not backend)',
+        controls: 'User controls their own private keys',
+        privacy: 'Zero-knowledge withdrawal - backend never sees it'
+      }
+    })
 
   } catch (err: any) {
     console.error('❌ CLAIM ERROR:', err.message || err.toString())
