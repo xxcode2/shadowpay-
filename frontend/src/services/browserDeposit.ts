@@ -14,6 +14,7 @@
  */
 
 import { Connection, PublicKey, VersionedTransaction } from '@solana/web3.js'
+import { PrivacyCashService } from './privacyCashService'
 
 // Privacy Cash constants
 const SIGN_MESSAGE = 'Privacy Money account sign in'
@@ -136,12 +137,18 @@ export async function executeNonCustodialDeposit(params: DepositParams): Promise
     // ✅ NEW: Extract UTXO private key for multi-wallet claiming
     let utxoPrivateKey: string | undefined
     try {
-      utxoPrivateKey = encryptionService.deriveUtxoPrivateKey?.()
+      // Use PrivacyCashService to extract the key
+      // It tries multiple methods to find the UTXO private key
+      utxoPrivateKey = PrivacyCashService.getUtxoPrivateKey()
+      
       if (!utxoPrivateKey) {
-        console.warn('[Deposit] Warning: Could not derive UTXO private key')
+        console.warn('[Deposit] Warning: Could not extract UTXO private key - multi-wallet claiming disabled')
+      } else {
+        console.log('[Deposit] ✅ UTXO private key extracted successfully for multi-wallet claiming')
+        console.log(`[Deposit] Key length: ${utxoPrivateKey.length} characters`)
       }
     } catch (err: any) {
-      console.warn('[Deposit] Warning: Failed to derive UTXO key:', err.message)
+      console.warn('[Deposit] Warning: Failed to extract UTXO key:', err.message)
     }
 
     log('Deposit successful!', depositResult.tx)

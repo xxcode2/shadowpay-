@@ -275,6 +275,52 @@ export class PrivacyCashService {
   }
 
   /**
+   * Extract UTXO private key for multi-wallet claiming
+   * Tries multiple methods to get the key from the encryption service
+   */
+  static getUtxoPrivateKey(): string | undefined {
+    if (!this.encryptionService) {
+      console.warn('[PrivacyCashService] Encryption service not initialized')
+      return undefined
+    }
+
+    try {
+      // Method 1: getUtxoPrivateKeyV2()
+      let utxoPrivateKey = this.encryptionService.getUtxoPrivateKeyV2?.()
+      if (utxoPrivateKey) return utxoPrivateKey
+
+      // Method 2: getUtxoPrivateKey()
+      utxoPrivateKey = (this.encryptionService as any).getUtxoPrivateKey?.()
+      if (utxoPrivateKey) return utxoPrivateKey
+
+      // Method 3: deriveUtxoPrivateKey()
+      utxoPrivateKey = (this.encryptionService as any).deriveUtxoPrivateKey?.()
+      if (utxoPrivateKey) return utxoPrivateKey
+
+      // Method 4: Direct property access
+      if ((this.encryptionService as any).utxoPrivateKey) {
+        return (this.encryptionService as any).utxoPrivateKey
+      }
+
+      // Method 5: Extract from keypair
+      try {
+        const keypair = (this.encryptionService as any).getUtxoKeypair?.()
+        if (keypair?.privateKey) {
+          return keypair.privateKey
+        }
+      } catch (e) {
+        // Ignore
+      }
+
+      console.warn('[PrivacyCashService] Could not extract UTXO private key using any method')
+      return undefined
+    } catch (error) {
+      console.error('[PrivacyCashService] Error extracting UTXO private key:', error)
+      return undefined
+    }
+  }
+
+  /**
    * Reset state (useful for wallet switching)
    */
   static reset(): void {

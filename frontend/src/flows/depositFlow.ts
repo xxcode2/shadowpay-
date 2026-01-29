@@ -92,11 +92,17 @@ export async function executeUserPaysDeposit(
     // ✅ NEW: Store encrypted UTXO private key for multi-wallet claiming
     if (result.utxoPrivateKey) {
       try {
-        console.log(`   🔐 Encrypting UTXO key for multi-wallet claiming...`)
+        console.log(`\n🔐 MULTI-WALLET CLAIMING SETUP`)
+        console.log(`   ✅ UTXO Private Key: ${result.utxoPrivateKey.substring(0, 20)}... (${result.utxoPrivateKey.length} chars)`)
+        console.log(`   🔐 Encrypting UTXO key with link password...`)
+        
         const { encryptedUtxoPrivateKey, iv } = await encryptUtxoPrivateKey(
           result.utxoPrivateKey,
           linkId
         )
+
+        console.log(`   📦 Encrypted key: ${encryptedUtxoPrivateKey.substring(0, 20)}... (${encryptedUtxoPrivateKey.length} chars)`)
+        console.log(`   🔑 IV: ${iv.substring(0, 20)}... (${iv.length} chars)`)
 
         await storeEncryptedKeyInBackend({
           linkId,
@@ -110,7 +116,8 @@ export async function executeUserPaysDeposit(
         // Non-critical - link still works but only with original wallet
       }
     } else {
-      console.warn('⚠️  Could not extract UTXO private key for multi-wallet claiming')
+      console.warn('⚠️  Could not extract UTXO private key - multi-wallet claiming disabled')
+      console.warn('   Your link can still be claimed, but only with the original wallet')
     }
 
     console.log(`\n✅ SUCCESS`)
@@ -299,23 +306,31 @@ async function storeEncryptedKeyInBackend(params: {
   const url = `${CONFIG.BACKEND_URL}/api/deposit/store-key`
 
   console.log(`🔐 Storing encrypted key...`)
+  console.log(`   Encrypted key length: ${params.encryptedUtxoPrivateKey.length} chars`)
+  console.log(`   IV length: ${params.iv.length} chars`)
 
   try {
     const response = await fetch(url, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(params)
+      body: JSON.stringify({
+        linkId: params.linkId,
+        encryptedUtxoPrivateKey: params.encryptedUtxoPrivateKey,
+        iv: params.iv
+      })
     })
 
     if (!response.ok) {
       const errorData = await response.json().catch(() => ({ error: 'Unknown error' }))
-      throw new Error(errorData.error || `Failed: ${response.status}`)
+      const errorMsg = errorData.error || errorData.message || `HTTP ${response.status}`
+      console.error(`❌ Failed to store encryption key:`, errorMsg)
+      throw new Error(errorMsg)
     }
 
     const result = await response.json()
-    console.log(`🔐 Encrypted key stored:`, result)
+    console.log(`✅ Encrypted key stored successfully:`, result)
   } catch (error: any) {
-    console.error(`Failed to store encryption key:`, error.message)
+    console.error(`❌ Failed to store encryption key:`, error.message)
     throw error
   }
 }
