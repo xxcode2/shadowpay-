@@ -226,105 +226,42 @@ router.post('/', async (req: Request, res: Response) => {
       // Continue anyway - SDK will check again
     }
 
-    // 🔥 EXECUTE REAL WITHDRAWAL VIA PRIVACY CASH SDK
-    // SDK returns: tx, recipient, amount_in_lamports, fee_in_lamports, isPartial
-    console.log(`🚀 Executing Privacy Cash withdrawal...`)
-    let withdrawalResult
-    try {
-      withdrawalResult = await pc.withdraw({
-        lamports: lamportsNum,
-        recipientAddress,
-      })
-    } catch (withdrawErr: any) {
-      console.error(`❌ Withdrawal failed: ${withdrawErr.message}`)
-      console.error(`   Error stack: ${withdrawErr.stack}`)
-      
-      // Re-check balance to understand failure
-      try {
-        const balance = await connection.getBalance(operatorPubkey)
-        const balanceSOL = balance / LAMPORTS_PER_SOL
-        console.error(`   Operator balance at failure: ${balanceSOL.toFixed(8)} SOL`)
-      } catch (e) {}
-      
-      return res.status(500).json({
-        error: withdrawErr.message || 'Withdrawal execution failed',
-        details: `Privacy Cash SDK error during withdrawal`,
-        originalError: withdrawErr.message
-      })
-    }
-
-    const { tx: withdrawTx, amount_in_lamports: amountReceived, fee_in_lamports: feeCharged, isPartial } = withdrawalResult
-
-    console.log(`✅ Real withdrawal tx: ${withdrawTx}`)
-    console.log(`   Amount requested: ${(lamportsNum / LAMPORTS_PER_SOL).toFixed(6)} SOL`)
-    console.log(`   Amount received: ${(amountReceived / LAMPORTS_PER_SOL).toFixed(6)} SOL`)
-    console.log(`   Total fee: ${(feeCharged / LAMPORTS_PER_SOL).toFixed(6)} SOL`)
-
-    if (isPartial) {
-      console.log(`   ⚠️ PARTIAL WITHDRAWAL - balance was insufficient`)
-    }
-
-    // ✅ VERIFY WITHDRAWAL ON-CHAIN
-    // Monitor transaction for confirmation before updating database
-    console.log(`🔍 Verifying transaction on-chain...`)
-    try {
-      const verification = await monitorTransactionStatus(withdrawTx, RPC)
-      if (!verification.confirmed) {
-        console.warn(`⚠️ Transaction ${withdrawTx} not yet confirmed, continuing anyway...`)
-      } else {
-        console.log(`✅ Transaction verified on-chain`)
-      }
-    } catch (verifyErr: any) {
-      console.warn(`⚠️ Transaction verification warning: ${verifyErr.message}`)
-      // Don't fail - Privacy Cash SDK already verified the withdrawal
-    }
-
-    // ✅ CALCULATE FEE BREAKDOWN
-    // Fees: 0.006 SOL base + 0.35% protocol fee
-    const BASE_FEE_LAMPORTS = 0.006 * LAMPORTS_PER_SOL
-    const protocolFeeLamports = feeCharged - BASE_FEE_LAMPORTS
-    const protocolFeeSOL = Math.max(0, protocolFeeLamports / LAMPORTS_PER_SOL)
-
-    // ✅ ATOMIC update: Link + Transaction record (prevents double-claim)
-    await prisma.$transaction([
-      prisma.paymentLink.update({
-        where: { id: linkId },
-        data: {
-          claimed: true,
-          claimedBy: recipientAddress,
-          withdrawTx,
-        },
-      }),
-      prisma.transaction.create({
-        data: {
-          type: 'withdraw',
-          linkId,
-          transactionHash: withdrawTx,
-          amount: link.amount, // Original amount in SOL
-          assetType: link.assetType,
-          status: 'confirmed',
-          toAddress: recipientAddress,
-        },
-      }),
-    ])
-
-    console.log(`✅ Link ${linkId} claimed by ${recipientAddress}`)
-    console.log(`💰 Operator earned 0.006 SOL base fee + 0.35% protocol fee`)
-
-    return res.status(200).json({
-      success: true,
-      withdrawTx,
-      linkId,
-      amount: amountReceived / LAMPORTS_PER_SOL, // Amount recipient got
-      fee: {
-        baseFee: 0.006,
-        protocolFee: protocolFeeSOL,
-        totalFee: feeCharged / LAMPORTS_PER_SOL,
+    // 🔥 FUNDAMENTAL ISSUE WITH PRIVACY CASH SDK:
+    // =========================================
+    // The SDK's withdraw() function tries to decrypt UTXOs using the CALLER's keypair
+    // But UTXOs were encrypted by the DEPOSITOR's keypair (different browser/wallet)
+    // 
+    // This is a design limitation of Privacy Cash SDK - it assumes:
+    // - User deposits with wallet A
+    // - User withdraws with SAME wallet A
+    // 
+    // Our use case is different:
+    // - User A deposits (encrypted with A's keys)
+    // - User B claims link (needs to withdraw, but is different from A)
+    // 
+    // WORKAROUND: We need the DEPOSITOR to generate the withdrawal proof
+    // when they CREATE the deposit, and store it for later use by any recipient.
+    // This requires modifying the deposit flow to pre-generate recipient-agnostic proofs.
+    
+    console.log(`⚠️ LIMITATION: Privacy Cash SDK requires same-wallet withdrawal`)
+    console.log(`   Depositor wallet: (from encryption keys)`)
+    console.log(`   Operator wallet: ${operatorPubkey.toString()}`)
+    console.log(`   Recipient wallet: ${recipientAddress}`)
+    console.log(`   ❌ Mismatch: Cannot decrypt UTXOs without depositor's private key`)
+    
+    return res.status(501).json({
+      error: 'Multi-wallet claiming not yet supported',
+      details: `Privacy Cash SDK limitation: withdrawals require the depositor's private key for decryption. Current implementation does not support recipient-only claims where depositor and claimer are different wallets.`,
+      technicalDetails: {
+        issue: 'UTXO encryption keys do not match operator or recipient keypairs',
+        requiredFix: 'Modify deposit flow to pre-generate withdrawal proofs for any recipient address',
+        currentState: {
+          depositedWith: 'Original depositor keys (unknown at backend)',
+          operatorUsing: operatorPubkey.toString(),
+          claimingWith: recipientAddress
+        }
       },
-      isPartial,
-      message: isPartial 
-        ? 'Partial withdrawal completed - balance was insufficient'
-        : 'Withdrawal completed successfully',
+      workaround: 'For now, the deposit creator must use the same wallet to claim, or provide their private key to the backend (not recommended for security)'
     })
   } catch (err: any) {
     console.error('❌ CLAIM ERROR:', err.message || err.toString())

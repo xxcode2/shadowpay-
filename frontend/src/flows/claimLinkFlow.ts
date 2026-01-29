@@ -94,6 +94,8 @@ If your deposit appears on Solscan but you can't claim, you can manually record 
 2. Copy the Transaction Hash
 3. Use the manual recording option below
 Or wait 1-2 minutes and try again.`
+          } else if (errorMsg.toLowerCase().includes('multi-wallet claiming')) {
+            errorMsg = `⚠️ LIMITATION: This payment link can only be claimed by the wallet that created it.\n\nReason: Privacy Cash SDK encrypts funds with the depositor's wallet keys. For security, only the original wallet can decrypt and claim.\n\nOptions:\n1. Use the same wallet that created this link\n2. Ask the creator to claim and send you the funds\n3. Ask creator to share their private claim link`
           } else if (errorMsg.toLowerCase().includes('already claimed')) {
             errorMsg = '❌ This link has already been claimed!'
           } else if (errorMsg.toLowerCase().includes('not found')) {
