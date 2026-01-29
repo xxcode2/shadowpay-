@@ -211,25 +211,40 @@ export async function executeDeposit(
  * - Deposit succeeded on-chain (visible on Solscan)
  * - But backend recording failed
  * - User has the transaction hash from Solscan
+ * 
+ * @param linkId - The payment link ID
+ * @param transactionHash - Transaction hash from Solscan
+ * @param lamports - Amount in lamports (optional, will use link's original amount if not provided)
  */
 export async function manuallyRecordDeposit(
   linkId: string,
-  transactionHash: string
+  transactionHash: string,
+  lamports?: number
 ): Promise<boolean> {
   const url = `${CONFIG.BACKEND_URL}/api/deposit/manual-record`
   
   console.log(`\n🔧 Manually recording deposit...`)
   console.log(`   Link: ${linkId}`)
   console.log(`   Tx: ${transactionHash?.slice(0, 20)}...`)
+  if (lamports) {
+    console.log(`   Amount: ${(lamports / 1e9).toFixed(6)} SOL (${lamports} lamports)`)
+  }
   
   try {
+    const body: any = {
+      linkId,
+      transactionHash
+    }
+    
+    // Include lamports if provided
+    if (lamports && lamports > 0) {
+      body.lamports = lamports
+    }
+    
     const response = await fetch(url, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        linkId,
-        transactionHash
-      })
+      body: JSON.stringify(body)
     })
 
     if (!response.ok) {

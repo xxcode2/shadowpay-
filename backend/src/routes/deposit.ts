@@ -356,11 +356,11 @@ router.post('/verify-and-record', async (req: Request<{}, {}, any>, res: Respons
  * 
  * Manual deposit recording endpoint
  * Used when user has on-chain confirmation (Solscan proof) but backend recording failed
- * User can manually provide transaction hash to record deposit
+ * User can manually provide transaction hash and amount to record deposit
  */
 router.post('/manual-record', async (req: Request<{}, {}, any>, res: Response) => {
   try {
-    const { linkId, transactionHash } = req.body
+    const { linkId, transactionHash, lamports } = req.body
 
     if (!linkId || !transactionHash) {
       return res.status(400).json({
@@ -371,6 +371,7 @@ router.post('/manual-record', async (req: Request<{}, {}, any>, res: Response) =
     console.log(`\n📝 MANUAL DEPOSIT RECORDING`)
     console.log(`   Link: ${linkId}`)
     console.log(`   Tx: ${transactionHash?.slice(0, 20)}...`)
+    console.log(`   Amount: ${lamports ? (lamports / 1e9).toFixed(6) + ' SOL' : 'not provided'} (${lamports} lamports)`)
 
     // Find the link
     const link = await prisma.paymentLink.findUnique({
@@ -391,14 +392,27 @@ router.post('/manual-record', async (req: Request<{}, {}, any>, res: Response) =
         success: true,
         message: 'Deposit already recorded',
         depositTx: link.depositTx,
+        lamports: link.lamports,
         note: 'Link already has a deposit recorded'
       })
     }
 
     // Record the deposit from manual submission
+    const updateData: any = { depositTx: transactionHash }
+    
+    // If user provided lamports, use it; otherwise use the link's original amount
+    if (lamports && Number(lamports) > 0) {
+      updateData.lamports = BigInt(lamports)
+      console.log(`   💰 Recording with provided amount: ${(Number(lamports) / 1e9).toFixed(6)} SOL`)
+    } else if (link.lamports && link.lamports > 0n) {
+      console.log(`   💰 Using existing link amount: ${(Number(link.lamports) / 1e9).toFixed(6)} SOL`)
+    } else {
+      console.warn(`   ⚠️ WARNING: No lamports amount found for this link!`)
+    }
+
     const updated = await prisma.paymentLink.update({
       where: { id: linkId },
-      data: { depositTx: transactionHash }
+      data: updateData
     })
 
     console.log(`   ✅ Deposit recorded manually by user`)
@@ -407,6 +421,7 @@ router.post('/manual-record', async (req: Request<{}, {}, any>, res: Response) =
       success: true,
       message: 'Deposit recorded successfully',
       depositTx: transactionHash,
+      lamports: updated.lamports?.toString(),
       linkId,
       note: 'You can now claim this link'
     })
