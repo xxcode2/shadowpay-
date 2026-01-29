@@ -74,9 +74,13 @@ async function withdrawFromPrivacyCash(
     const lamports = Math.floor(amount * 1_000_000_000)
 
     console.log(`⏳ Generating ZK proof and withdrawing...`)
+    
+    // ✅ IMPORTANT: recipientAddress must be PublicKey object, not string!
+    const recipientPublicKey = new PublicKey(recipientAddress)
+    
     const result = await client.withdraw({
       lamports,
-      recipientAddress
+      recipientAddress: recipientPublicKey
     })
 
     console.log(`✅ WITHDRAWAL SUCCESS!`)
