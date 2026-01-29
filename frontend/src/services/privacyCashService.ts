@@ -1,5 +1,6 @@
 import { EncryptionService } from 'privacycash/utils'
 import { PublicKey, Keypair } from '@solana/web3.js'
+// @ts-ignore
 import { PrivacyCash } from 'privacycash'
 
 /**

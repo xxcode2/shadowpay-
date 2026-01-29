@@ -71,26 +71,32 @@ export async function executeClaimLink(input: {
     let withdrawalTx = null
 
     try {
-      // ✅ Get Privacy Cash SDK from window
-      const PrivacyCash = (window as any).PrivacyCash
+      // ✅ Load Privacy Cash SDK dynamically
+      const { PrivacyCash } = await import('privacycash')
+      const { WasmFactory } = await import('@lightprotocol/hasher.rs')
+      
       if (!PrivacyCash) {
-        throw new Error(
-          'Privacy Cash SDK not loaded. Make sure Privacy Cash is installed via npm.'
-        )
+        throw new Error('Privacy Cash SDK not available')
       }
 
-      // ✅ Initialize SDK with user's wallet
+      // ✅ Get lightWasm instance for encryption/decryption
+      const lightWasm = await WasmFactory.getInstance()
+      console.log('✅ Loaded Privacy Cash SDK & LightWasm')
+
+      // ✅ Initialize SDK client with user's public key
       const client = new PrivacyCash({
         RPC_url: 'https://mainnet.helius-rpc.com/?api-key=c455719c-354b-4a44-98d4-27f8a18aa79c',
-        owner: wallet.publicKey, // User's wallet public key
+        owner: wallet.publicKey.toBase58(), // User's wallet public key
       })
 
       // ✅ Execute withdrawal - SDK handles encryption, ZK proof, relayer call
+      // SDK returns transaction after successful withdrawal
       const withdrawResult = await client.withdraw({
         lamports: Math.floor((linkData.amount || 0) * 1e9), // Convert SOL to lamports
-        recipientAddress: recipientAddress,
+        recipientAddress: recipientAddress, // Solana address as string
       })
 
+      // ✅ Extract transaction hash - SDK returns { isPartial, tx, recipient, amount_in_lamports, fee_in_lamports }
       if (withdrawResult && withdrawResult.tx) {
         withdrawalTx = withdrawResult.tx
         console.log(`✅ Withdrawal successful!`)
@@ -102,7 +108,7 @@ export async function executeClaimLink(input: {
       console.error(`❌ SDK withdrawal error: ${sdkErr.message}`)
       throw new Error(
         `Withdrawal failed: ${sdkErr.message}. ` +
-        `Make sure Privacy Cash SDK is properly installed and configured.`
+        `Make sure Privacy Cash SDK is properly installed.`
       )
     }
 

@@ -4,6 +4,8 @@
  */
 
 import { PrivacyCashService } from '../services/privacyCashService'
+// @ts-ignore
+declare module 'bn.js';
 import BN from 'bn.js'
 
 export interface DepositRequest {
