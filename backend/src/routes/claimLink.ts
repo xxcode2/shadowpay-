@@ -111,6 +111,7 @@ router.post('/', async (req: Request, res: Response) => {
     console.log(`🚀 Processing withdrawal for link ${linkId}`)
     console.log(`🎯 Recipient: ${recipientAddress}`)
     console.log(`💰 Amount: ${(link.amount).toFixed(6)} SOL (${Number(link.lamports)} lamports)`)
+    console.log(`ℹ️  Version: v2.0 - Simplified Payment Links (No Encryption Required)`)
 
     // ✅ CHECK FOR DEPOSIT TRANSACTION
     console.log(`📋 Step 1: Checking deposit transaction...`)
