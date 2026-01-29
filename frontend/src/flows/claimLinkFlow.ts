@@ -72,7 +72,8 @@ export async function executeClaimLink(input: {
     console.log('STEP 2: Requesting backend to execute withdrawal...')
     console.log(`💸 Withdrawing ${linkData.amount} SOL to ${recipientAddress}\n`)
 
-    const claimRes = await fetch(`${BACKEND_URL}/api/claim-link`, {
+    // Use /withdraw endpoint which handles everything
+    const claimRes = await fetch(`${BACKEND_URL}/api/withdraw`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
