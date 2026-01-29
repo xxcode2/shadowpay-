@@ -27,7 +27,7 @@ const router = Router()
  */
 router.post('/', async (req: Request<{}, {}, any>, res: Response) => {
   try {
-    const { amount, assetType } = req.body
+    const { amount, assetType, creatorAddress } = req.body
 
     // ✅ Validation
     if (!amount || amount <= 0) {
@@ -39,9 +39,14 @@ router.post('/', async (req: Request<{}, {}, any>, res: Response) => {
       return res.status(400).json({ error: `Asset must be one of: ${validAssets.join(', ')}` })
     }
 
+    // ✅ Validate creator address if provided
+    if (creatorAddress && typeof creatorAddress !== 'string') {
+      return res.status(400).json({ error: 'Invalid creatorAddress' })
+    }
+
     // ✅ Generate secure linkId
     const linkId = crypto.randomBytes(16).toString('hex')
-    console.log('📝 Creating payment link:', { linkId, amount, assetType })
+    console.log('📝 Creating payment link:', { linkId, amount, assetType, creator: creatorAddress })
 
     // ✅ Calculate lamports (source of truth for on-chain amount)
     const lamports = BigInt(Math.round(amount * LAMPORTS_PER_SOL))
@@ -56,6 +61,7 @@ router.post('/', async (req: Request<{}, {}, any>, res: Response) => {
         assetType,
         claimed: false,
         depositTx: '', // Will be updated when deposit to Privacy Cash happens
+        creatorAddress: creatorAddress || null, // ✅ NEW: Track creator for history
       } as any,
     })
 

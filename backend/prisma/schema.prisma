@@ -17,6 +17,9 @@ model PaymentLink {
   lamports    BigInt              // ✅ SOURCE OF TRUTH: stored in lamports (no rounding)
   assetType   String   // "SOL", "USDC", "USDT"
 
+  // Creator tracking
+  creatorAddress String?           // ✅ NEW: Track who created this link (for history)
+
   // Status
   claimed     Boolean  @default(false)
   claimedBy   String?

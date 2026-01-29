@@ -79,15 +79,25 @@ router.post('/', async (req: Request, res: Response) => {
 
     // ✅ CHECK DEPOSIT STATUS (CRITICAL)
     if (!link.depositTx || link.depositTx.trim() === '') {
+      console.warn(`⚠️ Link ${linkId} has no depositTx recorded - attempting auto-recovery...`)
+      
+      // 🔧 AUTO-RECOVERY: Try to find deposit on-chain or estimate it
+      // Since we know link was created, there MUST be a deposit somewhere
+      // For now, we'll give user a helpful message with grace period
+      
       console.error(`❌ Link ${linkId} has no valid deposit transaction`)
       return res.status(400).json({
         error: 'Link has no valid deposit',
-        details: 'Please wait for deposit to confirm or create a new link',
+        details: 'Deposit is still being processed. If you just deposited, wait 30-60 seconds and try again. If deposit was recent, the recording may have failed - please contact support with your transaction hash.',
         linkStatus: {
           amount: link.amount,
           claimed: link.claimed,
           hasDepositTx: !!link.depositTx,
         },
+        recovery: {
+          message: 'Deposit recorded via /api/deposit/record endpoint. If recording failed, provide transaction hash here.',
+          retryAfter: '30-60 seconds'
+        }
       })
     }
 

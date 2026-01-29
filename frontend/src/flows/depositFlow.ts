@@ -122,26 +122,75 @@ async function recordDepositInBackend(params: {
   console.log(`      URL: ${url}`)
   console.log(`      LinkID: ${params.linkId}`)
   
+  try {
+    const response = await fetch(url, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        linkId: params.linkId,
+        amount: params.amount,
+        lamports: params.lamports,
+        publicKey: params.publicKey,
+        transactionHash: params.transactionSignature
+      })
+    })
+
+    if (!response.ok) {
+      const errorData = await response.json().catch(() => ({ error: 'Unknown error' }))
+      console.error(`      ❌ Backend error (${response.status}):`, errorData)
+      
+      // If primary endpoint fails, try fallback endpoint
+      if (response.status === 404) {
+        console.warn(`      ⚠️  Primary endpoint not found, trying fallback...`)
+        await recordDepositWithFallback(params)
+        return
+      }
+      
+      throw new Error(errorData.error || `Backend error: ${response.status}`)
+    }
+    
+    const result = await response.json()
+    console.log(`      ✅ Deposit recorded:`, result)
+  } catch (primaryErr) {
+    console.error(`      ❌ Primary endpoint failed:`, primaryErr)
+    console.warn(`      🔄 Attempting fallback endpoint...`)
+    await recordDepositWithFallback(params)
+  }
+}
+
+/**
+ * Fallback endpoint for recording deposits
+ * Used if primary /api/deposit/record endpoint fails
+ */
+async function recordDepositWithFallback(params: {
+  linkId: string
+  amount: string
+  lamports: number
+  publicKey: string
+  transactionSignature: string
+}): Promise<void> {
+  const url = `${CONFIG.BACKEND_URL}/api/deposit/verify-and-record`
+  
+  console.log(`      Fallback URL: ${url}`)
+  
   const response = await fetch(url, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({
       linkId: params.linkId,
-      amount: params.amount,
-      lamports: params.lamports,
-      publicKey: params.publicKey,
-      transactionHash: params.transactionSignature
+      transactionHash: params.transactionSignature,
+      publicKey: params.publicKey
     })
   })
 
   if (!response.ok) {
     const errorData = await response.json().catch(() => ({ error: 'Unknown error' }))
-    console.error(`      ❌ Backend error (${response.status}):`, errorData)
-    throw new Error(errorData.error || `Backend error: ${response.status}`)
+    console.error(`      ❌ Fallback endpoint error (${response.status}):`, errorData)
+    throw new Error(errorData.error || `Fallback error: ${response.status}`)
   }
   
   const result = await response.json()
-  console.log(`      ✅ Deposit recorded:`, result)
+  console.log(`      ✅ Deposit recorded (via fallback):`, result)
 }
 
 /**

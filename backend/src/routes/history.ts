@@ -12,16 +12,30 @@ router.get('/:walletAddress', async (req: Request, res: Response) => {
       return res.status(400).json({ error: 'Wallet address required' })
     }
 
-    // Get all DEPOSIT transactions from this wallet (sent links)
-    const sentTransactions = await prisma.transaction.findMany({
+    console.log(`📋 Fetching history for wallet: ${walletAddress}`)
+
+    // ✅ NEW: Get all PaymentLinks created by this wallet (including pending ones with no deposit yet)
+    const sentLinks = await prisma.paymentLink.findMany({
       where: {
-        fromAddress: walletAddress,
-        type: 'deposit',
+        creatorAddress: walletAddress,
       },
       orderBy: {
         createdAt: 'desc',
       },
     })
+
+    console.log(`   Found ${sentLinks.length} links created by this wallet`)
+
+    // Format sent links - include pending (waiting) and claimed ones
+    const sent = sentLinks.map((link: any) => ({
+      linkId: link.id,
+      amount: link.amount,
+      createdAt: link.createdAt.toISOString(),
+      claimed: link.claimed,
+      status: link.claimed ? 'claimed' : 'waiting',
+      depositTx: link.depositTx || null,
+      withdrawTx: link.withdrawTx || null,
+    }))
 
     // Get all WITHDRAW transactions to this wallet (received links)
     const receivedTransactions = await prisma.transaction.findMany({
@@ -34,27 +48,18 @@ router.get('/:walletAddress', async (req: Request, res: Response) => {
       },
     })
 
-    // Format sent history - check claim status from PaymentLink
-    const sent = await Promise.all(
-      sentTransactions.map(async (tx: any) => {
-        const link = await prisma.paymentLink.findUnique({
-          where: { id: tx.linkId },
-        })
-        return {
-          linkId: tx.linkId,
-          amount: tx.amount,
-          createdAt: tx.createdAt.toISOString(),
-          claimed: link?.claimed ?? false,
-        }
-      })
-    )
+    console.log(`   Found ${receivedTransactions.length} withdraw transactions`)
 
     // Format received history
     const received = receivedTransactions.map((tx: any) => ({
       linkId: tx.linkId,
       amount: tx.amount,
       claimedAt: tx.createdAt.toISOString(),
+      status: 'received',
+      withdrawTx: tx.transactionHash,
     }))
+
+    console.log(`📤 Returning history: ${sent.length} sent, ${received.length} received`)
 
     return res.json({
       sent,

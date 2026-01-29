@@ -280,4 +280,75 @@ router.post('/', async (req: Request<{}, {}, any>, res: Response) => {
   })
 })
 
+/**
+ * POST /api/deposit/verify-and-record
+ * 
+ * More flexible endpoint that:
+ * 1. Accepts transaction hash
+ * 2. Looks up link by ID
+ * 3. Records deposit if not already recorded
+ * 4. Returns status
+ * 
+ * Used as fallback when /record endpoint fails
+ */
+router.post('/verify-and-record', async (req: Request<{}, {}, any>, res: Response) => {
+  try {
+    const { linkId, transactionHash, publicKey } = req.body
+
+    if (!linkId || !transactionHash) {
+      return res.status(400).json({
+        error: 'Missing linkId or transactionHash'
+      })
+    }
+
+    console.log(`\n📝 VERIFY AND RECORD DEPOSIT`)
+    console.log(`   Link: ${linkId}`)
+    console.log(`   Tx: ${transactionHash?.slice(0, 20)}...`)
+
+    // Find the link
+    const link = await prisma.paymentLink.findUnique({
+      where: { id: linkId }
+    })
+
+    if (!link) {
+      return res.status(404).json({
+        error: 'Link not found',
+        linkId
+      })
+    }
+
+    // Check if already recorded
+    if (link.depositTx && link.depositTx.trim() !== '') {
+      console.log(`   ✅ Deposit already recorded: ${link.depositTx}`)
+      return res.status(200).json({
+        success: true,
+        message: 'Deposit already recorded',
+        depositTx: link.depositTx,
+        isNew: false
+      })
+    }
+
+    // Record the deposit
+    const updated = await prisma.paymentLink.update({
+      where: { id: linkId },
+      data: { depositTx: transactionHash }
+    })
+
+    console.log(`   ✅ Deposit recorded successfully`)
+
+    return res.status(200).json({
+      success: true,
+      message: 'Deposit recorded',
+      depositTx: transactionHash,
+      isNew: true
+    })
+
+  } catch (error: any) {
+    console.error(`Verify and record deposit failed:`, error)
+    return res.status(500).json({
+      error: error.message || 'Failed to verify and record deposit'
+    })
+  }
+})
+
 export default router

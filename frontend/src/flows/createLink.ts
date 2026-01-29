@@ -32,12 +32,16 @@ export async function createLink({
   try {
     // 1️⃣ CREATE LINK METADATA ON BACKEND
     console.log(`📝 Creating payment link for ${amountSOL} SOL...`)
+    const walletAddress = wallet.publicKey.toString()
+    console.log(`   Creator: ${walletAddress}`)
+    
     const createRes = await fetch(`${BACKEND_URL}/api/create-link`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
         amount: amountSOL,
         assetType: 'SOL',
+        creatorAddress: walletAddress, // ✅ NEW: Send creator address
       }),
     })
 
