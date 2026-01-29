@@ -9,17 +9,102 @@ const router = Router()
 /**
  * POST /api/claim-link
  *
- * ✅ SIMPLIFIED MODEL (v3.0):
+ * ✅ CLAIM + AUTO-WITHDRAW:
  * 
  * FLOW:
- * 1. User A deposits SOL to Privacy Cash (pays deposit fee)
- * 2. User A creates link (records deposit hash in backend)
- * 3. User B claims link (backend validates, confirms claimed)
- * 4. User B withdraws from Privacy Cash to their wallet (pays withdrawal fee)
+ * 1. User connects wallet → provides address
+ * 2. User clicks "Claim" button
+ * 3. Backend validates link + marks claimed
+ * 4. Backend withdraws from Privacy Cash (using operator key) → sends to user address
+ * 5. Return tx hash to frontend
  * 
- * RESULT: Backend only records, users handle their own deposits/withdrawals!
- * NO OPERATOR BALANCE NEEDED - just small PostgreSQL storage!
+ * ONE CLICK - DONE! SOL in wallet!
  */
+
+/**
+ * Helper: Withdraw from Privacy Cash to user address
+ */
+async function withdrawFromPrivacyCash(
+  amount: number,
+  recipientAddress: string,
+  linkId: string
+): Promise<{ success: boolean; tx: string; amountReceived: number; feePaid: number }> {
+  try {
+    console.log(`\n💰 WITHDRAWING FROM PRIVACY CASH`)
+    console.log(`   Amount: ${amount} SOL`)
+    console.log(`   Recipient: ${recipientAddress}`)
+    console.log(`   Link: ${linkId}`)
+
+    const { PrivacyCash } = await import('privacycash')
+
+    // Get operator private key from env
+    const operatorKeyStr = process.env.OPERATOR_SECRET_KEY || ''
+    if (!operatorKeyStr) {
+      throw new Error('OPERATOR_SECRET_KEY not configured')
+    }
+
+    // Parse private key (support multiple formats)
+    let operatorKey: number[]
+    
+    // Try format 1: comma-separated numbers
+    if (operatorKeyStr.includes(',')) {
+      operatorKey = operatorKeyStr.split(',').map(n => parseInt(n.trim(), 10))
+    }
+    // Try format 2: JSON array
+    else if (operatorKeyStr.startsWith('[')) {
+      operatorKey = JSON.parse(operatorKeyStr)
+    }
+    // Try format 3: base64
+    else {
+      const buffer = Buffer.from(operatorKeyStr, 'base64')
+      operatorKey = Array.from(buffer)
+    }
+
+    if (!Array.isArray(operatorKey) || operatorKey.length !== 64) {
+      throw new Error(`Invalid operator key: got ${operatorKey.length} bytes, need 64`)
+    }
+
+    console.log(`🔐 Initializing Privacy Cash with operator key...`)
+
+    const client = new PrivacyCash({
+      RPC_url: 'https://mainnet.helius-rpc.com/?api-key=c455719c-354b-4a44-98d4-27f8a18aa79c',
+      owner: operatorKey
+    })
+
+    const lamports = Math.floor(amount * 1_000_000_000)
+
+    console.log(`⏳ Generating ZK proof and withdrawing...`)
+    const result = await client.withdraw({
+      lamports,
+      recipientAddress
+    })
+
+    console.log(`✅ WITHDRAWAL SUCCESS!`)
+    console.log(`   TX: ${result.tx}`)
+    console.log(`   Amount: ${(result.amount_in_lamports / 1_000_000_000).toFixed(6)} SOL`)
+    console.log(`   Fee: ${(result.fee_in_lamports / 1_000_000_000).toFixed(6)} SOL`)
+
+    // Save withdrawal tx in database
+    await prisma.paymentLink.update({
+      where: { id: linkId },
+      data: {
+        withdrawTx: result.tx,
+        updatedAt: new Date()
+      }
+    })
+
+    return {
+      success: true,
+      tx: result.tx,
+      amountReceived: result.amount_in_lamports / 1_000_000_000,
+      feePaid: result.fee_in_lamports / 1_000_000_000
+    }
+  } catch (err: any) {
+    console.error(`❌ Withdrawal failed:`, err.message)
+    throw err
+  }
+}
+
 router.post('/', async (req: Request, res: Response) => {
   try {
     const { linkId, recipientAddress } = req.body
@@ -54,7 +139,7 @@ router.post('/', async (req: Request, res: Response) => {
     }
 
     // ✅ FIND LINK
-    console.log(`🔍 Looking up link: ${linkId}`)
+    console.log(`\n🔍 Looking up link: ${linkId}`)
     const link = await prisma.paymentLink.findUnique({
       where: { id: linkId },
     })
@@ -95,7 +180,7 @@ router.post('/', async (req: Request, res: Response) => {
 
     console.log(`🔓 Marking link as claimed for ${recipientAddress}`)
 
-    // ✅ MARK LINK AS CLAIMED (no withdrawal, just record!)
+    // ✅ MARK LINK AS CLAIMED
     await prisma.paymentLink.update({
       where: { id: linkId },
       data: {
@@ -105,26 +190,58 @@ router.post('/', async (req: Request, res: Response) => {
       }
     })
 
-    console.log(`✅ Link successfully claimed!`)
-    console.log(`   Amount: ${link.amount} SOL`)
-    console.log(`   Recipient: ${recipientAddress}`)
-    console.log(`   Deposit TX: ${link.depositTx}`)
+    console.log(`✅ Link marked as claimed!`)
 
-    // ✅ RETURN CLAIM INFO FOR RECIPIENT TO WITHDRAW
-    return res.status(200).json({
-      success: true,
-      message: 'Link claimed successfully! Now withdraw from Privacy Cash.',
-      linkId,
-      amount: link.amount,
-      depositTx: link.depositTx,
-      recipientAddress,
-      nextStep: {
-        action: 'Withdraw from Privacy Cash',
-        instructions: 'Use the Privacy Cash SDK to withdraw your funds from the shielded pool to your wallet',
-        example: 'await client.withdraw({ lamports: amount_in_lamports, recipientAddress })',
-        fees: 'Base 0.006 SOL + 0.35% of amount'
-      }
-    })
+    // ✅ WITHDRAW FROM PRIVACY CASH TO USER WALLET
+    console.log(`\n💳 Step 2: Processing withdrawal to user wallet...`)
+    
+    try {
+      const withdrawResult = await withdrawFromPrivacyCash(
+        link.amount,
+        recipientAddress,
+        linkId
+      )
+
+      // SUCCESS!
+      console.log(`\n✅ CLAIM & WITHDRAW COMPLETE!`)
+      
+      return res.status(200).json({
+        success: true,
+        claimed: true,
+        withdrawn: true,
+        message: 'Link claimed and SOL sent to your wallet!',
+        linkId,
+        amount: link.amount,
+        recipientAddress,
+        withdrawTx: withdrawResult.tx,
+        amountReceived: withdrawResult.amountReceived,
+        feePaid: withdrawResult.feePaid,
+        receipt: {
+          depositTx: link.depositTx,
+          withdrawalTx: withdrawResult.tx,
+          timestamp: new Date().toISOString(),
+          solscan: `https://solscan.io/tx/${withdrawResult.tx}`
+        }
+      })
+    } catch (withdrawErr: any) {
+      console.error(`⚠️ Claim succeeded but withdrawal failed:`, withdrawErr.message)
+
+      // Link is claimed but withdrawal failed - user should contact support
+      return res.status(500).json({
+        success: false,
+        claimed: true,
+        withdrawn: false,
+        error: 'Withdrawal failed after claim',
+        details: withdrawErr.message,
+        message: 'Your link was claimed but withdrawal failed. Please contact support with Link ID: ' + linkId,
+        linkId,
+        amount: link.amount,
+        recipientAddress,
+        depositTx: link.depositTx,
+        supportEmail: 'support@shadowpay.xyz'
+      })
+    }
+
   } catch (err: any) {
     console.error('❌ CLAIM ERROR:', err.message || err.toString())
     return res.status(500).json({

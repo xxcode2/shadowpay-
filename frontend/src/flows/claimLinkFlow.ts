@@ -1,46 +1,33 @@
 /**
- * ✅ v3.0: ONE-CLICK CLAIM + AUTO-WITHDRAW
+ * ✅ v4.0: CLAIM & AUTO-WITHDRAW IN ONE CLICK
  * 
- * Super simple flow:
- * 1. User connects wallet (Phantom/Solflare)
- * 2. User clicks "Claim & Withdraw"
- * 3. Backend claims the link
- * 4. Frontend auto-withdraws to the connected wallet
- * 5. Funds appear in wallet!
+ * Super simple:
+ * 1. User connects wallet
+ * 2. User clicks "Claim"
+ * 3. Backend validates, claims, AND withdraws directly to wallet
+ * 4. Done! SOL in wallet!
  * 
- * That's it - completely automatic!
+ * All-in-one on backend - NO MANUAL WITHDRAWAL NEEDED!
  */
-
-import { autoWithdrawToConnectedWallet } from './autoWithdraw'
 
 export async function executeClaimLink(input: {
   linkId: string
-  recipientAddress?: string // Optional - uses connected wallet if not provided
+  recipientAddress: string
 }) {
   const { linkId, recipientAddress } = input
 
-  // ✅ CHECK WALLET CONNECTED
-  const wallet = (window as any).solana
-  if (!wallet || !wallet.isConnected) {
-    throw new Error('❌ Please connect your wallet first (Phantom or Solflare)')
-  }
-
-  const userWallet = wallet.publicKey?.toString()
-  if (!userWallet) {
-    throw new Error('❌ Could not get wallet address. Please reconnect.')
-  }
-
-  // Use connected wallet as recipient if not specified
-  const finalRecipient = recipientAddress || userWallet
-
-  // ✅ FRONTEND VALIDATION
+  // ✅ VALIDATION
   if (!linkId || typeof linkId !== 'string') {
     throw new Error('❌ Missing or invalid linkId')
   }
 
-  // Solana addresses are 32-58 characters base58
-  if (finalRecipient.length < 32 || finalRecipient.length > 58) {
-    throw new Error('❌ Invalid Solana wallet address format')
+  if (!recipientAddress || typeof recipientAddress !== 'string') {
+    throw new Error('❌ Missing or invalid wallet address')
+  }
+
+  // Solana address check
+  if (recipientAddress.length < 32 || recipientAddress.length > 58) {
+    throw new Error('❌ Invalid Solana wallet address')
   }
 
   const BACKEND_URL =
@@ -48,14 +35,13 @@ export async function executeClaimLink(input: {
     'https://shadowpay-backend-production.up.railway.app'
 
   console.log('\n' + '='.repeat(70))
-  console.log('🚀 CLAIM & WITHDRAW - ONE CLICK')
+  console.log('🎯 CLAIM & WITHDRAW - ONE CLICK')
   console.log('='.repeat(70) + '\n')
-  console.log(`📱 Connected Wallet: ${userWallet}`)
-  console.log(`🔗 Link ID: ${linkId}`)
-  console.log(`💰 Destination: ${finalRecipient}\n`)
+  console.log(`📱 Wallet: ${recipientAddress}`)
+  console.log(`🔗 Link ID: ${linkId}\n`)
 
   try {
-    // ✅ STEP 1: Fetch link details from backend
+    // STEP 1: Fetch link details
     console.log('📋 STEP 1: Fetching link details...')
     const linkResponse = await fetch(`${BACKEND_URL}/api/link/${linkId}`)
 
@@ -72,103 +58,74 @@ export async function executeClaimLink(input: {
 
     console.log(`   ✅ Found: ${linkData.amount} SOL`)
 
-    // ✅ STEP 2: Claim link with backend (just mark as claimed)
-    console.log('\n🔓 STEP 2: Claiming link on backend...')
+    // STEP 2: Claim link + backend withdraws to wallet
+    console.log('\n🔓 STEP 2: Claiming link (backend will auto-withdraw)...')
 
     const claimRes = await fetch(`${BACKEND_URL}/api/claim-link`, {
       method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-      },
+      headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
         linkId,
-        recipientAddress: finalRecipient,
+        recipientAddress,
       }),
     })
 
     if (!claimRes.ok) {
       let errorMsg = `Claim failed with status ${claimRes.status}`
-      
+
       try {
         const contentType = claimRes.headers.get('content-type')
         if (contentType?.includes('application/json')) {
           const errorData = await claimRes.json()
-          console.error('❌ Claim failed with details:', errorData)
           errorMsg = errorData.error || errorMsg
-
-          // Friendly error messages
-          if (errorMsg.toLowerCase().includes('no valid deposit')) {
-            errorMsg = `⏳ Deposit still processing. Wait 30-60 seconds and try again.`
-          } else if (errorMsg.toLowerCase().includes('already claimed')) {
-            errorMsg = '❌ This link has already been claimed!'
-          } else if (errorMsg.toLowerCase().includes('not found')) {
-            errorMsg = '❌ This link does not exist. Please check the link ID.'
-          } else if (errorMsg.toLowerCase().includes('invalid solana')) {
-            errorMsg = '❌ Invalid wallet address. Please check your Solana address.'
-          }
         }
-      } catch (parseErr: any) {
-        console.error('⚠️ Could not parse error response:', parseErr.message)
-      }
+      } catch {}
 
       throw new Error(errorMsg)
     }
 
     const claimData = await claimRes.json()
-    console.log(`   ✅ Link claimed! Amount: ${claimData.amount} SOL`)
 
-    // ✅ STEP 3: AUTO-WITHDRAW TO CONNECTED WALLET
-    console.log('\n💳 STEP 3: Auto-withdrawing from Privacy Cash...')
-
-    try {
-      const withdrawResult = await autoWithdrawToConnectedWallet({
-        amount: claimData.amount,
-        recipientAddress: finalRecipient
-      })
-
+    // SUCCESS!
+    if (claimData.withdrawn) {
       console.log('\n' + '='.repeat(70))
-      console.log('✅ SUCCESS! Link Claimed & Withdrawn!')
+      console.log('✅ SUCCESS! LINK CLAIMED & SOL SENT TO WALLET!')
       console.log('='.repeat(70))
-      console.log(`\n📥 Amount Received: ${withdrawResult.amountReceived.toFixed(6)} SOL`)
-      console.log(`💱 Fees Paid: ${withdrawResult.feesPaid.toFixed(6)} SOL`)
-      console.log(`🔗 View Tx: https://solscan.io/tx/${withdrawResult.tx}`)
-      console.log(`\n⏳ Funds should arrive in your wallet shortly!\n`)
+      console.log(`\n💸 Transaction: ${claimData.withdrawTx}`)
+      console.log(`📥 Amount Received: ${claimData.amountReceived.toFixed(6)} SOL`)
+      console.log(`💱 Fee Paid: ${claimData.feePaid.toFixed(6)} SOL`)
+      console.log(`⏳ Check wallet in 30-60 seconds!`)
+      console.log(`\n🔗 View on Solscan: https://solscan.io/tx/${claimData.withdrawTx}\n`)
 
       return {
         success: true,
         claimed: true,
         withdrawn: true,
-        linkId: claimData.linkId,
+        linkId,
         amount: claimData.amount,
-        amountReceived: withdrawResult.amountReceived,
-        feesPaid: withdrawResult.feesPaid,
-        withdrawTx: withdrawResult.tx,
-        recipient: finalRecipient,
-        message: '✅ Claimed and withdrawn successfully!'
+        amountReceived: claimData.amountReceived,
+        feePaid: claimData.feePaid,
+        withdrawTx: claimData.withdrawTx,
+        message: '✅ Link claimed and SOL sent to your wallet!',
       }
-    } catch (withdrawErr: any) {
-      console.error('❌ Withdrawal failed:', withdrawErr.message)
-      
-      // Claim succeeded but withdrawal failed - still good progress
-      console.log('\n⚠️ Claim succeeded but withdrawal needs manual action.')
-      console.log('You can still withdraw manually from Privacy Cash web UI:')
-      console.log('   https://www.privacycash.net')
+    } else {
+      // Fallback: claim succeeded but withdrawal failed
+      console.log('\n⚠️ Link claimed but withdrawal needs manual action.')
+      console.log('Contact support with Link ID:', linkId)
 
       return {
         success: false,
         claimed: true,
         withdrawn: false,
-        linkId: claimData.linkId,
+        linkId,
         amount: claimData.amount,
-        depositTx: claimData.depositTx,
-        error: withdrawErr.message,
-        message: 'Link claimed! Please complete withdrawal manually at privacycash.net'
+        message: 'Link claimed but withdrawal failed. Please contact support.',
+        error: claimData.error,
       }
     }
 
-
   } catch (err: any) {
-    console.error('❌ Error:', err.message || err.toString())
+    console.error('❌ Error:', err.message)
     throw new Error(`❌ ${err.message || 'Unknown error'}`)
   }
 }
