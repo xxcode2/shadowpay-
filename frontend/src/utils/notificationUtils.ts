@@ -1,14 +1,16 @@
 /**
  * Notification utilities for user feedback
+ * Uses beautiful toast notifications instead of ugly alerts
  */
+
+import { showSuccess as toastSuccess, showError as toastError, showWarning as toastWarning, showInfo as toastInfo } from './toast'
 
 /**
  * Show success message to user
  */
 export function showSuccess(message: string): void {
   console.log('✅ SUCCESS:', message)
-  // In a real app, show toast/notification
-  alert(message)
+  toastSuccess(message)
 }
 
 /**
@@ -16,8 +18,7 @@ export function showSuccess(message: string): void {
  */
 export function showError(message: string): void {
   console.error('❌ ERROR:', message)
-  // In a real app, show toast/notification
-  alert(message)
+  toastError(message)
 }
 
 /**
@@ -25,8 +26,7 @@ export function showError(message: string): void {
  */
 export function showWarning(message: string): void {
   console.warn('⚠️ WARNING:', message)
-  // In a real app, show toast/notification
-  alert(message)
+  toastWarning(message)
 }
 
 /**
@@ -34,6 +34,4 @@ export function showWarning(message: string): void {
  */
 export function showInfo(message: string): void {
   console.info('ℹ️ INFO:', message)
-  // In a real app, show toast/notification
-  alert(message)
-}
+  toastInfo(message)}
