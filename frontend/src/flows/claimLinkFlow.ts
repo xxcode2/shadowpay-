@@ -55,31 +55,13 @@ export async function executeClaimLink(input: {
 
     console.log(`   ✅ Link found: ${linkData.amount} SOL`)
 
-    // ✅ STEP 2: Generate ZK proof for withdrawal
-    console.log('🔐 Step 2: Generating ZK proof for withdrawal...')
-    console.log(`   🔑 Proving UTXO ownership without revealing amount...`)
+    // ✅ STEP 2: Submit claim to backend
+    // Backend will use Privacy Cash SDK to generate real ZK proof and withdraw
+    console.log('🔐 Step 2: Submitting to backend...')
+    console.log(`   Backend will use Privacy Cash SDK to withdraw...`)
 
-    const { generateWithdrawalProof } = await import(
-      '../utils/zkProof'
-    )
-
-    // For now, use mock proof data (in production, derive from user's encrypted UTXO)
-    const proofData = await generateWithdrawalProof({
-      linkId,
-      amount: Math.round(linkData.amount * 1e9), // Convert to lamports
-      recipientAddress,
-      commitment: linkData.commitment || 'mock_commitment_hash',
-      nullifier: linkData.nullifier || 'mock_nullifier_hash',
-      secret: 'user_secret_key', // In production, from user's encryption
-    })
-
-    console.log(`   ✅ ZK proof generated`)
-    console.log(`   Proof A: ${String(proofData.proof.pi_a[0]).substring(0, 20)}...`)
-    console.log(`   Public signals: ${proofData.publicSignals.length}`)
-
-    // ✅ STEP 3: Submit ZK proof to backend for withdrawal
-    console.log('📤 Step 3: Submitting withdrawal with ZK proof...')
-    console.log(`   Relayer will verify proof and execute withdrawal...`)
+    // ✅ STEP 3: Backend executes withdrawal via Privacy Cash SDK
+    console.log('📤 Step 3: Backend executing Privacy Cash withdrawal...')
 
     const res = await fetch(`${BACKEND_URL}/api/claim-link`, {
       method: 'POST',
@@ -90,8 +72,6 @@ export async function executeClaimLink(input: {
       body: JSON.stringify({
         linkId,
         recipientAddress,
-        zkProof: proofData.proof,
-        publicSignals: proofData.publicSignals,
       }),
     })
 
