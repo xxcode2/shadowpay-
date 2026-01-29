@@ -108,7 +108,12 @@ export async function executeClaimLink(input: {
 
           // Friendly error messages
           if (errorMsg.toLowerCase().includes('no valid deposit')) {
-            errorMsg = '⏳ Deposit still processing. Please wait 1-2 minutes and try again.'
+            errorMsg = `⏳ Deposit still processing. 
+If your deposit appears on Solscan but you can't claim, you can manually record it:
+1. Find your transaction on Solscan: https://solscan.io/
+2. Copy the Transaction Hash
+3. Use the manual recording option below
+Or wait 1-2 minutes and try again.`
           } else if (errorMsg.toLowerCase().includes('already claimed')) {
             errorMsg = '❌ This link has already been claimed!'
           } else if (errorMsg.toLowerCase().includes('not found')) {

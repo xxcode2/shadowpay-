@@ -204,3 +204,45 @@ export async function executeDeposit(
 ): Promise<string> {
   return executeUserPaysDeposit(request, wallet)
 }
+
+/**
+ * Manual deposit recording for recovery
+ * Use this when:
+ * - Deposit succeeded on-chain (visible on Solscan)
+ * - But backend recording failed
+ * - User has the transaction hash from Solscan
+ */
+export async function manuallyRecordDeposit(
+  linkId: string,
+  transactionHash: string
+): Promise<boolean> {
+  const url = `${CONFIG.BACKEND_URL}/api/deposit/manual-record`
+  
+  console.log(`\n🔧 Manually recording deposit...`)
+  console.log(`   Link: ${linkId}`)
+  console.log(`   Tx: ${transactionHash?.slice(0, 20)}...`)
+  
+  try {
+    const response = await fetch(url, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        linkId,
+        transactionHash
+      })
+    })
+
+    if (!response.ok) {
+      const errorData = await response.json().catch(() => ({ error: 'Unknown error' }))
+      console.error(`❌ Manual recording failed:`, errorData)
+      throw new Error(errorData.error || `Failed: ${response.status}`)
+    }
+    
+    const result = await response.json()
+    console.log(`✅ Deposit recorded successfully!`, result)
+    return true
+  } catch (error: any) {
+    console.error(`❌ Manual recording error:`, error.message)
+    return false
+  }
+}

@@ -351,4 +351,72 @@ router.post('/verify-and-record', async (req: Request<{}, {}, any>, res: Respons
   }
 })
 
+/**
+ * POST /api/deposit/manual-record
+ * 
+ * Manual deposit recording endpoint
+ * Used when user has on-chain confirmation (Solscan proof) but backend recording failed
+ * User can manually provide transaction hash to record deposit
+ */
+router.post('/manual-record', async (req: Request<{}, {}, any>, res: Response) => {
+  try {
+    const { linkId, transactionHash } = req.body
+
+    if (!linkId || !transactionHash) {
+      return res.status(400).json({
+        error: 'Missing linkId or transactionHash'
+      })
+    }
+
+    console.log(`\n📝 MANUAL DEPOSIT RECORDING`)
+    console.log(`   Link: ${linkId}`)
+    console.log(`   Tx: ${transactionHash?.slice(0, 20)}...`)
+
+    // Find the link
+    const link = await prisma.paymentLink.findUnique({
+      where: { id: linkId }
+    })
+
+    if (!link) {
+      return res.status(404).json({
+        error: 'Link not found',
+        linkId
+      })
+    }
+
+    // Check if already recorded
+    if (link.depositTx && link.depositTx.trim() !== '') {
+      console.log(`   ✅ Deposit already recorded: ${link.depositTx}`)
+      return res.status(200).json({
+        success: true,
+        message: 'Deposit already recorded',
+        depositTx: link.depositTx,
+        note: 'Link already has a deposit recorded'
+      })
+    }
+
+    // Record the deposit from manual submission
+    const updated = await prisma.paymentLink.update({
+      where: { id: linkId },
+      data: { depositTx: transactionHash }
+    })
+
+    console.log(`   ✅ Deposit recorded manually by user`)
+
+    return res.status(200).json({
+      success: true,
+      message: 'Deposit recorded successfully',
+      depositTx: transactionHash,
+      linkId,
+      note: 'You can now claim this link'
+    })
+
+  } catch (error: any) {
+    console.error(`Manual record deposit failed:`, error)
+    return res.status(500).json({
+      error: error.message || 'Failed to record deposit manually'
+    })
+  }
+})
+
 export default router
