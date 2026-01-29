@@ -17,9 +17,6 @@ model PaymentLink {
   lamports    BigInt              // ✅ SOURCE OF TRUTH: stored in lamports (no rounding)
   assetType   String   // "SOL", "USDC", "USDT"
 
-  // Creator tracking
-  creatorAddress String?           // ✅ NEW: Track who created this link (for history)
-
   // Status
   claimed     Boolean  @default(false)
   claimedBy   String?
@@ -36,6 +33,15 @@ model PaymentLink {
 
   @@map("payment_links")
 }
+
+// TODO: After production DB migration runs (adds creatorAddress column):
+// 1. Uncomment creatorAddress field below
+// 2. Re-enable in createLink.ts (line ~67)
+// 3. Re-enable in history.ts (lines ~17-27)
+//
+// model PaymentLink {
+//   creatorAddress String?           // Track who created this link (for history)
+// }
 
 model Transaction {
   id              String   @id @default(cuid())
