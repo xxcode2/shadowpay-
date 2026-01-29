@@ -278,8 +278,10 @@ export class App {
       // ✅ UPDATE UI
       document.getElementById('connect-wallet-btn')?.classList.add('hidden')
       document.getElementById('wallet-connected')?.classList.remove('hidden')
-      document.getElementById('wallet-address')!.textContent =
-        `${this.walletAddress.slice(0, 4)}...${this.walletAddress.slice(-4)}`
+      const walletAddressEl = document.getElementById('wallet-address')
+      if (walletAddressEl && this.walletAddress) {
+        walletAddressEl.textContent = `${this.walletAddress.slice(0, 4)}...${this.walletAddress.slice(-4)}`
+      }
 
       this.setStatus('✅ Wallet connected — Ready to create link')
     } catch (err: any) {

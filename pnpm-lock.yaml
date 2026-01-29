@@ -76,6 +76,9 @@ importers:
 
   frontend:
     dependencies:
+      '@lightprotocol/hasher.rs':
+        specifier: ^0.2.1
+        version: 0.2.1
       '@solana/web3.js':
         specifier: ^1.98.4
         version: 1.98.4(bufferutil@4.1.0)(typescript@5.9.3)(utf-8-validate@5.0.10)
@@ -94,6 +97,9 @@ importers:
       rollup-plugin-polyfill-node:
         specifier: ^0.13.0
         version: 0.13.0(rollup@4.55.3)
+      snarkjs:
+        specifier: ^0.7.5
+        version: 0.7.6
       tweetnacl:
         specifier: ^1.0.3
         version: 1.0.3
@@ -104,6 +110,9 @@ importers:
       '@types/node':
         specifier: ^24.3.0
         version: 24.10.9
+      '@types/snarkjs':
+        specifier: ^0.7.9
+        version: 0.7.9
       typescript:
         specifier: ^5.9.2
         version: 5.9.3
