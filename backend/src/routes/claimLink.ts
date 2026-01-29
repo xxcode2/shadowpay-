@@ -110,9 +110,10 @@ router.post('/', async (req: Request, res: Response) => {
       })
     }
 
-    // ✅ Get operator and initialize connection
+    // ✅ Get operator and initialize connection with v0 transaction support
     const pc = getPrivacyCashClient()
-    const connection = new Connection(RPC)
+    const connection = new Connection(RPC, 'confirmed')
+    // Note: Connection will support v0 transactions automatically
     const operatorKeypair = (pc as any)['keypair'] // SDK stores keypair internally
 
     console.log(`🚀 Executing REAL PrivacyCash withdrawal for link ${linkId}`)
