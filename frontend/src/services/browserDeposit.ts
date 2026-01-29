@@ -14,7 +14,6 @@
  */
 
 import { Connection, PublicKey, VersionedTransaction } from '@solana/web3.js'
-import { PrivacyCashService } from './privacyCashService'
 
 // Privacy Cash constants
 const SIGN_MESSAGE = 'Privacy Money account sign in'
@@ -137,18 +136,70 @@ export async function executeNonCustodialDeposit(params: DepositParams): Promise
     // ✅ NEW: Extract UTXO private key for multi-wallet claiming
     let utxoPrivateKey: string | undefined
     try {
-      // Use PrivacyCashService to extract the key
-      // It tries multiple methods to find the UTXO private key
-      utxoPrivateKey = PrivacyCashService.getUtxoPrivateKey()
+      console.log('[Deposit] 🔐 Attempting to extract UTXO private key from encryptionService...')
+      
+      // Log encryptionService state for debugging
+      console.log('[Deposit] EncryptionService type:', typeof encryptionService)
+      console.log('[Deposit] EncryptionService constructor:', encryptionService?.constructor?.name)
+      
+      // Try the most direct method first
+      if (typeof encryptionService.getUtxoPrivateKeyV2 === 'function') {
+        console.log('[Deposit] Found getUtxoPrivateKeyV2 method')
+        utxoPrivateKey = encryptionService.getUtxoPrivateKeyV2()
+        console.log('[Deposit] getUtxoPrivateKeyV2() returned:', utxoPrivateKey ? `string (${utxoPrivateKey.length} chars)` : 'null/undefined')
+      }
+      
+      if (!utxoPrivateKey && typeof (encryptionService as any).getUtxoPrivateKey === 'function') {
+        console.log('[Deposit] Found getUtxoPrivateKey method')
+        utxoPrivateKey = (encryptionService as any).getUtxoPrivateKey()
+        console.log('[Deposit] getUtxoPrivateKey() returned:', utxoPrivateKey ? `string (${utxoPrivateKey.length} chars)` : 'null/undefined')
+      }
+      
+      if (!utxoPrivateKey && typeof (encryptionService as any).deriveUtxoPrivateKey === 'function') {
+        console.log('[Deposit] Found deriveUtxoPrivateKey method')
+        utxoPrivateKey = (encryptionService as any).deriveUtxoPrivateKey()
+        console.log('[Deposit] deriveUtxoPrivateKey() returned:', utxoPrivateKey ? `string (${utxoPrivateKey.length} chars)` : 'null/undefined')
+      }
+      
+      if (!utxoPrivateKey && typeof (encryptionService as any).getUtxoKeypair === 'function') {
+        console.log('[Deposit] Found getUtxoKeypair method')
+        const keypair = (encryptionService as any).getUtxoKeypair()
+        console.log('[Deposit] getUtxoKeypair() returned:', keypair ? JSON.stringify(Object.keys(keypair)) : 'null')
+        if (keypair?.privateKey) {
+          utxoPrivateKey = keypair.privateKey
+          console.log('[Deposit] Extracted privateKey from keypair')
+        }
+      }
+      
+      // Check for public properties/fields
+      if (!utxoPrivateKey) {
+        console.log('[Deposit] Checking for UTXO key in public properties...')
+        const stringProps = Object.getOwnPropertyNames(encryptionService)
+          .filter(prop => {
+            const val = (encryptionService as any)[prop]
+            return val && typeof val === 'string' && val.length > 50 && !prop.startsWith('_')
+          })
+        
+        console.log('[Deposit] Found string properties (>50 chars):', stringProps)
+        
+        if (stringProps.length > 0) {
+          // Use the first long string as potential key
+          utxoPrivateKey = (encryptionService as any)[stringProps[0]]
+          console.log(`[Deposit] Using ${stringProps[0]} as UTXO key`)
+        }
+      }
       
       if (!utxoPrivateKey) {
-        console.warn('[Deposit] Warning: Could not extract UTXO private key - multi-wallet claiming disabled')
+        console.warn('[Deposit] ❌ Could not extract UTXO private key using any method')
+        console.warn('[Deposit] This is a limitation of the Privacy Cash SDK')
+        console.warn('[Deposit] Multi-wallet claiming will be disabled')
       } else {
-        console.log('[Deposit] ✅ UTXO private key extracted successfully for multi-wallet claiming')
+        console.log('[Deposit] ✅ SUCCESS: UTXO private key extracted')
         console.log(`[Deposit] Key length: ${utxoPrivateKey.length} characters`)
+        console.log(`[Deposit] Key preview: ${utxoPrivateKey.substring(0, 20)}...${utxoPrivateKey.substring(utxoPrivateKey.length - 20)}`)
       }
     } catch (err: any) {
-      console.warn('[Deposit] Warning: Failed to extract UTXO key:', err.message)
+      console.error('[Deposit] ❌ Exception while extracting UTXO key:', err.message || err)
     }
 
     log('Deposit successful!', depositResult.tx)
@@ -158,7 +209,7 @@ export async function executeNonCustodialDeposit(params: DepositParams): Promise
       transactionSignature: depositResult.tx,
       amount: lamports / 1e9,
       explorerUrl: `https://solscan.io/tx/${depositResult.tx}`,
-      utxoPrivateKey // ✅ Include for backend storage
+      utxoPrivateKey // ✅ Include for backend storage (may be undefined)
     }
 
   } catch (error: any) {
