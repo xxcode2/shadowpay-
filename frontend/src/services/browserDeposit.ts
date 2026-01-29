@@ -122,7 +122,7 @@ export async function executeNonCustodialDeposit(params: DepositParams): Promise
       lightWasm,
       connection,
       amount_in_lamports: lamports,
-      keyBasePath: '/circuits',
+      keyBasePath: '/circuits/transaction2',
       publicKey: wallet.publicKey,
       transactionSigner: async (tx: VersionedTransaction) => {
         log('Please sign the deposit transaction')
