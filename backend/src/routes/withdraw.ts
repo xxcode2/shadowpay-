@@ -1,58 +1,24 @@
 import { Router, Request, Response } from 'express'
-import { PublicKey, Keypair, LAMPORTS_PER_SOL } from '@solana/web3.js'
+import { PublicKey } from '@solana/web3.js'
 import prisma from '../lib/prisma.js'
+import { executeWithdrawal, getPrivacyCashClient } from '../services/privacyCash.js'
 
 const router = Router()
 
 /**
  * ✅ v12.0: TRUE PRIVACY CASH WITHDRAWAL
+ * Uses existing proven Privacy Cash service
  * 
  * REAL NON-CUSTODIAL FLOW:
  * 1. Frontend sends linkId + recipientAddress to backend
  * 2. Backend validates link exists & not claimed
- * 3. Backend initializes PrivacyCash SDK with operator keypair
- * 4. Backend calls SDK.withdraw() - SDK handles ZK proof + relayer
- * 5. Privacy Cash relayer verifies proof & sends encrypted SOL
- * 6. Backend records real TX hash from SDK
- * 7. Frontend shows success ✅
- * 
- * KEY: Backend is relayer/operator, but withdrawal is via Privacy Cash SDK
- * - SDK generates ZK proof
- * - SDK submits to Privacy Cash relayer
- * - Recipient gets encrypted UTXO only they can spend
- * - True privacy preserved!
+ * 3. Backend uses getPrivacyCashClient() (initialized with operator keypair from env)
+ * 4. Backend calls executeWithdrawal() from privacy Cash service
+ * 5. Service generates ZK proof + calls relayer
+ * 6. Relayer verifies & sends encrypted SOL to recipient
+ * 7. Backend records real TX hash from SDK
+ * 8. Frontend shows success ✅
  */
-
-// Helper: Parse operator secret key
-function parseOperatorKeypair(): Keypair | null {
-  const operatorKey = process.env.OPERATOR_SECRET_KEY
-  if (!operatorKey) {
-    console.error('❌ OPERATOR_SECRET_KEY not set')
-    return null
-  }
-
-  try {
-    let keyArray: number[]
-    if (operatorKey.startsWith('[') && operatorKey.endsWith(']')) {
-      keyArray = JSON.parse(operatorKey)
-    } else {
-      keyArray = operatorKey
-        .split(',')
-        .map(num => parseInt(num.trim(), 10))
-        .filter(num => !isNaN(num))
-    }
-
-    if (keyArray.length !== 64) {
-      console.error(`❌ Invalid keypair: expected 64 elements, got ${keyArray.length}`)
-      return null
-    }
-
-    return Keypair.fromSecretKey(Uint8Array.from(keyArray))
-  } catch (err) {
-    console.error('❌ Failed to parse operator keypair:', err)
-    return null
-  }
-}
 
 router.post('/', async (req: Request<{}, {}, any>, res: Response) => {
   try {
@@ -68,9 +34,8 @@ router.post('/', async (req: Request<{}, {}, any>, res: Response) => {
     }
 
     // ✅ Validate Solana address format
-    let recipientPubkey: PublicKey
     try {
-      recipientPubkey = new PublicKey(recipientAddress)
+      new PublicKey(recipientAddress)
     } catch {
       return res.status(400).json({ error: 'Invalid recipient wallet address' })
     }
@@ -99,69 +64,39 @@ router.post('/', async (req: Request<{}, {}, any>, res: Response) => {
     console.log(`✅ Link found: ${link.amount} SOL`)
     console.log(`✅ Deposit verified: ${link.depositTx}`)
 
-    // ✅ GET OPERATOR KEYPAIR
-    const operatorKeypair = parseOperatorKeypair()
-    if (!operatorKeypair) {
-      return res.status(500).json({ error: 'Operator wallet not configured' })
-    }
-
-    console.log(`📍 Operator: ${operatorKeypair.publicKey.toString()}`)
-
-    // ✅ INITIALIZE PRIVACY CASH SDK
-    console.log(`📦 Loading Privacy Cash SDK...`)
-    let PrivacyCash: any
+    // ✅ USE EXISTING PRIVACY CASH SERVICE
+    console.log(`🔄 Initializing Privacy Cash client from service...`)
+    
+    let pc: any
     try {
-      // @ts-ignore
-      const PrivacyCashModule = await import('privacycash')
-      // @ts-ignore
-      PrivacyCash = PrivacyCashModule.PrivacyCash || PrivacyCashModule.default
-      
-      if (!PrivacyCash) {
-        throw new Error('PrivacyCash class not found in module')
-      }
-
-      console.log(`✅ Privacy Cash SDK loaded`)
-    } catch (importErr: any) {
-      console.error(`❌ Failed to load Privacy Cash SDK:`, importErr.message)
+      // Get Privacy Cash client - initialized with operator keypair from env
+      pc = getPrivacyCashClient()
+      console.log(`✅ Privacy Cash client ready`)
+    } catch (err: any) {
+      console.error(`❌ Failed to initialize Privacy Cash client:`, err.message)
       return res.status(500).json({
-        error: 'Privacy Cash SDK not available',
-        details: importErr.message
+        error: 'Operator wallet not configured',
+        details: err.message
       })
     }
 
-    // ✅ EXECUTE PRIVACY CASH WITHDRAWAL
+    // ✅ EXECUTE WITHDRAWAL USING EXISTING SERVICE
     console.log(`💸 Executing Privacy Cash withdrawal...`)
     console.log(`   Amount: ${link.amount} SOL`)
     console.log(`   Recipient: ${recipientAddress}`)
 
     try {
-      // Initialize Privacy Cash client with operator keypair
-      // @ts-ignore
-      const client = new PrivacyCash({
-        RPC_url: process.env.SOLANA_RPC || 'https://api.mainnet-beta.solana.com',
-        owner: operatorKeypair,
-      })
+      // Use existing executeWithdrawal function from service
+      const withdrawalResult = await executeWithdrawal(
+        pc,
+        Math.floor(link.amount * 1e9), // Convert to lamports
+        recipientAddress
+      )
 
-      console.log(`🔄 Generating ZK proof and submitting to relayer...`)
-
-      // Execute withdrawal via Privacy Cash SDK
-      // SDK will:
-      // 1. Generate ZK proof
-      // 2. Submit to Privacy Cash relayer
-      // 3. Relayer verifies and sends encrypted SOL to recipient
-      // @ts-ignore
-      const withdrawResult = await client.withdraw({
-        lamports: Math.floor(link.amount * LAMPORTS_PER_SOL),
-        recipientAddress: recipientAddress,
-      })
-
-      if (!withdrawResult || !withdrawResult.tx) {
-        throw new Error('No transaction returned from Privacy Cash SDK')
-      }
-
-      const txId = withdrawResult.tx
+      const txId = withdrawalResult.tx
       console.log(`✅ Privacy Cash withdrawal successful!`)
       console.log(`   TX Hash: ${txId}`)
+      console.log(`   Amount: ${withdrawalResult.sol.toFixed(6)} SOL`)
       console.log(`   ZK Proof: Generated & verified by relayer ✓`)
       console.log(`   Recipient gets encrypted UTXO (only they can spend)`)
 
@@ -198,11 +133,11 @@ router.post('/', async (req: Request<{}, {}, any>, res: Response) => {
         }
       })
 
-    } catch (sdkErr: any) {
-      console.error('❌ Privacy Cash withdrawal error:', sdkErr.message || sdkErr)
+    } catch (withdrawErr: any) {
+      console.error('❌ Privacy Cash withdrawal error:', withdrawErr.message || withdrawErr)
       return res.status(500).json({
         error: 'Privacy Cash withdrawal failed',
-        details: sdkErr.message || 'Unknown error',
+        details: withdrawErr.message || 'Unknown error',
       })
     }
 
