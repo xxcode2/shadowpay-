@@ -119,7 +119,7 @@ export async function executeClaimLink(input: {
       // @ts-ignore - type definitions incomplete
       const client = new PrivacyCash({
         RPC_url: 'https://mainnet.helius-rpc.com/?api-key=c455719c-354b-4a44-98d4-27f8a18aa79c',
-        owner: wallet.publicKey,
+        owner: wallet,
       })
 
       // ✅ Step C: Execute withdrawal
