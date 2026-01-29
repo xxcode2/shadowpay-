@@ -25,6 +25,7 @@ router.get('/:id', async (req: Request<{ id: string }>, res: Response) => {
       assetType: link.assetType,
       claimed: link.claimed,
       claimedBy: link.claimedBy || null,
+      depositTx: link.depositTx || null,
       createdAt: link.createdAt,
       updatedAt: link.updatedAt,
     })
