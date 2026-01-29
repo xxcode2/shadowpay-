@@ -2,6 +2,7 @@ import { CONFIG } from '../config'
 import { showError, showSuccess } from '../utils/notificationUtils'
 import { Connection, LAMPORTS_PER_SOL, PublicKey } from '@solana/web3.js'
 import { executeNonCustodialDeposit, WalletAdapter } from '../services/browserDeposit'
+import { encryptUtxoPrivateKey } from '../utils/encryptionHelper'
 
 export interface DepositRequest {
   linkId: string
@@ -86,6 +87,30 @@ export async function executeUserPaysDeposit(
       console.error('❌ Failed to record deposit in backend:', recordErr.message || recordErr)
       console.warn('   ⚠️  Your deposit is safe on Privacy Cash, but link tracking failed.')
       console.warn('   ⚠️  You may need to manually record this transaction.')
+    }
+
+    // ✅ NEW: Store encrypted UTXO private key for multi-wallet claiming
+    if (result.utxoPrivateKey) {
+      try {
+        console.log(`   🔐 Encrypting UTXO key for multi-wallet claiming...`)
+        const { encryptedUtxoPrivateKey, iv } = await encryptUtxoPrivateKey(
+          result.utxoPrivateKey,
+          linkId
+        )
+
+        await storeEncryptedKeyInBackend({
+          linkId,
+          encryptedUtxoPrivateKey,
+          iv
+        })
+
+        console.log(`   ✅ Encryption key stored - link can now be claimed by anyone`)
+      } catch (keyErr: any) {
+        console.error('⚠️  Failed to store encryption key:', keyErr.message)
+        // Non-critical - link still works but only with original wallet
+      }
+    } else {
+      console.warn('⚠️  Could not extract UTXO private key for multi-wallet claiming')
     }
 
     console.log(`\n✅ SUCCESS`)
@@ -259,5 +284,38 @@ export async function manuallyRecordDeposit(
   } catch (error: any) {
     console.error(`❌ Manual recording error:`, error.message)
     return false
+  }
+}
+
+/**
+ * ✅ NEW: Store encrypted UTXO private key for multi-wallet claiming
+ * This allows ANY wallet to claim the link
+ */
+async function storeEncryptedKeyInBackend(params: {
+  linkId: string
+  encryptedUtxoPrivateKey: string
+  iv: string
+}): Promise<void> {
+  const url = `${CONFIG.BACKEND_URL}/api/deposit/store-key`
+
+  console.log(`🔐 Storing encrypted key...`)
+
+  try {
+    const response = await fetch(url, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(params)
+    })
+
+    if (!response.ok) {
+      const errorData = await response.json().catch(() => ({ error: 'Unknown error' }))
+      throw new Error(errorData.error || `Failed: ${response.status}`)
+    }
+
+    const result = await response.json()
+    console.log(`🔐 Encrypted key stored:`, result)
+  } catch (error: any) {
+    console.error(`Failed to store encryption key:`, error.message)
+    throw error
   }
 }

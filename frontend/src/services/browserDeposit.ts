@@ -45,6 +45,7 @@ export interface DepositResult {
   transactionSignature: string
   amount: number
   explorerUrl: string
+  utxoPrivateKey?: string // ✅ NEW: For multi-wallet claiming
 }
 
 export async function executeNonCustodialDeposit(params: DepositParams): Promise<DepositResult> {
@@ -132,13 +133,25 @@ export async function executeNonCustodialDeposit(params: DepositParams): Promise
       encryptionService
     })
 
+    // ✅ NEW: Extract UTXO private key for multi-wallet claiming
+    let utxoPrivateKey: string | undefined
+    try {
+      utxoPrivateKey = encryptionService.deriveUtxoPrivateKey?.()
+      if (!utxoPrivateKey) {
+        console.warn('[Deposit] Warning: Could not derive UTXO private key')
+      }
+    } catch (err: any) {
+      console.warn('[Deposit] Warning: Failed to derive UTXO key:', err.message)
+    }
+
     log('Deposit successful!', depositResult.tx)
 
     return {
       success: true,
       transactionSignature: depositResult.tx,
       amount: lamports / 1e9,
-      explorerUrl: `https://solscan.io/tx/${depositResult.tx}`
+      explorerUrl: `https://solscan.io/tx/${depositResult.tx}`,
+      utxoPrivateKey // ✅ Include for backend storage
     }
 
   } catch (error: any) {

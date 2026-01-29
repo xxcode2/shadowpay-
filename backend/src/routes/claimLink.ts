@@ -4,6 +4,7 @@ import prisma from '../lib/prisma.js'
 import { getPrivacyCashClient } from '../services/privacyCash.js'
 import { assertOperatorBalance } from '../utils/operatorBalanceGuard.js'
 import { verifyWithdrawalTransaction, monitorTransactionStatus } from '../utils/privacyCashOperations.js'
+import { decryptUtxoPrivateKey } from '../utils/encryptionHelper.js'
 
 const router = Router()
 
@@ -110,164 +111,168 @@ router.post('/', async (req: Request, res: Response) => {
       })
     }
 
-    // ✅ Get operator and initialize connection with v0 transaction support
-    const pc = getPrivacyCashClient()
-    const connection = new Connection(RPC, 'confirmed')
-    // Note: Connection will support v0 transactions automatically
-    const operatorKeypair = (pc as any)['keypair'] // SDK stores keypair internally
-
-    console.log(`🚀 Executing REAL PrivacyCash withdrawal for link ${linkId}`)
-    console.log(`📤 Operator (relayer): ${operatorKeypair?.publicKey?.toString() || 'relayer'}`)
+    console.log(`🚀 Executing PrivacyCash withdrawal with decrypted key for link ${linkId}`)
     console.log(`🎯 Recipient: ${recipientAddress}`)
     console.log(`💰 Amount: ${(link.amount).toFixed(6)} SOL (${Number(link.lamports)} lamports)`)
 
-    // ✅ Convert lamports to number for PrivacyCash SDK
-    let lamportsNum = Number(link.lamports)
-
-    // 🔧 CRITICAL FIX: Extract actual deposit amount from transaction
-    // This allows claiming from ANY browser/wallet (non-custodial recovery)
-    // Instead of relying on browser encryption state or stored lamports
-    if (link.depositTx && link.depositTx.trim() !== '') {
-      console.log(`🔍 Extracting actual deposit amount from transaction...`)
-      try {
-        const tx = await connection.getParsedTransaction(link.depositTx, 'confirmed')
-        
-        if (tx && tx.transaction.message.instructions) {
-          // Find transfer instruction to Privacy Cash pool
-          const PRIVACY_CASH_POOL = '6w8zSkj4UGbNEvnr8qHU5YaKNHkS6Jvvxs3zEb5qNAU7'
-          
-          for (const ix of tx.transaction.message.instructions) {
-            // Look for system program transfer or spl-token transfer
-            if ((ix as any).program === 'system' && (ix as any).parsed?.type === 'transfer') {
-              const destination = (ix as any).parsed?.info?.destination
-              // Check if it's transferring to pool or a temp account
-              const amount = (ix as any).parsed?.info?.lamports
-              
-              if (amount && amount > 0) {
-                console.log(`   Found transfer: ${(amount / LAMPORTS_PER_SOL).toFixed(6)} SOL`)
-                // Use the largest transfer found (likely the deposit)
-                if (amount > lamportsNum) {
-                  lamportsNum = amount
-                }
-              }
-            }
-          }
-          
-          // Alternative: Use balance changes
-          if (lamportsNum <= 0 && tx.meta) {
-            const signer = tx.transaction.message.accountKeys[0]?.toString()
-            const signerPreBalance = tx.meta.preBalances?.[0] || 0
-            const signerPostBalance = tx.meta.postBalances?.[0] || 0
-            const spent = signerPreBalance - signerPostBalance
-            
-            // Spent amount minus fees = deposit amount
-            const txFee = tx.meta.fee || 5000
-            const depositAmount = spent - txFee
-            
-            if (depositAmount > 0) {
-              console.log(`   Calculated from balance change: ${(depositAmount / LAMPORTS_PER_SOL).toFixed(6)} SOL`)
-              if (depositAmount > lamportsNum) {
-                lamportsNum = depositAmount
-              }
-            }
-          }
-        }
-      } catch (extractErr: any) {
-        console.warn(`⚠️ Could not extract amount from tx: ${extractErr.message}`)
-        // Continue with stored amount
-      }
-    }
-
-    if (!Number.isFinite(lamportsNum) || lamportsNum <= 0) {
-      console.error(`❌ Invalid withdrawal amount: ${lamportsNum} lamports`)
+    // ✅ CHECK FOR ENCRYPTED UTXO PRIVATE KEY
+    console.log(`🔐 Step 1: Checking for encrypted UTXO private key...`)
+    if (!link.encryptedUtxoPrivateKey || !link.encryptionIv) {
+      console.error(`❌ Link ${linkId} has no encrypted UTXO private key`)
       return res.status(400).json({
-        error: `Invalid withdrawal amount: ${lamportsNum} lamports (must be > 0)`,
-        details: 'Could not determine deposit amount from transaction'
+        error: 'Link has no encryption key',
+        details: 'This link does not have the encryption key needed for claiming. The deposit may not have been completed properly. Please contact support.',
+        linkId
       })
     }
 
-    console.log(`✅ Using withdrawal amount: ${(lamportsNum / LAMPORTS_PER_SOL).toFixed(6)} SOL (${lamportsNum} lamports)`)
-
-    // ✅ CHECK OPERATOR BALANCE BEFORE WITHDRAWAL
-    console.log(`💰 Checking operator balance before withdrawal...`)
-    const operatorPubkey = operatorKeypair?.publicKey
-    if (!operatorPubkey) {
-      console.error(`❌ Cannot get operator pubkey`)
-      return res.status(500).json({
-        error: 'Operator pubkey not found',
-        details: 'Backend misconfiguration'
-      })
-    }
-
+    // ✅ DECRYPT UTXO PRIVATE KEY
+    console.log(`🔐 Step 2: Decrypting UTXO private key...`)
+    let utxoPrivateKey: string
     try {
+      utxoPrivateKey = decryptUtxoPrivateKey(
+        link.encryptedUtxoPrivateKey,
+        link.encryptionIv,
+        linkId // Use linkId as password
+      )
+      console.log(`   ✅ UTXO private key decrypted successfully`)
+    } catch (decryptErr: any) {
+      console.error(`❌ Decryption failed: ${decryptErr.message}`)
+      return res.status(400).json({
+        error: 'Failed to decrypt UTXO key',
+        details: 'The encryption key for this link is invalid or corrupted.',
+        error: decryptErr.message
+      })
+    }
+
+    // ✅ INITIALIZE SDK WITH DECRYPTED KEY
+    console.log(`🔐 Step 3: Initializing Privacy Cash SDK with stored key...`)
+    let pc: any
+    try {
+      // Import PrivacyCash dynamically to avoid issues
+      const { PrivacyCash } = await import('privacycash')
+      const connection = new Connection(RPC, 'confirmed')
+
+      // Initialize with the decrypted UTXO private key
+      pc = new PrivacyCash({
+        RPC_url: RPC,
+        owner: utxoPrivateKey // Use the decrypted key!
+      })
+
+      console.log(`   ✅ SDK initialized with decrypted key`)
+    } catch (initErr: any) {
+      console.error(`❌ SDK initialization failed: ${initErr.message}`)
+      return res.status(500).json({
+        error: 'Failed to initialize payment system',
+        details: initErr.message
+      })
+    }
+
+    // ✅ CHECK OPERATOR BALANCE
+    console.log(`💰 Step 4: Checking operator balance...`)
+    let operatorPubkey: PublicKey
+    try {
+      const connection = new Connection(RPC, 'confirmed')
+      // @ts-ignore
+      const operatorKeypair = pc.keypair
+      operatorPubkey = operatorKeypair.publicKey
+
       const balance = await connection.getBalance(operatorPubkey)
       const balanceSOL = balance / LAMPORTS_PER_SOL
-      const requiredSOL = (lamportsNum / LAMPORTS_PER_SOL) + 0.007 // withdrawal + fees + buffer
-      
-      console.log(`   Current balance: ${balanceSOL.toFixed(8)} SOL (${balance} lamports)`)
+      const requiredSOL = (Number(link.lamports) / LAMPORTS_PER_SOL) + 0.01 // amount + buffer
+
+      console.log(`   Current balance: ${balanceSOL.toFixed(8)} SOL`)
       console.log(`   Required: ${requiredSOL.toFixed(8)} SOL`)
-      console.log(`   Withdrawal amount: ${(lamportsNum / LAMPORTS_PER_SOL).toFixed(8)} SOL`)
-      
-      if (balance < (requiredSOL * LAMPORTS_PER_SOL)) {
-        const shortfall = (requiredSOL * LAMPORTS_PER_SOL) - balance
-        console.error(`❌ INSUFFICIENT BALANCE: Short ${(shortfall / LAMPORTS_PER_SOL).toFixed(8)} SOL`)
+
+      if (balance < requiredSOL * LAMPORTS_PER_SOL) {
+        console.error(`❌ Insufficient operator balance`)
         return res.status(400).json({
           error: 'Operator wallet insufficient balance',
-          details: `Current: ${balanceSOL.toFixed(8)} SOL, Required: ${requiredSOL.toFixed(8)} SOL, Short: ${(shortfall / LAMPORTS_PER_SOL).toFixed(8)} SOL`,
-          operatorAddress: operatorPubkey.toString(),
-          currentBalance: balanceSOL,
-          requiredBalance: requiredSOL,
-          shortfallSOL: shortfall / LAMPORTS_PER_SOL
+          details: `Cannot process withdrawal at this time. Try again later.`
         })
       }
-      console.log(`   ✅ Balance sufficient for withdrawal`)
-    } catch (balanceCheckErr: any) {
-      console.error(`⚠️ Balance check failed: ${balanceCheckErr.message}`)
-      // Continue anyway - SDK will check again
+      console.log(`   ✅ Operator balance sufficient`)
+    } catch (balErr: any) {
+      console.error(`⚠️ Balance check error: ${balErr.message}`)
+      // Continue anyway
     }
 
-    // 🔥 FUNDAMENTAL ISSUE WITH PRIVACY CASH SDK:
-    // =========================================
-    // The SDK's withdraw() function tries to decrypt UTXOs using the CALLER's keypair
-    // But UTXOs were encrypted by the DEPOSITOR's keypair (different browser/wallet)
-    // 
-    // This is a design limitation of Privacy Cash SDK - it assumes:
-    // - User deposits with wallet A
-    // - User withdraws with SAME wallet A
-    // 
-    // Our use case is different:
-    // - User A deposits (encrypted with A's keys)
-    // - User B claims link (needs to withdraw, but is different from A)
-    // 
-    // WORKAROUND: We need the DEPOSITOR to generate the withdrawal proof
-    // when they CREATE the deposit, and store it for later use by any recipient.
-    // This requires modifying the deposit flow to pre-generate recipient-agnostic proofs.
-    
-    console.log(`⚠️ LIMITATION: Privacy Cash SDK requires same-wallet withdrawal`)
-    console.log(`   Depositor wallet: (from encryption keys)`)
-    console.log(`   Operator wallet: ${operatorPubkey.toString()}`)
-    console.log(`   Recipient wallet: ${recipientAddress}`)
-    console.log(`   ❌ Mismatch: Cannot decrypt UTXOs without depositor's private key`)
-    
-    return res.status(501).json({
-      error: 'Multi-wallet claiming not yet supported',
-      details: `Privacy Cash SDK limitation: withdrawals require the depositor's private key for decryption. Current implementation does not support recipient-only claims where depositor and claimer are different wallets.`,
-      technicalDetails: {
-        issue: 'UTXO encryption keys do not match operator or recipient keypairs',
-        requiredFix: 'Modify deposit flow to pre-generate withdrawal proofs for any recipient address',
-        currentState: {
-          depositedWith: 'Original depositor keys (unknown at backend)',
-          operatorUsing: operatorPubkey.toString(),
-          claimingWith: recipientAddress
-        }
-      },
-      workaround: 'For now, the deposit creator must use the same wallet to claim, or provide their private key to the backend (not recommended for security)'
+    // ✅ EXECUTE WITHDRAWAL
+    console.log(`📤 Step 5: Executing withdrawal to recipient...`)
+    let withdrawTx: string
+    try {
+      const withdrawResult = await pc.withdraw({
+        lamports: Number(link.lamports),
+        recipientAddress
+      })
+
+      withdrawTx = withdrawResult.tx
+      const amountReceived = withdrawResult.amount_in_lamports / LAMPORTS_PER_SOL
+      const feeCharged = withdrawResult.fee_in_lamports / LAMPORTS_PER_SOL
+
+      console.log(`   ✅ Withdrawal successful!`)
+      console.log(`   Transaction: ${withdrawTx}`)
+      console.log(`   Amount received: ${amountReceived.toFixed(6)} SOL`)
+      console.log(`   Fee: ${feeCharged.toFixed(6)} SOL`)
+    } catch (withdrawErr: any) {
+      console.error(`❌ Withdrawal execution failed: ${withdrawErr.message}`)
+      return res.status(500).json({
+        error: 'Withdrawal execution failed',
+        details: withdrawErr.message,
+        linkId
+      })
+    }
+
+    // ✅ MARK LINK AS CLAIMED
+    console.log(`✅ Step 6: Marking link as claimed...`)
+    try {
+      await prisma.$transaction([
+        prisma.paymentLink.update({
+          where: { id: linkId },
+          data: {
+            claimed: true,
+            claimedBy: recipientAddress,
+            withdrawTx
+          }
+        }),
+        prisma.transaction.create({
+          data: {
+            type: 'withdraw',
+            linkId,
+            transactionHash: withdrawTx,
+            amount: link.amount,
+            assetType: link.assetType,
+            status: 'confirmed',
+            toAddress: recipientAddress
+          }
+        })
+      ])
+      console.log(`   ✅ Link marked as claimed`)
+    } catch (dbErr: any) {
+      console.error(`⚠️ Database update failed: ${dbErr.message}`)
+      // Transaction may have succeeded even if DB update fails
+    }
+
+    console.log(`\n✅ CLAIM COMPLETE`)
+    console.log(`   Link: ${linkId}`)
+    console.log(`   Amount: ${(Number(link.lamports) / LAMPORTS_PER_SOL).toFixed(6)} SOL`)
+    console.log(`   Recipient: ${recipientAddress}`)
+    console.log(`   Transaction: ${withdrawTx}`)
+
+    return res.status(200).json({
+      success: true,
+      message: 'Claim successful!',
+      linkId,
+      recipientAddress,
+      amount: Number(link.lamports) / LAMPORTS_PER_SOL,
+      withdrawTx,
+      claimed: true
     })
   } catch (err: any) {
     console.error('❌ CLAIM ERROR:', err.message || err.toString())
     return res.status(500).json({
-      error: err.message || 'Withdrawal failed',
-      details: process.env.NODE_ENV === 'development' ? err.toString() : undefined,
+      error: err.message || 'Claim failed',
+      details: process.env.NODE_ENV === 'development' ? err.stack : undefined
     })
   }
 })

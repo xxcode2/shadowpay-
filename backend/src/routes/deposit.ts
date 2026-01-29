@@ -1,6 +1,7 @@
 import { Router, Request, Response } from 'express'
 import { Connection, PublicKey } from '@solana/web3.js'
 import prisma from '../lib/prisma.js'
+import { encryptUtxoPrivateKey } from '../utils/encryptionHelper.js'
 
 const router = Router()
 
@@ -221,6 +222,76 @@ router.post('/record', async (req: Request<{}, {}, any>, res: Response) => {
     console.error(`Record deposit failed:`, error)
     return res.status(500).json({
       error: error.message || 'Failed to record deposit',
+    })
+  }
+})
+
+/**
+ * ✅ NEW: Store encrypted UTXO private key for multi-wallet claiming
+ * 
+ * POST /api/deposit/store-key
+ * 
+ * Called after deposit/record with encrypted UTXO private key
+ * This enables ANY wallet to claim the link by decrypting with linkId password
+ * 
+ * Request body:
+ * {
+ *   linkId: string,
+ *   encryptedUtxoPrivateKey: string (base64),
+ *   iv: string (base64),
+ * }
+ */
+router.post('/store-key', async (req: Request<{}, {}, any>, res: Response) => {
+  try {
+    const { linkId, encryptedUtxoPrivateKey, iv } = req.body
+
+    console.log(`\n🔐 STORING ENCRYPTED UTXO KEY`)
+    console.log(`   Link: ${linkId}`)
+    console.log(`   Encrypted key length: ${encryptedUtxoPrivateKey?.length || 0} chars`)
+
+    // Validate
+    if (!linkId || !encryptedUtxoPrivateKey || !iv) {
+      return res.status(400).json({
+        error: 'Missing required fields',
+        required: ['linkId', 'encryptedUtxoPrivateKey', 'iv']
+      })
+    }
+
+    // Find link
+    const link = await prisma.paymentLink.findUnique({
+      where: { id: linkId }
+    })
+
+    if (!link) {
+      return res.status(404).json({ error: 'Link not found' })
+    }
+
+    if (link.claimed) {
+      return res.status(400).json({ error: 'Link already claimed' })
+    }
+
+    // Store encrypted key
+    await prisma.paymentLink.update({
+      where: { id: linkId },
+      data: {
+        encryptedUtxoPrivateKey,
+        encryptionIv: iv,
+        encryptionSalt: 'shadowpay-v1-encryption', // For reference
+      }
+    })
+
+    console.log(`   ✅ Encrypted key stored successfully`)
+
+    return res.status(200).json({
+      success: true,
+      message: 'Encryption key stored',
+      linkId
+    })
+
+  } catch (error: any) {
+    console.error(`Store key failed:`, error)
+    return res.status(500).json({
+      error: error.message || 'Failed to store encryption key',
     })
   }
 })

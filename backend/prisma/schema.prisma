@@ -24,6 +24,12 @@ model PaymentLink {
   // Tx references
   depositTx   String?
   withdrawTx  String?
+  
+  // ✅ NEW: Encrypted UTXO private key for multi-wallet claiming
+  // This allows ANY wallet to claim by decrypting with link password
+  encryptedUtxoPrivateKey String? @db.Text  // Encrypted with AES-256-GCM
+  encryptionIv            String? @db.Text  // IV for decryption
+  encryptionSalt          String? @db.Text  // Salt for key derivation
 
   // Relations
   transactions Transaction[]
