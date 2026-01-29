@@ -1,3 +1,5 @@
+// File: src/routes/claimLink.ts
+
 import { Router, Request, Response } from 'express'
 import { Connection, LAMPORTS_PER_SOL, PublicKey } from '@solana/web3.js'
 import prisma from '../lib/prisma.js'
@@ -82,10 +84,6 @@ router.post('/', async (req: Request, res: Response) => {
     if (!link.depositTx || link.depositTx.trim() === '') {
       console.warn(`⚠️ Link ${linkId} has no depositTx recorded - attempting auto-recovery...`)
       
-      // 🔧 AUTO-RECOVERY: Try to find deposit on-chain or estimate it
-      // Since we know link was created, there MUST be a deposit somewhere
-      // For now, we'll give user a helpful message with grace period
-      
       console.error(`❌ Link ${linkId} has no valid deposit transaction`)
       return res.status(400).json({
         error: 'Link has no valid deposit',
@@ -141,7 +139,7 @@ router.post('/', async (req: Request, res: Response) => {
       return res.status(400).json({
         error: 'Failed to decrypt UTXO key',
         details: 'The encryption key for this link is invalid or corrupted.',
-        error: decryptErr.message
+        errorMessage: decryptErr.message  // ✅ FIXED: Changed 'error' to 'errorMessage'
       })
     }
 
