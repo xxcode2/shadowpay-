@@ -92,6 +92,9 @@ router.get('/health', async (req: Request, res: Response) => {
  * submitted to the Privacy Cash relayer. It records the transaction
  * in the database for link tracking purposes.
  *
+ * CRITICAL FIX: We now verify the transaction exists and succeeded
+ * before recording it. This prevents recording invalid tx hashes.
+ *
  * The actual deposit logic (ZK proof generation, transaction signing)
  * happens entirely in the browser for non-custodial operation.
  */
@@ -130,12 +133,60 @@ router.post('/record', async (req: Request<{}, {}, any>, res: Response) => {
 
     const amountSOL = typeof amount === 'string' ? parseFloat(amount) : amount
 
+    // ✅ CRITICAL: Verify transaction on-chain before recording
+    console.log(`   🔍 Verifying transaction on-chain...`)
+    let txVerified = false
+    
+    try {
+      const rpcUrl = process.env.SOLANA_RPC_URL || 'https://api.mainnet-beta.solana.com'
+      const connection = new Connection(rpcUrl, 'confirmed')
+      
+      // Fetch transaction details
+      const tx = await connection.getParsedTransaction(transactionHash, 'confirmed')
+      
+      if (!tx) {
+        console.warn(`   ⚠️ Transaction not found on-chain yet: ${transactionHash}`)
+        return res.status(400).json({
+          error: 'Transaction verification failed',
+          details: 'Transaction not found on-chain. Wait a moment and try again.',
+          transactionHash
+        })
+      }
+
+      // Check if transaction succeeded
+      if (tx.meta?.err !== null) {
+        console.error(`   ❌ Transaction failed on-chain: ${JSON.stringify(tx.meta?.err)}`)
+        return res.status(400).json({
+          error: 'Transaction failed on-chain',
+          details: `Transaction failed: ${JSON.stringify(tx.meta?.err)}`,
+          transactionHash
+        })
+      }
+
+      console.log(`   ✅ Transaction verified on-chain`)
+      txVerified = true
+      
+    } catch (verifyErr: any) {
+      console.warn(`   ⚠️ RPC verification error: ${verifyErr.message}`)
+      // Continue with fallback - frontend should have already verified
+      txVerified = false
+    }
+
     // Record the deposit
     try {
+      const updateData: any = { 
+        depositTx: transactionHash,
+      }
+      
+      // Store lamports amount if provided
+      if (lamports) {
+        updateData.lamports = BigInt(lamports)
+      }
+
       await prisma.$transaction([
         prisma.paymentLink.update({
           where: { id: linkId },
-          data: { depositTx: transactionHash },
+          data: updateData,
         }),
         prisma.transaction.create({
           data: {
@@ -144,7 +195,7 @@ router.post('/record', async (req: Request<{}, {}, any>, res: Response) => {
             transactionHash,
             amount: amountSOL,
             assetType: link.assetType,
-            status: 'confirmed',
+            status: txVerified ? 'confirmed' : 'pending',
             fromAddress: publicKey,
           },
         }),
@@ -162,7 +213,8 @@ router.post('/record', async (req: Request<{}, {}, any>, res: Response) => {
     return res.status(200).json({
       success: true,
       message: 'Deposit recorded',
-      transactionHash
+      transactionHash,
+      verified: txVerified
     })
 
   } catch (error: any) {
