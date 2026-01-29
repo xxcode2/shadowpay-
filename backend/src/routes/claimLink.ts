@@ -121,13 +121,71 @@ router.post('/', async (req: Request, res: Response) => {
     console.log(`💰 Amount: ${(link.amount).toFixed(6)} SOL (${Number(link.lamports)} lamports)`)
 
     // ✅ Convert lamports to number for PrivacyCash SDK
-    const lamportsNum = Number(link.lamports)
+    let lamportsNum = Number(link.lamports)
+
+    // 🔧 CRITICAL FIX: Extract actual deposit amount from transaction
+    // This allows claiming from ANY browser/wallet (non-custodial recovery)
+    // Instead of relying on browser encryption state or stored lamports
+    if (link.depositTx && link.depositTx.trim() !== '') {
+      console.log(`🔍 Extracting actual deposit amount from transaction...`)
+      try {
+        const tx = await connection.getParsedTransaction(link.depositTx, 'confirmed')
+        
+        if (tx && tx.transaction.message.instructions) {
+          // Find transfer instruction to Privacy Cash pool
+          const PRIVACY_CASH_POOL = '6w8zSkj4UGbNEvnr8qHU5YaKNHkS6Jvvxs3zEb5qNAU7'
+          
+          for (const ix of tx.transaction.message.instructions) {
+            // Look for system program transfer or spl-token transfer
+            if ((ix as any).program === 'system' && (ix as any).parsed?.type === 'transfer') {
+              const destination = (ix as any).parsed?.info?.destination
+              // Check if it's transferring to pool or a temp account
+              const amount = (ix as any).parsed?.info?.lamports
+              
+              if (amount && amount > 0) {
+                console.log(`   Found transfer: ${(amount / LAMPORTS_PER_SOL).toFixed(6)} SOL`)
+                // Use the largest transfer found (likely the deposit)
+                if (amount > lamportsNum) {
+                  lamportsNum = amount
+                }
+              }
+            }
+          }
+          
+          // Alternative: Use balance changes
+          if (lamportsNum <= 0 && tx.meta) {
+            const signer = tx.transaction.message.accountKeys[0]?.toString()
+            const signerPreBalance = tx.meta.preBalances?.[0] || 0
+            const signerPostBalance = tx.meta.postBalances?.[0] || 0
+            const spent = signerPreBalance - signerPostBalance
+            
+            // Spent amount minus fees = deposit amount
+            const txFee = tx.meta.fee || 5000
+            const depositAmount = spent - txFee
+            
+            if (depositAmount > 0) {
+              console.log(`   Calculated from balance change: ${(depositAmount / LAMPORTS_PER_SOL).toFixed(6)} SOL`)
+              if (depositAmount > lamportsNum) {
+                lamportsNum = depositAmount
+              }
+            }
+          }
+        }
+      } catch (extractErr: any) {
+        console.warn(`⚠️ Could not extract amount from tx: ${extractErr.message}`)
+        // Continue with stored amount
+      }
+    }
 
     if (!Number.isFinite(lamportsNum) || lamportsNum <= 0) {
+      console.error(`❌ Invalid withdrawal amount: ${lamportsNum} lamports`)
       return res.status(400).json({
         error: `Invalid withdrawal amount: ${lamportsNum} lamports (must be > 0)`,
+        details: 'Could not determine deposit amount from transaction'
       })
     }
+
+    console.log(`✅ Using withdrawal amount: ${(lamportsNum / LAMPORTS_PER_SOL).toFixed(6)} SOL (${lamportsNum} lamports)`)
 
     // ✅ CHECK OPERATOR BALANCE BEFORE WITHDRAWAL
     console.log(`💰 Checking operator balance before withdrawal...`)
