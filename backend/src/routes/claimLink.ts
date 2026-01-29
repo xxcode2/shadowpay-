@@ -120,12 +120,10 @@ async function withdrawFromPrivacyCash(
 
     console.log(`⏳ Generating ZK proof and withdrawing...`)
     
-    // ✅ IMPORTANT: recipientAddress must be PublicKey object, not string!
-    const recipientPublicKey = new PublicKey(recipientAddress)
-    
+    // ✅ Privacy Cash SDK accepts string addresses
     const result = await client.withdraw({
       lamports,
-      recipientAddress: recipientPublicKey
+      recipientAddress: recipientAddress
     })
 
     console.log(`✅ WITHDRAWAL SUCCESS!`)
