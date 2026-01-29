@@ -1,12 +1,11 @@
 // File: src/routes/claimLink.ts
 
 import { Router, Request, Response } from 'express'
-import { Connection, LAMPORTS_PER_SOL, PublicKey } from '@solana/web3.js'
+import { Connection, LAMPORTS_PER_SOL, PublicKey, Keypair } from '@solana/web3.js'
 import prisma from '../lib/prisma.js'
 import { getPrivacyCashClient } from '../services/privacyCash.js'
 import { assertOperatorBalance } from '../utils/operatorBalanceGuard.js'
 import { verifyWithdrawalTransaction, monitorTransactionStatus } from '../utils/privacyCashOperations.js'
-import { decryptUtxoPrivateKey } from '../utils/encryptionHelper.js'
 
 const router = Router()
 
@@ -109,55 +108,42 @@ router.post('/', async (req: Request, res: Response) => {
       })
     }
 
-    console.log(`🚀 Executing PrivacyCash withdrawal with decrypted key for link ${linkId}`)
+    console.log(`🚀 Processing withdrawal for link ${linkId}`)
     console.log(`🎯 Recipient: ${recipientAddress}`)
     console.log(`💰 Amount: ${(link.amount).toFixed(6)} SOL (${Number(link.lamports)} lamports)`)
 
-    // ✅ CHECK FOR ENCRYPTED UTXO PRIVATE KEY
-    console.log(`🔐 Step 1: Checking for encrypted UTXO private key...`)
-    if (!link.encryptedUtxoPrivateKey || !link.encryptionIv) {
-      console.error(`❌ Link ${linkId} has no encrypted UTXO private key`)
+    // ✅ CHECK FOR DEPOSIT TRANSACTION
+    console.log(`📋 Step 1: Checking deposit transaction...`)
+    if (!link.depositTx || link.depositTx.trim() === '') {
+      console.error(`❌ Link ${linkId} has no valid deposit transaction`)
       return res.status(400).json({
-        error: 'Link has no encryption key',
-        details: 'This link does not have the encryption key needed for claiming. The deposit may not have been completed properly. Please contact support.',
+        error: 'No valid deposit found',
+        details: 'This link does not have a completed deposit. Please deposit funds before claiming.',
         linkId
       })
     }
 
-    // ✅ DECRYPT UTXO PRIVATE KEY
-    console.log(`🔐 Step 2: Decrypting UTXO private key...`)
-    let utxoPrivateKey: string
-    try {
-      utxoPrivateKey = decryptUtxoPrivateKey(
-        link.encryptedUtxoPrivateKey,
-        link.encryptionIv,
-        linkId // Use linkId as password
-      )
-      console.log(`   ✅ UTXO private key decrypted successfully`)
-    } catch (decryptErr: any) {
-      console.error(`❌ Decryption failed: ${decryptErr.message}`)
-      return res.status(400).json({
-        error: 'Failed to decrypt UTXO key',
-        details: 'The encryption key for this link is invalid or corrupted.',
-        errorMessage: decryptErr.message  // ✅ FIXED: Changed 'error' to 'errorMessage'
-      })
-    }
+    console.log(`✅ Deposit verified: ${link.depositTx}`)
 
-    // ✅ INITIALIZE SDK WITH DECRYPTED KEY
-    console.log(`🔐 Step 3: Initializing Privacy Cash SDK with stored key...`)
+    // ✅ INITIALIZE SDK WITH OPERATOR KEYPAIR
+    console.log(`🔐 Step 2: Initializing Privacy Cash SDK...`)
     let pc: any
     try {
-      // Import PrivacyCash dynamically to avoid issues
+      // Import PrivacyCash dynamically
       const { PrivacyCash } = await import('privacycash')
-      const connection = new Connection(RPC, 'confirmed')
+      
+      // Load operator keypair from environment
+      const operatorKeypair = Keypair.fromSecretKey(
+        new Uint8Array(JSON.parse(process.env.OPERATOR_SECRET_KEY || '[]'))
+      )
 
-      // Initialize with the decrypted UTXO private key
+      // Initialize SDK with operator keypair (for withdrawal)
       pc = new PrivacyCash({
         RPC_url: RPC,
-        owner: utxoPrivateKey // Use the decrypted key!
+        owner: operatorKeypair
       })
 
-      console.log(`   ✅ SDK initialized with decrypted key`)
+      console.log(`   ✅ SDK initialized`)
     } catch (initErr: any) {
       console.error(`❌ SDK initialization failed: ${initErr.message}`)
       return res.status(500).json({
@@ -167,13 +153,12 @@ router.post('/', async (req: Request, res: Response) => {
     }
 
     // ✅ CHECK OPERATOR BALANCE
-    console.log(`💰 Step 4: Checking operator balance...`)
-    let operatorPubkey: PublicKey
+    console.log(`💰 Step 3: Checking operator balance...`)
     try {
       const connection = new Connection(RPC, 'confirmed')
       // @ts-ignore
       const operatorKeypair = pc.keypair
-      operatorPubkey = operatorKeypair.publicKey
+      const operatorPubkey = operatorKeypair.publicKey
 
       const balance = await connection.getBalance(operatorPubkey)
       const balanceSOL = balance / LAMPORTS_PER_SOL
@@ -196,7 +181,7 @@ router.post('/', async (req: Request, res: Response) => {
     }
 
     // ✅ EXECUTE WITHDRAWAL
-    console.log(`📤 Step 5: Executing withdrawal to recipient...`)
+    console.log(`📤 Step 4: Executing withdrawal to recipient...`)
     let withdrawTx: string
     try {
       const withdrawResult = await pc.withdraw({

@@ -2,7 +2,6 @@ import { CONFIG } from '../config'
 import { showError, showSuccess } from '../utils/notificationUtils'
 import { Connection, LAMPORTS_PER_SOL, PublicKey } from '@solana/web3.js'
 import { executeNonCustodialDeposit, WalletAdapter } from '../services/browserDeposit'
-import { encryptUtxoPrivateKey } from '../utils/encryptionHelper'
 
 export interface DepositRequest {
   linkId: string
@@ -89,44 +88,10 @@ export async function executeUserPaysDeposit(
       console.warn('   ⚠️  You may need to manually record this transaction.')
     }
 
-    // ✅ NEW: Store encrypted UTXO private key for multi-wallet claiming
-    if (result.utxoPrivateKey) {
-      try {
-        console.log(`\n🔐 MULTI-WALLET CLAIMING SETUP`)
-        console.log(`   ✅ UTXO Private Key extracted: ${result.utxoPrivateKey.substring(0, 20)}...`)
-        console.log(`   Key length: ${result.utxoPrivateKey.length} characters`)
-        console.log(`   🔐 Encrypting UTXO key with link password...`)
-        
-        const { encryptedUtxoPrivateKey, iv } = await encryptUtxoPrivateKey(
-          result.utxoPrivateKey,
-          linkId
-        )
-
-        console.log(`   📦 Encrypted: ${encryptedUtxoPrivateKey.substring(0, 20)}...`)
-        console.log(`   🔑 IV: ${iv.substring(0, 20)}...`)
-        console.log(`   📤 Storing encrypted key on backend...`)
-
-        await storeEncryptedKeyInBackend({
-          linkId,
-          encryptedUtxoPrivateKey,
-          iv
-        })
-
-        console.log(`   ✅ SUCCESS: Encryption key stored - link can now be claimed by anyone`)
-      } catch (keyErr: any) {
-        console.error('❌ Failed to store encryption key:', keyErr.message || keyErr)
-        console.error('⚠️  Deposit succeeded, but multi-wallet claiming is disabled')
-        console.error('⚠️  Link can only be claimed with the original wallet')
-      }
-    } else {
-      console.warn('⚠️  UTXO private key could not be extracted')
-      console.warn('   Your deposit succeeded, but multi-wallet claiming is disabled')
-      console.warn('   Link can only be claimed with the original wallet')
-    }
-
-    console.log(`\n✅ SUCCESS`)
+    console.log(`\n✅ DEPOSIT SUCCESSFUL`)
     console.log(`   Amount: ${amount} SOL`)
     console.log(`   Transaction: ${result.transactionSignature}`)
+    console.log(`   Status: Funds in Privacy Cash pool ✨`)
 
     const message = `${amount} SOL successfully deposited to Privacy Cash!`
     showSuccess(`${message} View on Solscan: ${result.explorerUrl}`)
@@ -295,51 +260,5 @@ export async function manuallyRecordDeposit(
   } catch (error: any) {
     console.error(`❌ Manual recording error:`, error.message)
     return false
-  }
-}
-
-/**
- * ✅ NEW: Store encrypted UTXO private key for multi-wallet claiming
- * This allows ANY wallet to claim the link
- */
-async function storeEncryptedKeyInBackend(params: {
-  linkId: string
-  encryptedUtxoPrivateKey: string
-  iv: string
-}): Promise<void> {
-  const url = `${CONFIG.BACKEND_URL}/api/deposit/store-key`
-
-  console.log(`🔐 Sending encrypted key to backend...`)
-  console.log(`   URL: ${url}`)
-  console.log(`   linkId: ${params.linkId}`)
-  console.log(`   encryptedKey length: ${params.encryptedUtxoPrivateKey.length}`)
-  console.log(`   iv length: ${params.iv.length}`)
-
-  try {
-    const response = await fetch(url, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        linkId: params.linkId,
-        encryptedUtxoPrivateKey: params.encryptedUtxoPrivateKey,
-        iv: params.iv
-      })
-    })
-
-    const responseData = await response.json()
-    
-    if (!response.ok) {
-      const errorMsg = responseData.error || responseData.message || `HTTP ${response.status}`
-      console.error(`❌ Backend returned error:`, errorMsg)
-      if (responseData.details) {
-        console.error(`   Details:`, responseData.details)
-      }
-      throw new Error(errorMsg)
-    }
-
-    console.log(`✅ Encrypted key stored on backend:`, responseData)
-  } catch (error: any) {
-    console.error(`❌ Failed to store encryption key:`, error.message || error)
-    throw error
   }
 }
