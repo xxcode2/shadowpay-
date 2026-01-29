@@ -8,11 +8,15 @@
  * 
  * No backend withdrawal needed - user withdraws themselves using their keys!
  */
+
+import { autoWithdrawFromPrivacyCash } from './autoWithdraw.js'
+
 export async function executeClaimLink(input: {
   linkId: string
   recipientAddress: string
+  userPrivateKey?: Uint8Array | number[] // Optional: for auto-withdrawal
 }) {
-  const { linkId, recipientAddress } = input
+  const { linkId, recipientAddress, userPrivateKey } = input
 
   // ✅ FRONTEND VALIDATION
   if (!linkId || typeof linkId !== 'string') {
@@ -98,62 +102,56 @@ export async function executeClaimLink(input: {
     console.log(`   ✅ Link claimed on backend!`)
     console.log(`   📝 Amount to withdraw: ${claimData.amount} SOL`)
 
-    // ✅ STEP 3: Auto-withdraw from Privacy Cash using recipient's balance
-    console.log('💰 Step 3: Auto-withdrawing from Privacy Cash...')
-    console.log(`   ⏳ Generating ZK proof and submitting to relayer...`)
+    // ✅ STEP 3: AUTO-WITHDRAW FROM PRIVACY CASH
+    console.log('💰 Step 3: Processing withdrawal from Privacy Cash...')
 
-    // Try to import and use Privacy Cash
-    try {
-      const { PrivacyCash } = await import('privacycash')
-      
-      // Get user's wallet from browser wallet (assumed to be connected)
-      // This assumes user has connected their wallet via Phantom/Solflare
-      const userKeypair = (window as any).solana?.publicKey || recipientAddress
-      
-      if (!userKeypair) {
-        throw new Error('No wallet connected. Please connect your Solana wallet.')
+    // If user provided private key, auto-withdraw
+    if (userPrivateKey) {
+      console.log(`   🔐 Auto-withdrawing with your keypair...`)
+      const withdrawResult = await autoWithdrawFromPrivacyCash({
+        amount: claimData.amount,
+        recipientAddress,
+        userPrivateKey
+      })
+
+      return {
+        success: true,
+        claimed: true,
+        withdrawn: true,
+        linkId: claimData.linkId,
+        amount: claimData.amount,
+        withdrawTx: withdrawResult.tx,
+        amountReceived: withdrawResult.amountReceived,
+        feesPaid: withdrawResult.feesPaid,
+        message: 'Link claimed and funds withdrawn successfully!'
       }
+    }
 
-      // Create Privacy Cash client with user's keypair
-      // Note: In production, you'd get the actual private key from wallet
-      console.log(`   🔐 Note: Recipient needs to confirm withdrawal from their wallet`)
-      
-      // For now, show user the instructions instead of auto-executing
-      // (automatic execution would require user to import private key)
-      throw new Error('MANUAL_WITHDRAWAL_NEEDED')
-      
-    } catch (withdrawErr: any) {
-      // If Privacy Cash SDK not available or manual withdrawal needed
-      if (withdrawErr.message === 'MANUAL_WITHDRAWAL_NEEDED' || 
-          withdrawErr.message.includes('Cannot find module')) {
-        
-        console.log(`\n📋 NEXT STEP: Recipient Must Withdraw from Privacy Cash`)
-        console.log(`━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━`)
-        console.log(`Your link has been claimed! Now you need to withdraw your funds.`)
-        console.log(`\nUse Privacy Cash SDK to withdraw:`)
-        console.log(`\nconst client = new PrivacyCash({`)
-        console.log(`  RPC_url: 'https://mainnet.helius-rpc.com/?api-key=YOUR_KEY',`)
-        console.log(`  owner: userPrivateKey // Your wallet's private key`)
-        console.log(`})`)
-        console.log(`\nconst result = await client.withdraw({`)
-        console.log(`  lamports: ${Math.floor(claimData.amount * 1_000_000_000)},`)
-        console.log(`  recipientAddress: '${recipientAddress}'`)
-        console.log(`})`)
-        console.log(`\nFees: 0.006 SOL base + 0.35% of amount`)
-        console.log(`━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n`)
+    // Otherwise, show manual withdrawal instructions
+    else {
+      console.log(`\n📋 NEXT STEP: Recipient Must Withdraw from Privacy Cash`)
+      console.log(`━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━`)
+      console.log(`Your link has been claimed! Now you need to withdraw your funds.`)
+      console.log(`\n💡 Quick Options:`)
+      console.log(`   1. Use Privacy Cash Web UI: https://www.privacycash.net`)
+      console.log(`   2. Use CLI with: autoWithdrawFromPrivacyCash(...)`)
+      console.log(`   3. Manual SDK: const result = await client.withdraw({...})`)
+      console.log(`\n📊 Withdrawal Info:`)
+      console.log(`   Amount: ${claimData.amount} SOL`)
+      console.log(`   Recipient: ${recipientAddress}`)
+      console.log(`   Fees: 0.006 SOL base + 0.35% of amount`)
+      console.log(`━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n`)
 
-        return {
-          success: true,
-          claimed: true,
-          linkId: claimData.linkId,
-          amount: claimData.amount,
-          depositTx: claimData.depositTx,
-          requiresManualWithdrawal: true,
-          message: 'Link claimed! You must now withdraw from Privacy Cash using the SDK.'
-        }
+      return {
+        success: true,
+        claimed: true,
+        withdrawn: false,
+        linkId: claimData.linkId,
+        amount: claimData.amount,
+        depositTx: claimData.depositTx,
+        requiresManualWithdrawal: true,
+        message: 'Link claimed! Follow the instructions above to withdraw your funds.'
       }
-
-      throw withdrawErr
     }
 
   } catch (err: any) {
