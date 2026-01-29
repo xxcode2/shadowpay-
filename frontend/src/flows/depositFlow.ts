@@ -81,9 +81,11 @@ export async function executeUserPaysDeposit(
         publicKey,
         transactionSignature: result.transactionSignature
       })
-    } catch (recordErr) {
+    } catch (recordErr: any) {
       // Non-critical - deposit succeeded even if recording fails
-      console.warn('Failed to record deposit in backend:', recordErr)
+      console.error('❌ Failed to record deposit in backend:', recordErr.message || recordErr)
+      console.warn('   ⚠️  Your deposit is safe on Privacy Cash, but link tracking failed.')
+      console.warn('   ⚠️  You may need to manually record this transaction.')
     }
 
     console.log(`\n✅ SUCCESS`)
@@ -114,25 +116,32 @@ async function recordDepositInBackend(params: {
   publicKey: string
   transactionSignature: string
 }): Promise<void> {
-  const response = await fetch(
-    `${CONFIG.BACKEND_URL}/api/deposit/record`,
-    {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        linkId: params.linkId,
-        amount: params.amount,
-        lamports: params.lamports,
-        publicKey: params.publicKey,
-        transactionHash: params.transactionSignature
-      })
-    }
-  )
+  const url = `${CONFIG.BACKEND_URL}/api/deposit/record`
+  
+  console.log(`   📤 Recording deposit with backend...`)
+  console.log(`      URL: ${url}`)
+  console.log(`      LinkID: ${params.linkId}`)
+  
+  const response = await fetch(url, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      linkId: params.linkId,
+      amount: params.amount,
+      lamports: params.lamports,
+      publicKey: params.publicKey,
+      transactionHash: params.transactionSignature
+    })
+  })
 
   if (!response.ok) {
-    const errorData = await response.json().catch(() => ({}))
+    const errorData = await response.json().catch(() => ({ error: 'Unknown error' }))
+    console.error(`      ❌ Backend error (${response.status}):`, errorData)
     throw new Error(errorData.error || `Backend error: ${response.status}`)
   }
+  
+  const result = await response.json()
+  console.log(`      ✅ Deposit recorded:`, result)
 }
 
 /**
