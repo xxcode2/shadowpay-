@@ -10,17 +10,20 @@
     "setup:circuits": "mkdir -p public/circuits && cp -f node_modules/privacycash/circuit2/transaction2.wasm public/circuits/ 2>/dev/null && cp -f node_modules/privacycash/circuit2/transaction2.zkey public/circuits/ 2>/dev/null && echo '✅ Circuit files setup complete' || echo '⚠️  Circuit files may need manual setup'"
   },
   "dependencies": {
+    "@lightprotocol/hasher.rs": "^0.2.1",
     "@solana/web3.js": "^1.98.4",
     "bn.js": "^5.2.1",
     "buffer": "^6.0.3",
     "privacycash": "^1.1.11",
     "process": "^0.11.10",
     "rollup-plugin-polyfill-node": "^0.13.0",
+    "snarkjs": "^0.7.5",
     "tweetnacl": "^1.0.3"
   },
   "devDependencies": {
     "@types/bn.js": "^5.1.2",
     "@types/node": "^24.3.0",
+    "@types/snarkjs": "^0.7.9",
     "typescript": "^5.9.2",
     "vite": "^5.4.21",
     "vite-plugin-node-polyfills": "^0.25.0"
