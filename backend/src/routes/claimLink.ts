@@ -1,37 +1,24 @@
 // File: src/routes/claimLink.ts
 
 import { Router, Request, Response } from 'express'
-import { Connection, LAMPORTS_PER_SOL, PublicKey, Keypair } from '@solana/web3.js'
+import { PublicKey } from '@solana/web3.js'
 import prisma from '../lib/prisma.js'
-import { getPrivacyCashClient } from '../services/privacyCash.js'
-import { assertOperatorBalance } from '../utils/operatorBalanceGuard.js'
-import { verifyWithdrawalTransaction, monitorTransactionStatus } from '../utils/privacyCashOperations.js'
 
 const router = Router()
-
-const RPC = process.env.SOLANA_RPC_URL!
 
 /**
  * POST /api/claim-link
  *
- * ✅ CORRECT BUSINESS MODEL:
+ * ✅ SIMPLIFIED MODEL (v3.0):
  * 
- * PAYMENT FLOW:
- * 1. Sender (User1) creates link - pays amount + deposit fee (~0.002 SOL)
- * 2. Sender's SOL goes to Privacy Cash pool (encrypted, private)
- * 3. Recipient (User2) claims link - receives amount minus operator fee
- * 4. Operator acts as RELAYER and earns 0.006 SOL fee per transaction
+ * FLOW:
+ * 1. User A deposits SOL to Privacy Cash (pays deposit fee)
+ * 2. User A creates link (records deposit hash in backend)
+ * 3. User B claims link (backend validates, confirms claimed)
+ * 4. User B withdraws from Privacy Cash to their wallet (pays withdrawal fee)
  * 
- * ECONOMIC MODEL:
- * Sender pays: 0.017 SOL (amount) + 0.008 SOL (fees) = 0.025 SOL total
- * Operator earns: 0.006 SOL (commission fee)
- * Recipient receives: 0.011 SOL (0.017 - 0.006 operator fee)
- * Result: Operator earns ~0.003 SOL after costs, system sustainable!
- * 
- * TECHNICAL:
- * - Operator is RELAYER only - does NOT pay the deposit amount
- * - PrivacyCash handles fund transfer from shielded pool
- * - Operator balance check only verifies withdrawal fee buffer
+ * RESULT: Backend only records, users handle their own deposits/withdrawals!
+ * NO OPERATOR BALANCE NEEDED - just small PostgreSQL storage!
  */
 router.post('/', async (req: Request, res: Response) => {
   try {
@@ -67,6 +54,7 @@ router.post('/', async (req: Request, res: Response) => {
     }
 
     // ✅ FIND LINK
+    console.log(`🔍 Looking up link: ${linkId}`)
     const link = await prisma.paymentLink.findUnique({
       where: { id: linkId },
     })
@@ -79,237 +67,63 @@ router.post('/', async (req: Request, res: Response) => {
       })
     }
 
-    // ✅ CHECK DEPOSIT STATUS (CRITICAL)
+    console.log(`✅ Link found: ${link.amount} SOL`)
+
+    // ✅ CHECK DEPOSIT STATUS
     if (!link.depositTx || link.depositTx.trim() === '') {
-      console.warn(`⚠️ Link ${linkId} has no depositTx recorded - attempting auto-recovery...`)
-      
-      console.error(`❌ Link ${linkId} has no valid deposit transaction`)
+      console.error(`❌ Link ${linkId} has no deposit recorded`)
       return res.status(400).json({
-        error: 'Link has no valid deposit',
-        details: 'Deposit is still being processed. If you just deposited, wait 30-60 seconds and try again. If deposit was recent, the recording may have failed - please contact support with your transaction hash.',
+        error: 'No deposit found',
+        details: 'This link does not have a completed deposit. User may need to wait for deposit to confirm.',
         linkStatus: {
           amount: link.amount,
-          claimed: link.claimed,
           hasDepositTx: !!link.depositTx,
-        },
-        recovery: {
-          message: 'Deposit recorded via /api/deposit/record endpoint. If recording failed, provide transaction hash here.',
-          retryAfter: '30-60 seconds'
         }
       })
     }
+
+    console.log(`✅ Deposit verified: ${link.depositTx}`)
 
     // ✅ CHECK CLAIM STATUS
     if (link.claimed) {
       console.error(`❌ Link ${linkId} already claimed by ${link.claimedBy}`)
       return res.status(400).json({
         error: 'Link already claimed',
-        details: `This link was claimed by ${link.claimedBy || 'unknown address'}`,
+        details: `This link was already claimed by ${link.claimedBy || 'unknown address'}`,
       })
     }
 
-    console.log(`🚀 Processing withdrawal for link ${linkId}`)
-    console.log(`🎯 Recipient: ${recipientAddress}`)
-    console.log(`💰 Amount: ${(link.amount).toFixed(6)} SOL (${Number(link.lamports)} lamports)`)
-    console.log(`ℹ️  Version: v2.0 - Simplified Payment Links (No Encryption Required)`)
+    console.log(`🔓 Marking link as claimed for ${recipientAddress}`)
 
-    // ✅ CHECK FOR DEPOSIT TRANSACTION
-    console.log(`📋 Step 1: Checking deposit transaction...`)
-    if (!link.depositTx || link.depositTx.trim() === '') {
-      console.error(`❌ Link ${linkId} has no valid deposit transaction`)
-      return res.status(400).json({
-        error: 'No valid deposit found',
-        details: 'This link does not have a completed deposit. Please deposit funds before claiming.',
-        linkId
-      })
-    }
-
-    console.log(`✅ Deposit verified: ${link.depositTx}`)
-
-    // ✅ INITIALIZE SDK WITH OPERATOR KEYPAIR
-    console.log(`🔐 Step 2: Initializing Privacy Cash SDK...`)
-    let pc: any
-    try {
-      // Import PrivacyCash dynamically
-      const { PrivacyCash } = await import('privacycash')
-      
-      // Load operator keypair from environment with better error handling
-      const secretKeyStr = process.env.OPERATOR_SECRET_KEY
-      if (!secretKeyStr) {
-        throw new Error('OPERATOR_SECRET_KEY environment variable not set')
+    // ✅ MARK LINK AS CLAIMED (no withdrawal, just record!)
+    await prisma.paymentLink.update({
+      where: { id: linkId },
+      data: {
+        claimed: true,
+        claimedBy: recipientAddress,
+        updatedAt: new Date()
       }
+    })
 
-      let keyArray: number[] = []
-      let parseAttempts = 0
-      
-      // Attempt 1: Try JSON array parsing
-      try {
-        const trimmed = secretKeyStr.trim()
-        if (trimmed.startsWith('[') && trimmed.endsWith(']')) {
-          keyArray = JSON.parse(trimmed)
-          parseAttempts++
-        }
-      } catch (e) {
-        // Silently fail and try next method
-      }
-      
-      // Attempt 2: Try comma-separated numbers
-      if (keyArray.length === 0) {
-        try {
-          const numbers = secretKeyStr
-            .split(/[,\s\n]+/) // Split on comma, space, or newline
-            .map(str => str.trim())
-            .filter(str => str.length > 0)
-            .map(num => parseInt(num, 10))
-            .filter(num => !isNaN(num))
-          
-          if (numbers.length > 0) {
-            keyArray = numbers
-            parseAttempts++
-          }
-        } catch (e) {
-          // Silently fail
-        }
-      }
-      
-      // Attempt 3: Try raw JSON array without brackets
-      if (keyArray.length === 0) {
-        try {
-          const arrayStr = `[${secretKeyStr}]`
-          keyArray = JSON.parse(arrayStr)
-          parseAttempts++
-        } catch (e) {
-          // Silently fail
-        }
-      }
-      
-      if (keyArray.length === 0) {
-        throw new Error(`Could not parse OPERATOR_SECRET_KEY after ${parseAttempts} attempts. Please check the environment variable format.`)
-      }
-
-      if (keyArray.length !== 64) {
-        throw new Error(`OPERATOR_SECRET_KEY should have 64 elements, got ${keyArray.length}`)
-      }
-
-      const operatorKeypair = Keypair.fromSecretKey(
-        new Uint8Array(keyArray)
-      )
-
-      // Initialize SDK with operator keypair (for withdrawal)
-      pc = new PrivacyCash({
-        RPC_url: RPC,
-        owner: operatorKeypair
-      })
-
-      console.log(`   ✅ SDK initialized`)
-      console.log(`   Operator: ${operatorKeypair.publicKey.toString()}`)
-    } catch (initErr: any) {
-      console.error(`❌ SDK initialization failed: ${initErr.message}`)
-      return res.status(500).json({
-        error: 'Failed to initialize payment system',
-        details: initErr.message,
-        hint: 'OPERATOR_SECRET_KEY environment variable may be malformed. Check production environment.'
-      })
-    }
-
-    // ✅ CHECK OPERATOR BALANCE
-    console.log(`💰 Step 3: Checking operator balance...`)
-    try {
-      const connection = new Connection(RPC, 'confirmed')
-      // @ts-ignore
-      const operatorKeypair = pc.keypair
-      const operatorPubkey = operatorKeypair.publicKey
-
-      const balance = await connection.getBalance(operatorPubkey)
-      const balanceSOL = balance / LAMPORTS_PER_SOL
-      const requiredSOL = (Number(link.lamports) / LAMPORTS_PER_SOL) + 0.01 // amount + buffer
-
-      console.log(`   Current balance: ${balanceSOL.toFixed(8)} SOL`)
-      console.log(`   Required: ${requiredSOL.toFixed(8)} SOL`)
-
-      if (balance < requiredSOL * LAMPORTS_PER_SOL) {
-        console.error(`❌ Insufficient operator balance`)
-        return res.status(400).json({
-          error: 'Operator wallet insufficient balance',
-          details: `Cannot process withdrawal at this time. Try again later.`
-        })
-      }
-      console.log(`   ✅ Operator balance sufficient`)
-    } catch (balErr: any) {
-      console.error(`⚠️ Balance check error: ${balErr.message}`)
-      // Continue anyway
-    }
-
-    // ✅ EXECUTE WITHDRAWAL
-    console.log(`📤 Step 4: Executing withdrawal to recipient...`)
-    let withdrawTx: string
-    try {
-      const withdrawResult = await pc.withdraw({
-        lamports: Number(link.lamports),
-        recipientAddress
-      })
-
-      withdrawTx = withdrawResult.tx
-      const amountReceived = withdrawResult.amount_in_lamports / LAMPORTS_PER_SOL
-      const feeCharged = withdrawResult.fee_in_lamports / LAMPORTS_PER_SOL
-
-      console.log(`   ✅ Withdrawal successful!`)
-      console.log(`   Transaction: ${withdrawTx}`)
-      console.log(`   Amount received: ${amountReceived.toFixed(6)} SOL`)
-      console.log(`   Fee: ${feeCharged.toFixed(6)} SOL`)
-    } catch (withdrawErr: any) {
-      console.error(`❌ Withdrawal execution failed: ${withdrawErr.message}`)
-      return res.status(500).json({
-        error: 'Withdrawal execution failed',
-        details: withdrawErr.message,
-        linkId
-      })
-    }
-
-    // ✅ MARK LINK AS CLAIMED
-    console.log(`✅ Step 6: Marking link as claimed...`)
-    try {
-      await prisma.$transaction([
-        prisma.paymentLink.update({
-          where: { id: linkId },
-          data: {
-            claimed: true,
-            claimedBy: recipientAddress,
-            withdrawTx
-          }
-        }),
-        prisma.transaction.create({
-          data: {
-            type: 'withdraw',
-            linkId,
-            transactionHash: withdrawTx,
-            amount: link.amount,
-            assetType: link.assetType,
-            status: 'confirmed',
-            toAddress: recipientAddress
-          }
-        })
-      ])
-      console.log(`   ✅ Link marked as claimed`)
-    } catch (dbErr: any) {
-      console.error(`⚠️ Database update failed: ${dbErr.message}`)
-      // Transaction may have succeeded even if DB update fails
-    }
-
-    console.log(`\n✅ CLAIM COMPLETE`)
-    console.log(`   Link: ${linkId}`)
-    console.log(`   Amount: ${(Number(link.lamports) / LAMPORTS_PER_SOL).toFixed(6)} SOL`)
+    console.log(`✅ Link successfully claimed!`)
+    console.log(`   Amount: ${link.amount} SOL`)
     console.log(`   Recipient: ${recipientAddress}`)
-    console.log(`   Transaction: ${withdrawTx}`)
+    console.log(`   Deposit TX: ${link.depositTx}`)
 
+    // ✅ RETURN CLAIM INFO FOR RECIPIENT TO WITHDRAW
     return res.status(200).json({
       success: true,
-      message: 'Claim successful!',
+      message: 'Link claimed successfully! Now withdraw from Privacy Cash.',
       linkId,
+      amount: link.amount,
+      depositTx: link.depositTx,
       recipientAddress,
-      amount: Number(link.lamports) / LAMPORTS_PER_SOL,
-      withdrawTx,
-      claimed: true
+      nextStep: {
+        action: 'Withdraw from Privacy Cash',
+        instructions: 'Use the Privacy Cash SDK to withdraw your funds from the shielded pool to your wallet',
+        example: 'await client.withdraw({ lamports: amount_in_lamports, recipientAddress })',
+        fees: 'Base 0.006 SOL + 0.35% of amount'
+      }
     })
   } catch (err: any) {
     console.error('❌ CLAIM ERROR:', err.message || err.toString())
