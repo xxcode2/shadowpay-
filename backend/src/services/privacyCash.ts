@@ -224,6 +224,55 @@ export async function executeWithdrawal(
 }
 
 /**
+ * Execute deposit to Privacy Cash pool
+ * 
+ * @param pc - PrivacyCash client instance
+ * @param lamports - Amount to deposit in lamports
+ * @returns Transaction signature
+ */
+export async function executeDeposit(
+  pc: PrivacyCash,
+  lamports: number
+): Promise<{
+  tx: string
+  lamports: number
+  sol: number
+}> {
+  if (!lamports || lamports <= 0) {
+    throw new Error('Invalid deposit amount')
+  }
+
+  try {
+    // @ts-ignore - SDK may not have complete type definitions
+    const result = await pc.deposit({
+      lamports,
+    })
+
+    const sol = lamports / LAMPORTS_PER_SOL
+
+    return {
+      tx: result.tx,
+      lamports,
+      sol,
+    }
+  } catch (err: any) {
+    console.error('❌ Deposit error:', err)
+
+    const errorMsg = err?.message?.toLowerCase() || ''
+
+    if (errorMsg.includes('insufficient')) {
+      throw new Error(`Insufficient SOL balance for deposit`)
+    }
+
+    if (errorMsg.includes('timeout')) {
+      throw new Error(`Deposit timeout - relayer not responding`)
+    }
+
+    throw new Error(`Deposit failed: ${err.message}`)
+  }
+}
+
+/**
  * Convert lamports to SOL
  */
 export function lamportsToSol(lamports: number): number {
