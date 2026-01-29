@@ -516,6 +516,7 @@ export class App {
       await executeClaimLink({
         linkId: window.currentLinkId,
         recipientAddress: this.walletAddress,
+        wallet: this.getSigningWallet(),
       })
 
       this.hideLoadingModal()

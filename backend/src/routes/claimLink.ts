@@ -1,27 +1,28 @@
 // File: src/routes/claimLink.ts
 
 import { Router, Request, Response } from 'express'
-import { PublicKey, Connection, Keypair } from '@solana/web3.js'
-import bs58 from 'bs58'
+import { PublicKey } from '@solana/web3.js'
 import prisma from '../lib/prisma.js'
 
 const router = Router()
 
 /**
- * ✅ v7.0: REAL WITHDRAWAL EXECUTION
+ * ✅ v8.0: CORRECT NON-CUSTODIAL ARCHITECTURE
  * 
- * Backend executes ACTUAL Privacy Cash withdrawal:
- * 1. Mark link as claimed
- * 2. Call Privacy Cash relayer API to withdraw
- * 3. Return real TX hash with funds in wallet
+ * Backend ONLY:
+ * 1. Validate link exists & has deposit
+ * 2. Check link not already claimed
+ * 3. Mark link as claimed
+ * 4. Return deposit info (so frontend can use SDK to withdraw)
  * 
- * User sees: click claim → SOL in wallet instantly
+ * WITHDRAWAL happens in FRONTEND via Privacy Cash SDK
+ * Backend NEVER touches private keys or calls relayer
+ * 
+ * Flow:
+ * Frontend → SDK.withdraw() → Relayer → Wallet
+ *     ↓
+ *  Backend (metadata only)
  */
-
-// Get Solana connection
-const RPC_URL = process.env.SOLANA_RPC_URL || 'https://api.mainnet-beta.solana.com'
-const connection = new Connection(RPC_URL, 'confirmed')
-const PRIVACY_CASH_RELAYER_URL = 'https://api.privacycash.net/v1'
 
 router.post('/', async (req: Request, res: Response) => {
   try {
@@ -69,6 +70,7 @@ router.post('/', async (req: Request, res: Response) => {
 
     console.log(`✅ Link found: ${link.amount} SOL`)
 
+
     // ✅ CHECK DEPOSIT STATUS
     if (!link.depositTx || link.depositTx.trim() === '') {
       console.error(`❌ Link ${linkId} has no deposit recorded`)
@@ -93,10 +95,10 @@ router.post('/', async (req: Request, res: Response) => {
       })
     }
 
-    // ✅ MARK LINK AS CLAIMED
+    // ✅ MARK LINK AS CLAIMED (ONLY THIS - NO WITHDRAWAL)
     console.log(`🔓 Marking link as claimed for ${recipientAddress}`)
 
-    const updatedLink = await prisma.paymentLink.update({
+    await prisma.paymentLink.update({
       where: { id: linkId },
       data: {
         claimed: true,
@@ -107,105 +109,28 @@ router.post('/', async (req: Request, res: Response) => {
 
     console.log(`✅ Link marked as claimed!`)
 
-    // ✅ EXECUTE REAL WITHDRAWAL VIA PRIVACY CASH RELAYER
-    console.log(`\n💸 Executing withdrawal to ${recipientAddress}...`)
-    let withdrawalTx = null
-    let withdrawalError = null
-
-    try {
-      // Get operator keypair from environment
-      const operatorKeyStr = process.env.OPERATOR_SECRET_KEY
-      if (!operatorKeyStr) {
-        throw new Error('OPERATOR_SECRET_KEY not configured')
-      }
-
-      // Parse operator keypair
-      let operatorKeypair: Keypair
-      try {
-        const keyArray = JSON.parse(operatorKeyStr)
-        operatorKeypair = Keypair.fromSecretKey(Uint8Array.from(keyArray))
-      } catch (e) {
-        // Try as base58 string
-        try {
-          const decoded = bs58.decode(operatorKeyStr)
-          operatorKeypair = Keypair.fromSecretKey(decoded)
-        } catch {
-          throw new Error('Invalid OPERATOR_SECRET_KEY format')
-        }
-      }
-
-      console.log(`🔑 Using operator: ${operatorKeypair.publicKey.toString()}`)
-
-      // Call Privacy Cash relayer to execute withdrawal
-      const withdrawalPayload = {
-        recipient: recipientAddress,
-        amount: Math.floor((link.amount || 0) * 1e9), // Convert to lamports
-        pool: 'default'
-      }
-
-      console.log(`📤 Calling Privacy Cash relayer: ${PRIVACY_CASH_RELAYER_URL}/withdraw`)
-      
-      const relayerResponse = await fetch(`${PRIVACY_CASH_RELAYER_URL}/withdraw`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          ...withdrawalPayload,
-          operator: operatorKeypair.publicKey.toString()
-        })
-      })
-
-      if (!relayerResponse.ok) {
-        const errorText = await relayerResponse.text()
-        console.warn(`⚠️ Relayer responded with ${relayerResponse.status}: ${errorText}`)
-        throw new Error(`Relayer error: ${relayerResponse.status}`)
-      }
-
-      const relayerResult = await relayerResponse.json() as any
-
-      if (relayerResult.signature) {
-        withdrawalTx = relayerResult.signature
-        console.log(`✅ Withdrawal successful! TX: ${withdrawalTx}`)
-        
-        // Save withdrawal TX to database
-        await prisma.paymentLink.update({
-          where: { id: linkId },
-          data: {
-            withdrawTx: withdrawalTx,
-            updatedAt: new Date()
-          }
-        })
-      } else {
-        throw new Error('No signature in relayer response')
-      }
-    } catch (err: any) {
-      withdrawalError = err.message
-      console.error(`❌ Withdrawal failed: ${err.message}`)
-      console.log(`⚠️ Link is marked claimed but withdrawal needs retry`)
-    }
-
-    // ✅ RETURN RESULT
-    const result: any = {
+    // ✅ RETURN DEPOSIT INFO FOR FRONTEND TO USE WITH SDK
+    console.log(`\n📤 Returning deposit info for frontend withdrawal via SDK...`)
+    return res.status(200).json({
       success: true,
       claimed: true,
-      message: withdrawalTx ? '✅ Claimed & funds sent to wallet!' : '⚠️ Claimed but withdrawal pending',
+      message: '✅ Link claimed! Frontend will now withdraw via Privacy Cash SDK.',
       linkId,
       amount: link.amount,
       depositTx: link.depositTx,
       recipientAddress,
-      claimedAt: new Date().toISOString()
-    }
-
-    if (withdrawalTx) {
-      result.withdrawalTx = withdrawalTx
-      result.withdrawn = true
-    } else if (withdrawalError) {
-      result.withdrawalError = withdrawalError
-      result.withdrawn = false
-    }
-
-    return res.status(withdrawalTx ? 200 : 202).json(result)
+      claimedAt: new Date().toISOString(),
+      
+      // ✅ FRONTEND NEEDS THIS TO CALL SDK.WITHDRAW()
+      withdrawalInfo: {
+        depositTx: link.depositTx,
+        amount: link.amount,
+        recipient: recipientAddress,
+        // Frontend will use Privacy Cash SDK to execute the actual withdrawal
+      },
+      
+      nextStep: 'Frontend calls Privacy Cash SDK withdraw with depositTx'
+    })
 
   } catch (err: any) {
     console.error('❌ CLAIM ERROR:', err.message || err.toString())
