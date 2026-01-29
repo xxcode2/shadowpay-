@@ -28,6 +28,9 @@ Thumbs.db
 logs/
 *.log
 npm-debug.log*
+
+# Secrets (NEVER commit operator keys)
+operator-key.json
 yarn-debug.log*
 
 # Runtime data
