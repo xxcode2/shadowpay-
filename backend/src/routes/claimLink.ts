@@ -133,9 +133,38 @@ router.post('/', async (req: Request, res: Response) => {
       // Import PrivacyCash dynamically
       const { PrivacyCash } = await import('privacycash')
       
-      // Load operator keypair from environment
+      // Load operator keypair from environment with better error handling
+      const secretKeyStr = process.env.OPERATOR_SECRET_KEY
+      if (!secretKeyStr) {
+        throw new Error('OPERATOR_SECRET_KEY environment variable not set')
+      }
+
+      let keyArray: number[] = []
+      try {
+        // Try to parse as JSON array first
+        keyArray = JSON.parse(secretKeyStr)
+      } catch {
+        // If JSON parsing fails, try comma-separated format
+        try {
+          keyArray = secretKeyStr
+            .split(',')
+            .map(num => parseInt(num.trim(), 10))
+            .filter(num => !isNaN(num))
+          
+          if (keyArray.length === 0) {
+            throw new Error('No valid key numbers found in OPERATOR_SECRET_KEY')
+          }
+        } catch (parseErr: any) {
+          throw new Error(`Invalid OPERATOR_SECRET_KEY format: ${parseErr.message}`)
+        }
+      }
+
+      if (keyArray.length !== 64) {
+        throw new Error(`OPERATOR_SECRET_KEY should have 64 elements, got ${keyArray.length}`)
+      }
+
       const operatorKeypair = Keypair.fromSecretKey(
-        new Uint8Array(JSON.parse(process.env.OPERATOR_SECRET_KEY || '[]'))
+        new Uint8Array(keyArray)
       )
 
       // Initialize SDK with operator keypair (for withdrawal)
@@ -145,11 +174,13 @@ router.post('/', async (req: Request, res: Response) => {
       })
 
       console.log(`   ✅ SDK initialized`)
+      console.log(`   Operator: ${operatorKeypair.publicKey.toString()}`)
     } catch (initErr: any) {
       console.error(`❌ SDK initialization failed: ${initErr.message}`)
       return res.status(500).json({
         error: 'Failed to initialize payment system',
-        details: initErr.message
+        details: initErr.message,
+        hint: 'OPERATOR_SECRET_KEY environment variable may be malformed. Check production environment.'
       })
     }
 
