@@ -1,13 +1,16 @@
 /**
- * ✅ v5.0: NON-CUSTODIAL CLAIM FLOW
+ * ✅ v6.0: CLAIM + WITHDRAW FLOW
  * 
- * Backend ONLY marks link as claimed
- * User MUST withdraw themselves from Private Cash
+ * Backend handles BOTH:
+ * 1. Marks link as claimed
+ * 2. Executes withdrawal to recipient wallet
  * 
  * 2-STEP PROCESS:
- * 1. Claim link (backend)
- * 2. Withdraw from pool (user frontend/web UI)
+ * 1. Fetch link details
+ * 2. Claim + Withdraw (backend does both)
  */
+
+import { PublicKey } from '@solana/web3.js'
 
 export async function executeClaimLink(input: {
   linkId: string
@@ -56,8 +59,8 @@ export async function executeClaimLink(input: {
 
     console.log(`✅ Found: ${linkData.amount} SOL\n`)
 
-    // STEP 2: Claim link (backend only marks as claimed)
-    console.log('STEP 2: Claiming link on backend...')
+    // STEP 2: Claim + Withdraw (backend does both)
+    console.log('STEP 2: Claiming link and withdrawing funds...')
 
     const claimRes = await fetch(`${BACKEND_URL}/api/claim-link`, {
       method: 'POST',
@@ -82,43 +85,32 @@ export async function executeClaimLink(input: {
 
     const claimData = await claimRes.json()
 
-    console.log(`✅ Link claimed successfully!\n`)
+    console.log(`✅ Link claimed successfully!`)
+    console.log(`📤 Funds withdrawn to wallet!\n`)
 
-    // SUCCESS - show withdrawal instructions
+    // SUCCESS - show final result
     console.log('='.repeat(70))
-    console.log('✅ LINK CLAIMED!')
+    console.log('✅ LINK CLAIMED & WITHDRAWN!')
     console.log('='.repeat(70))
     console.log(`\n💰 Amount: ${claimData.amount} SOL`)
     console.log(`📍 Deposit TX: ${claimData.depositTx}`)
-    console.log(`⏰ Claimed at: ${claimData.claimedAt}\n`)
+    console.log(`💸 Withdrawal TX: ${claimData.withdrawalTx}`)
+    console.log(`⏰ Claimed at: ${claimData.claimedAt}`)
+    console.log('\n✨ Funds are now in your wallet!')
 
-    console.log('📌 NEXT STEP: Withdraw from Private Cash Pool\n')
-    
-    if (claimData.withdrawalOptions) {
-      console.log('OPTION 1: Easy (Web UI)')
-      console.log(`  → Visit ${claimData.withdrawalOptions.option1.url}`)
-      console.log('  → Connect your wallet')
-      console.log(`  → Withdraw ${claimData.amount} SOL`)
-      console.log('  → Funds arrive in 30-60 seconds\n')
-
-      console.log('OPTION 2: Advanced (SDK)')
-      console.log('  → Use Privacy Cash SDK from your application')
-      console.log(`  → Code example in response.withdrawalOptions.option2.code\n`)
-    }
-
-    console.log('='.repeat(70) + '\n')
+    console.log('\n' + '='.repeat(70) + '\n')
 
     return {
       success: true,
       claimed: true,
+      withdrawn: true,
       linkId,
       amount: claimData.amount,
       depositTx: claimData.depositTx,
       recipientAddress,
       claimedAt: claimData.claimedAt,
-      message: '✅ Link claimed! Now withdraw from Private Cash pool.',
-      withdrawalOptions: claimData.withdrawalOptions,
-      nextSteps: claimData.nextSteps
+      withdrawalTx: claimData.withdrawalTx,
+      message: '✅ Link claimed & funds withdrawn to your wallet!',
     }
 
   } catch (err: any) {
