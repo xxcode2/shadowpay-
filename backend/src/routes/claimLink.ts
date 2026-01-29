@@ -129,22 +129,70 @@ router.post('/', async (req: Request, res: Response) => {
       })
     }
 
-    // ⚠️ Note: Balance check is optional since Privacy Cash SDK handles it
-    // But we can still warn if operator is low on SOL for network fees
+    // ✅ CHECK OPERATOR BALANCE BEFORE WITHDRAWAL
+    console.log(`💰 Checking operator balance before withdrawal...`)
+    const operatorPubkey = operatorKeypair?.publicKey
+    if (!operatorPubkey) {
+      console.error(`❌ Cannot get operator pubkey`)
+      return res.status(500).json({
+        error: 'Operator pubkey not found',
+        details: 'Backend misconfiguration'
+      })
+    }
+
     try {
-      // Try to assert balance, but don't fail if it fails (SDK will handle)
-      // This is just for logging purposes
-      // await assertOperatorBalance(connection, operatorKeypair.publicKey, NETWORK_TX_FEE)
-    } catch (balanceErr: any) {
-      console.warn(`⚠️ Operator balance warning: ${balanceErr.message}`)
+      const balance = await connection.getBalance(operatorPubkey)
+      const balanceSOL = balance / LAMPORTS_PER_SOL
+      const requiredSOL = (lamportsNum / LAMPORTS_PER_SOL) + 0.007 // withdrawal + fees + buffer
+      
+      console.log(`   Current balance: ${balanceSOL.toFixed(8)} SOL (${balance} lamports)`)
+      console.log(`   Required: ${requiredSOL.toFixed(8)} SOL`)
+      console.log(`   Withdrawal amount: ${(lamportsNum / LAMPORTS_PER_SOL).toFixed(8)} SOL`)
+      
+      if (balance < (requiredSOL * LAMPORTS_PER_SOL)) {
+        const shortfall = (requiredSOL * LAMPORTS_PER_SOL) - balance
+        console.error(`❌ INSUFFICIENT BALANCE: Short ${(shortfall / LAMPORTS_PER_SOL).toFixed(8)} SOL`)
+        return res.status(400).json({
+          error: 'Operator wallet insufficient balance',
+          details: `Current: ${balanceSOL.toFixed(8)} SOL, Required: ${requiredSOL.toFixed(8)} SOL, Short: ${(shortfall / LAMPORTS_PER_SOL).toFixed(8)} SOL`,
+          operatorAddress: operatorPubkey.toString(),
+          currentBalance: balanceSOL,
+          requiredBalance: requiredSOL,
+          shortfallSOL: shortfall / LAMPORTS_PER_SOL
+        })
+      }
+      console.log(`   ✅ Balance sufficient for withdrawal`)
+    } catch (balanceCheckErr: any) {
+      console.error(`⚠️ Balance check failed: ${balanceCheckErr.message}`)
+      // Continue anyway - SDK will check again
     }
 
     // 🔥 EXECUTE REAL WITHDRAWAL VIA PRIVACY CASH SDK
     // SDK returns: tx, recipient, amount_in_lamports, fee_in_lamports, isPartial
-    const withdrawalResult = await pc.withdraw({
-      lamports: lamportsNum,
-      recipientAddress,
-    })
+    console.log(`🚀 Executing Privacy Cash withdrawal...`)
+    let withdrawalResult
+    try {
+      withdrawalResult = await pc.withdraw({
+        lamports: lamportsNum,
+        recipientAddress,
+      })
+    } catch (withdrawErr: any) {
+      console.error(`❌ Withdrawal failed: ${withdrawErr.message}`)
+      console.error(`   Error stack: ${withdrawErr.stack}`)
+      
+      // Re-check balance to understand failure
+      try {
+        const balance = await connection.getBalance(operatorPubkey)
+        const balanceSOL = balance / LAMPORTS_PER_SOL
+        console.error(`   Operator balance at failure: ${balanceSOL.toFixed(8)} SOL`)
+      } catch (e) {}
+      
+      return res.status(500).json({
+        error: withdrawErr.message || 'Withdrawal execution failed',
+        details: `Privacy Cash SDK error during withdrawal`,
+        originalError: withdrawErr.message
+      })
+    }
 
     const { tx: withdrawTx, amount_in_lamports: amountReceived, fee_in_lamports: feeCharged, isPartial } = withdrawalResult
 
