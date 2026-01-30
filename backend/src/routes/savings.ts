@@ -19,6 +19,18 @@ const router = Router()
 const db = prisma as any  // Type assertion for Prisma models
 
 /**
+ * GET /api/savings/status
+ * Check if savings API is working
+ */
+router.get('/status', (_req: Request, res: Response) => {
+  res.json({ 
+    status: 'ok', 
+    message: 'Savings API is responding',
+    timestamp: new Date().toISOString()
+  })
+})
+
+/**
  * POST /api/savings/init
  * Initialize or get savings account for wallet
  */
@@ -35,6 +47,12 @@ router.post('/init', async (req: Request<{}, {}, any>, res: Response) => {
       new PublicKey(walletAddress)
     } catch {
       return res.status(400).json({ error: 'Invalid wallet address' })
+    }
+
+    // Check database connection
+    if (!db || !db.saving) {
+      console.error('❌ Database connection failed - Prisma client not available')
+      return res.status(503).json({ error: 'Database service unavailable' })
     }
 
     // Find or create
@@ -62,8 +80,8 @@ router.post('/init', async (req: Request<{}, {}, any>, res: Response) => {
       createdAt: saving.createdAt,
     })
   } catch (error: any) {
-    console.error('❌ Init savings error:', error)
-    res.status(500).json({ error: error.message })
+    console.error('❌ Init savings error:', error.message || error)
+    res.status(500).json({ error: error.message || 'Failed to initialize savings account' })
   }
 })
 
@@ -154,6 +172,12 @@ router.post('/:walletAddress/execute-deposit', async (req: Request<any, {}, any>
       new PublicKey(walletAddress)
     } catch {
       return res.status(400).json({ error: 'Invalid wallet address' })
+    }
+
+    // Check database connection
+    if (!db || !db.saving) {
+      console.error('❌ Database connection failed')
+      return res.status(503).json({ error: 'Database service unavailable' })
     }
 
     // Step 1: Initialize PC client with operator keypair

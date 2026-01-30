@@ -137,10 +137,19 @@ app.use((err: any, _req: express.Request, res: express.Response, _next: express.
 async function startServer() {
   try {
     await validateEnvironment()
-    await ensureDbSchema()
+    // Run schema check with timeout - don't block server startup
+    Promise.race([
+      ensureDbSchema(),
+      new Promise((_, reject) => 
+        setTimeout(() => reject(new Error('Schema check timeout')), 5000)
+      )
+    ]).catch(err => {
+      console.warn('⚠️  Schema check failed/timeout:', err.message)
+      // Continue anyway - let Prisma handle it
+    })
   } catch (err: any) {
-    console.error('⚠️  Schema check failed:', err.message)
-    // Continue anyway - schema might already exist
+    console.error('⚠️  Validation failed:', err.message)
+    // Continue anyway
   }
 
   // ✅ STEP 7.5: SETUP OPERATOR BALANCE MONITORING
