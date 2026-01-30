@@ -87,6 +87,12 @@ export class App {
         this.switchMode('history')
       })
 
+    document.getElementById('mode-savings')
+      ?.addEventListener('click', () => {
+        if (import.meta.env.DEV) console.log('📍 Mode: savings')
+        this.switchMode('savings')
+      })
+
     document.getElementById('connect-wallet-btn')
       ?.addEventListener('click', () => {
         if (import.meta.env.DEV) console.log('📍 Click: connect-wallet')
@@ -237,7 +243,7 @@ export class App {
   }
 
   // ================= MODE =================
-  private switchMode(mode: 'create' | 'claim' | 'history') {
+  private switchMode(mode: 'create' | 'claim' | 'history' | 'savings') {
     document.querySelectorAll('.mode-btn').forEach(btn => {
       btn.classList.remove('bg-gradient-to-r', 'from-purple-600', 'to-blue-600', 'text-white')
       btn.classList.add('text-gray-400')
@@ -249,8 +255,30 @@ export class App {
     document.getElementById('section-create')?.classList.add('hidden')
     document.getElementById('section-claim')?.classList.add('hidden')
     document.getElementById('section-history')?.classList.add('hidden')
+    document.getElementById('section-savings')?.classList.add('hidden')
 
     document.getElementById(`section-${mode}`)?.classList.remove('hidden')
+
+    // Load Savings Dashboard jika mode savings dipilih
+    if (mode === 'savings') {
+      this.loadSavingsDashboard()
+    }
+  }
+
+  // ================= SAVINGS =================
+  private async loadSavingsDashboard() {
+    if (!this.walletAddress) {
+      this.setStatus('❌ Connect wallet first to view savings')
+      return
+    }
+
+    try {
+      const { renderSavingsDashboard } = await import('./components/SavingsDashboardRoot.js')
+      renderSavingsDashboard(this.walletAddress, this.getSigningWallet())
+    } catch (err: any) {
+      console.error('❌ Error loading savings dashboard:', err)
+      this.setStatus('❌ Error loading savings dashboard')
+    }
   }
 
   // ================= WALLET =================

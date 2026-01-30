@@ -140,7 +140,7 @@
    </header><!-- Main -->
    <main class="relative z-10 max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-12"><!-- Tabs -->
     <div class="flex justify-center mb-12">
-     <div class="inline-flex gap-2 p-1.5 rounded-2xl glass-card"><button id="mode-create" class="mode-btn px-6 py-3 rounded-xl font-display font-medium transition-all duration-300 bg-gradient-to-r from-purple-600 to-blue-600 text-white text-sm"> Create Link </button> <button id="mode-claim" class="mode-btn px-6 py-3 rounded-xl font-display font-medium transition-all duration-300 text-gray-400 hover:text-white text-sm"> Claim Link </button> <button id="mode-history" class="mode-btn px-6 py-3 rounded-xl font-display font-medium transition-all duration-300 text-gray-400 hover:text-white text-sm"> History </button>
+     <div class="inline-flex gap-2 p-1.5 rounded-2xl glass-card"><button id="mode-create" class="mode-btn px-6 py-3 rounded-xl font-display font-medium transition-all duration-300 bg-gradient-to-r from-purple-600 to-blue-600 text-white text-sm"> Create Link </button> <button id="mode-claim" class="mode-btn px-6 py-3 rounded-xl font-display font-medium transition-all duration-300 text-gray-400 hover:text-white text-sm"> Claim Link </button> <button id="mode-history" class="mode-btn px-6 py-3 rounded-xl font-display font-medium transition-all duration-300 text-gray-400 hover:text-white text-sm"> History </button> <button id="mode-savings" class="mode-btn px-6 py-3 rounded-xl font-display font-medium transition-all duration-300 text-gray-400 hover:text-white text-sm"> 💰 Savings </button>
      </div>
     </div><!-- Create Section -->
     <div id="section-create" class="section-content">
@@ -228,6 +228,13 @@
        <div class="text-center py-12">
         <p class="text-gray-400">Click Refresh to load your transaction history</p>
        </div>
+      </div>
+     </div>
+    </div><!-- Savings Section -->
+    <div id="section-savings" class="section-content hidden">
+     <div class="max-w-6xl mx-auto">
+      <div id="savings-dashboard-root">
+       <!-- React component will mount here -->
       </div>
      </div>
     </div>
