@@ -331,10 +331,24 @@ export const SavingsDashboard: React.FC<SavingsDashboardProps> = ({ walletAddres
   }
 
   if (error) {
+    // Check if it's an account not found error
+    const isAccountNotFound = error.includes('not found') || error.includes('404')
+    
     return (
       <div className="savings-dashboard error">
-        <p>Error: {error}</p>
-        <button className="action-btn" onClick={loadProfile}>Retry</button>
+        <div style={{ textAlign: 'center', padding: '40px 20px' }}>
+          <p style={{ fontSize: '16px', marginBottom: '20px', color: '#ff6b6b' }}>
+            {isAccountNotFound ? '💡 No savings account yet' : `❌ ${error}`}
+          </p>
+          {isAccountNotFound && (
+            <p style={{ fontSize: '14px', color: '#999', marginBottom: '20px' }}>
+              Click Retry to initialize your savings account
+            </p>
+          )}
+          <button className="action-btn" onClick={loadProfile}>
+            {isAccountNotFound ? 'Initialize Account' : 'Retry'}
+          </button>
+        </div>
       </div>
     )
   }

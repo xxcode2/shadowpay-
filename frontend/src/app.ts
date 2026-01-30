@@ -134,7 +134,6 @@ export class App {
     const form = e.target as HTMLFormElement
     const amount = (document.getElementById('send-amount-input') as HTMLInputElement).value
     const recipient = (document.getElementById('send-recipient-input') as HTMLInputElement).value
-    const memo = (document.getElementById('send-memo-input') as HTMLInputElement).value
 
     if (!amount || !recipient) {
       alert('❌ Fill all required fields')
@@ -152,7 +151,6 @@ export class App {
         assetType: 'SOL',
         recipientAddress: recipient,
         wallet,
-        memo
       })
 
       this.setStatus('✅ Sent successfully!')
@@ -176,7 +174,6 @@ export class App {
 
     const form = e.target as HTMLFormElement
     const amount = (document.getElementById('withdraw-amount-input') as HTMLInputElement).value
-    const memo = (document.getElementById('withdraw-memo-input') as HTMLInputElement).value
 
     if (!amount) {
       alert('❌ Enter amount')
@@ -193,7 +190,6 @@ export class App {
         amount: parseFloat(amount),
         assetType: 'SOL',
         wallet,
-        memo
       })
 
       this.setStatus('✅ Withdrawn successfully!')
@@ -285,11 +281,19 @@ export class App {
     }
 
     try {
+      this.setStatus('⏳ Loading dashboard...')
+      
+      // Ensure account exists
+      await SavingsSDK.initAccount(this.walletAddress, 'SOL')
+      
+      // Load React component
       const { renderSavingsDashboard } = await import('./components/SavingsDashboardRoot.js')
       renderSavingsDashboard(this.walletAddress, this.getWallet())
+      
+      this.setStatus('✅ Dashboard loaded')
     } catch (err: any) {
       console.error('Error loading dashboard:', err)
-      this.setStatus('❌ Error loading dashboard')
+      this.setStatus('⚠️ Dashboard: ' + (err.message || 'Check console'))
     }
   }
 
