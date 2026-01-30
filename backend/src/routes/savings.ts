@@ -90,28 +90,40 @@ router.post('/init', async (req: Request<{}, {}, any>, res: Response) => {
         createdAt: saving.createdAt,
       })
     } catch (dbError: any) {
-      console.error('❌ Database error:', dbError.message)
+      console.error('❌ Database error:', dbError.message?.split('\n')[0] || dbError.message)
       
-      // Check if it's a connection error
-      if (dbError.code === 'P1000' || dbError.message.includes('connect')) {
+      // Check various database error codes
+      const errorMsg = dbError.message || ''
+      
+      if (errorMsg.includes("Can't reach database")) {
         return res.status(503).json({ 
           error: 'Database connection failed',
-          message: 'Could not connect to database'
+          message: 'Cannot connect to database server'
         })
       }
       
-      // Check if it's a missing table error
+      if (dbError.code === 'P1000') {
+        return res.status(503).json({ 
+          error: 'Database authentication failed',
+          message: 'Invalid database credentials'
+        })
+      }
+      
       if (dbError.code === 'P2021') {
         return res.status(503).json({ 
-          error: 'Database schema not ready',
-          message: 'Savings tables have not been created. Run migrations.'
+          error: 'Database schema incomplete',
+          message: 'Savings tables not found. Run migrations.'
         })
       }
       
-      throw dbError
+      // For any other database error, return 503
+      return res.status(503).json({ 
+        error: 'Database error',
+        message: 'Database operation failed'
+      })
     }
   } catch (error: any) {
-    console.error('❌ Init savings error:', error.message || error)
+    console.error('❌ Init savings error:', error.message?.split('\n')[0] || error.message || error)
     res.status(500).json({ error: error.message || 'Failed to initialize savings account' })
   }
 })
