@@ -15,6 +15,7 @@ import prisma from '../lib/prisma.js'
 import { PublicKey } from '@solana/web3.js'
 
 const router = Router()
+const db = prisma as any  // Type assertion for Prisma models
 
 /**
  * POST /api/savings/init
@@ -36,12 +37,12 @@ router.post('/init', async (req: Request<{}, {}, any>, res: Response) => {
     }
 
     // Find or create
-    let saving = await prisma.saving.findUnique({
+    let saving = await db.saving.findUnique({
       where: { walletAddress },
     })
 
     if (!saving) {
-      saving = await prisma.saving.create({
+      saving = await db.saving.create({
         data: {
           walletAddress,
           assetType,
@@ -73,7 +74,7 @@ router.get('/:walletAddress', async (req: Request, res: Response) => {
   try {
     const { walletAddress } = req.params
 
-    const saving = await prisma.saving.findUnique({
+    const saving = await db.saving.findUnique({
       where: { walletAddress },
       include: {
         transactions: {
@@ -97,7 +98,7 @@ router.get('/:walletAddress', async (req: Request, res: Response) => {
       totalWithdrawn: saving.totalWithdrawn.toString(),
       currentBalance: saving.currentBalance.toString(),
       lastSyncedAt: saving.lastSyncedAt,
-      transactions: saving.transactions.map(tx => ({
+      transactions: saving.transactions.map((tx: any) => ({
         id: tx.id,
         type: tx.type,
         status: tx.status,
@@ -110,7 +111,7 @@ router.get('/:walletAddress', async (req: Request, res: Response) => {
         createdAt: tx.createdAt,
       })),
       autoDeposits: saving.autoDeposits,
-      goals: saving.goals.map(goal => ({
+      goals: saving.goals.map((goal: any) => ({
         id: goal.id,
         name: goal.name,
         description: goal.description,
@@ -146,7 +147,7 @@ router.post('/:walletAddress/deposit', async (req: Request<any, {}, any>, res: R
       return res.status(400).json({ error: 'Invalid amount' })
     }
 
-    const saving = await prisma.saving.findUnique({
+    const saving = await db.saving.findUnique({
       where: { walletAddress },
     })
 
@@ -155,7 +156,7 @@ router.post('/:walletAddress/deposit', async (req: Request<any, {}, any>, res: R
     }
 
     // Create transaction record
-    const transaction = await prisma.savingTransaction.create({
+    const transaction = await db.savingTransaction.create({
       data: {
         savingId: saving.id,
         type: 'deposit',
@@ -169,7 +170,7 @@ router.post('/:walletAddress/deposit', async (req: Request<any, {}, any>, res: R
     })
 
     // Update saving balance
-    await prisma.saving.update({
+    await db.saving.update({
       where: { id: saving.id },
       data: {
         totalDeposited: { increment: BigInt(amount) },
@@ -216,7 +217,7 @@ router.post('/:walletAddress/send', async (req: Request<any, {}, any>, res: Resp
       return res.status(400).json({ error: 'Invalid recipient address' })
     }
 
-    const saving = await prisma.saving.findUnique({
+    const saving = await db.saving.findUnique({
       where: { walletAddress },
     })
 
@@ -229,7 +230,7 @@ router.post('/:walletAddress/send', async (req: Request<any, {}, any>, res: Resp
     }
 
     // Create transaction record
-    const transaction = await prisma.savingTransaction.create({
+    const transaction = await db.savingTransaction.create({
       data: {
         savingId: saving.id,
         type: 'send',
@@ -244,7 +245,7 @@ router.post('/:walletAddress/send', async (req: Request<any, {}, any>, res: Resp
     })
 
     // Update balance
-    await prisma.saving.update({
+    await db.saving.update({
       where: { id: saving.id },
       data: {
         totalWithdrawn: { increment: BigInt(amount) },
@@ -281,7 +282,7 @@ router.post('/:walletAddress/withdraw', async (req: Request<any, {}, any>, res: 
       return res.status(400).json({ error: 'Invalid amount' })
     }
 
-    const saving = await prisma.saving.findUnique({
+    const saving = await db.saving.findUnique({
       where: { walletAddress },
     })
 
@@ -294,7 +295,7 @@ router.post('/:walletAddress/withdraw', async (req: Request<any, {}, any>, res: 
     }
 
     // Create transaction record
-    const transaction = await prisma.savingTransaction.create({
+    const transaction = await db.savingTransaction.create({
       data: {
         savingId: saving.id,
         type: 'withdraw',
@@ -309,7 +310,7 @@ router.post('/:walletAddress/withdraw', async (req: Request<any, {}, any>, res: 
     })
 
     // Update balance
-    await prisma.saving.update({
+    await db.saving.update({
       where: { id: saving.id },
       data: {
         totalWithdrawn: { increment: BigInt(amount) },
@@ -349,7 +350,7 @@ router.post('/:walletAddress/auto-deposit', async (req: Request<any, {}, any>, r
       return res.status(400).json({ error: 'Invalid amount' })
     }
 
-    const saving = await prisma.saving.findUnique({
+    const saving = await db.saving.findUnique({
       where: { walletAddress },
     })
 
@@ -357,7 +358,7 @@ router.post('/:walletAddress/auto-deposit', async (req: Request<any, {}, any>, r
       return res.status(404).json({ error: 'Savings account not found' })
     }
 
-    const autoDeposit = await prisma.autoDeposit.create({
+    const autoDeposit = await db.autoDeposit.create({
       data: {
         savingId: saving.id,
         frequency,
@@ -393,7 +394,7 @@ router.put('/:walletAddress/auto-deposit/:autoDepositId', async (req: Request<an
     const { autoDepositId } = req.params
     const { frequency, amount, enabled } = req.body
 
-    const autoDeposit = await prisma.autoDeposit.update({
+    const autoDeposit = await db.autoDeposit.update({
       where: { id: autoDepositId },
       data: {
         ...(frequency && { frequency }),
@@ -424,7 +425,7 @@ router.delete('/:walletAddress/auto-deposit/:autoDepositId', async (req: Request
   try {
     const { autoDepositId } = req.params
 
-    await prisma.autoDeposit.delete({
+    await db.autoDeposit.delete({
       where: { id: autoDepositId },
     })
 
@@ -452,7 +453,7 @@ router.post('/:walletAddress/goals', async (req: Request<any, {}, any>, res: Res
       return res.status(400).json({ error: 'Valid target amount required' })
     }
 
-    const saving = await prisma.saving.findUnique({
+    const saving = await db.saving.findUnique({
       where: { walletAddress },
     })
 
@@ -460,7 +461,7 @@ router.post('/:walletAddress/goals', async (req: Request<any, {}, any>, res: Res
       return res.status(404).json({ error: 'Savings account not found' })
     }
 
-    const goal = await prisma.savingGoal.create({
+    const goal = await db.savingGoal.create({
       data: {
         savingId: saving.id,
         name,
@@ -495,7 +496,7 @@ router.put('/:walletAddress/goals/:goalId', async (req: Request<any, {}, any>, r
     const { goalId } = req.params
     const { currentAmount, status } = req.body
 
-    const goal = await prisma.savingGoal.update({
+    const goal = await db.savingGoal.update({
       where: { id: goalId },
       data: {
         ...(currentAmount !== undefined && { currentAmount: BigInt(currentAmount) }),
@@ -529,7 +530,7 @@ router.delete('/:walletAddress/goals/:goalId', async (req: Request, res: Respons
   try {
     const { goalId } = req.params
 
-    await prisma.savingGoal.delete({
+    await db.savingGoal.delete({
       where: { id: goalId },
     })
 
