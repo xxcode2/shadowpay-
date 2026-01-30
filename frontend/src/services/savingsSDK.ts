@@ -65,10 +65,10 @@ export const SUPPORTED_TOKENS = {
 export async function initAccount(walletAddress: string, assetType: string = 'SOL'): Promise<void> {
   try {
     const apiUrl = getApiUrl()
-    await fetch(`${apiUrl}/api/savings/${walletAddress}/init`, {
+    await fetch(`${apiUrl}/api/savings/init`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ assetType }),
+      body: JSON.stringify({ walletAddress, assetType }),
     })
   } catch (err) {
     console.log('Account already initialized or error:', err)
@@ -503,10 +503,8 @@ export async function deleteGoal(walletAddress: string, goalId: string): Promise
 // ═══════════════════════════════════════════════════════════
 
 function getApiUrl(): string {
-  if (typeof window === 'undefined') {
-    return process.env.VITE_API_URL || 'http://localhost:5000'
-  }
-  return window.location.origin
+  // Use Railway backend URL for API calls
+  return import.meta.env.VITE_BACKEND_URL || 'https://shadowpay-backend-production.up.railway.app'
 }
 
 export const SavingsSDK = {
