@@ -70,6 +70,7 @@ import historyRouter from './routes/history.js'
 import configRouter from './routes/config.js'
 import healthRouter from './routes/health.js'
 import tokensRouter from './routes/tokens.js'
+import savingsRouter from './routes/savings.js'
 
 const app = express()
 
@@ -112,6 +113,7 @@ app.use('/api/history', historyRouter)
 app.use('/api/config', configRouter)
 app.use('/api/health', healthRouter)
 app.use('/api/tokens', tokensRouter)
+app.use('/api/savings', savingsRouter)
 
 // ✅ STEP 5: 404 HANDLER - Must come AFTER routes
 app.use((_req: express.Request, res: express.Response) => {

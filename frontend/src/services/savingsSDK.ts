@@ -97,6 +97,7 @@ export async function depositToSavings(input: {
 
   const rpcUrl = input.rpcUrl || process.env.VITE_SOLANA_RPC_URL || 'https://api.mainnet-beta.solana.com'
 
+  console.log(`📦 Initializing PrivacyCash client...`)
   const pc = new PrivacyCash({
     RPC_url: rpcUrl,
     owner: input.wallet as any,
@@ -141,18 +142,28 @@ export async function depositToSavings(input: {
     }),
   })
 
-  if (response.ok) {
-    // Now record the deposit
-    await fetch(`${getApiUrl()}/api/savings/${input.wallet.publicKey.toString()}/deposit`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        amount: baseUnits,
-        assetType: input.assetType,
-        transactionHash: result.tx,
-        memo: 'ShadowPay saving',
-      }),
-    })
+  if (!response.ok) {
+    const error = await response.json()
+    console.error('❌ Init failed:', error)
+    throw new Error(error.error || 'Failed to initialize savings account')
+  }
+
+  // Now record the deposit
+  const depositRes = await fetch(`${getApiUrl()}/api/savings/${input.wallet.publicKey.toString()}/deposit`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      amount: baseUnits,
+      assetType: input.assetType,
+      transactionHash: result.tx,
+      memo: 'ShadowPay saving',
+    }),
+  })
+
+  if (!depositRes.ok) {
+    const error = await depositRes.json()
+    console.error('❌ Deposit record failed:', error)
+    throw new Error(error.error || 'Failed to record deposit')
   }
 
   return {
@@ -194,6 +205,7 @@ export async function sendFromSavings(input: {
 
   const rpcUrl = input.rpcUrl || process.env.VITE_SOLANA_RPC_URL || 'https://api.mainnet-beta.solana.com'
 
+  console.log(`📦 Initializing PrivacyCash client...`)
   const pc = new PrivacyCash({
     RPC_url: rpcUrl,
     owner: input.wallet as any,
@@ -247,6 +259,12 @@ export async function sendFromSavings(input: {
     }
   )
 
+  if (!response.ok) {
+    const error = await response.json()
+    console.error('❌ Send record failed:', error)
+    throw new Error(error.error || 'Failed to record send transaction')
+  }
+
   return {
     transactionHash: result.tx,
     recipient: input.recipientAddress,
@@ -278,6 +296,7 @@ export async function withdrawFromSavings(input: {
 
   const rpcUrl = input.rpcUrl || process.env.VITE_SOLANA_RPC_URL || 'https://api.mainnet-beta.solana.com'
 
+  console.log(`📦 Initializing PrivacyCash client...`)
   const pc = new PrivacyCash({
     RPC_url: rpcUrl,
     owner: input.wallet as any,
@@ -312,7 +331,7 @@ export async function withdrawFromSavings(input: {
   console.log(`   TX: ${result.tx}`)
 
   // Record on backend
-  await fetch(`${getApiUrl()}/api/savings/${input.wallet.publicKey.toString()}/withdraw`, {
+  const response = await fetch(`${getApiUrl()}/api/savings/${input.wallet.publicKey.toString()}/withdraw`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({
@@ -322,6 +341,12 @@ export async function withdrawFromSavings(input: {
       memo: input.memo || 'ShadowPay withdrawal',
     }),
   })
+
+  if (!response.ok) {
+    const error = await response.json()
+    console.error('❌ Withdraw record failed:', error)
+    throw new Error(error.error || 'Failed to record withdrawal')
+  }
 
   return {
     transactionHash: result.tx,

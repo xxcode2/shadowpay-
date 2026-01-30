@@ -147,12 +147,26 @@ router.post('/:walletAddress/deposit', async (req: Request<any, {}, any>, res: R
       return res.status(400).json({ error: 'Invalid amount' })
     }
 
-    const saving = await db.saving.findUnique({
+    // Validate wallet address
+    try {
+      new PublicKey(walletAddress)
+    } catch {
+      return res.status(400).json({ error: 'Invalid wallet address' })
+    }
+
+    // Find or create savings account
+    let saving = await db.saving.findUnique({
       where: { walletAddress },
     })
 
     if (!saving) {
-      return res.status(404).json({ error: 'Savings account not found' })
+      console.log(`📌 Auto-creating savings account for ${walletAddress}`)
+      saving = await db.saving.create({
+        data: {
+          walletAddress,
+          assetType: assetType || 'SOL',
+        },
+      })
     }
 
     // Create transaction record
@@ -222,7 +236,17 @@ router.post('/:walletAddress/send', async (req: Request<any, {}, any>, res: Resp
     })
 
     if (!saving) {
-      return res.status(404).json({ error: 'Savings account not found' })
+      // Auto-create savings account for send
+      console.log(`📌 Auto-creating savings account for ${walletAddress}`)
+      await db.saving.create({
+        data: {
+          walletAddress,
+          assetType: assetType || 'SOL',
+        },
+      })
+      
+      // Still fail because no balance
+      return res.status(400).json({ error: 'No savings account - deposit first' })
     }
 
     if (saving.currentBalance < BigInt(amount)) {
@@ -282,12 +306,29 @@ router.post('/:walletAddress/withdraw', async (req: Request<any, {}, any>, res: 
       return res.status(400).json({ error: 'Invalid amount' })
     }
 
+    // Validate wallet address
+    try {
+      new PublicKey(walletAddress)
+    } catch {
+      return res.status(400).json({ error: 'Invalid wallet address' })
+    }
+
     const saving = await db.saving.findUnique({
       where: { walletAddress },
     })
 
     if (!saving) {
-      return res.status(404).json({ error: 'Savings account not found' })
+      // Auto-create savings account for withdraw
+      console.log(`📌 Auto-creating savings account for ${walletAddress}`)
+      await db.saving.create({
+        data: {
+          walletAddress,
+          assetType: assetType || 'SOL',
+        },
+      })
+      
+      // Still fail because no balance
+      return res.status(400).json({ error: 'No savings to withdraw - deposit first' })
     }
 
     if (saving.currentBalance < BigInt(amount)) {
