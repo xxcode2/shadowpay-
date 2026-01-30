@@ -11,7 +11,6 @@
  */
 
 import { PublicKey, LAMPORTS_PER_SOL } from '@solana/web3.js'
-import { PrivacyCash } from 'privacycash'
 
 // Token config
 export const SUPPORTED_TOKENS = {
@@ -95,81 +94,61 @@ export async function depositToSavings(input: {
 }> {
   console.log(`\n💰 SAVING ${input.amount} ${input.assetType}`)
 
-  const rpcUrl = input.rpcUrl || process.env.VITE_SOLANA_RPC_URL || 'https://api.mainnet-beta.solana.com'
-
-  console.log(`📦 Initializing PrivacyCash client...`)
-  const pc = new PrivacyCash({
-    RPC_url: rpcUrl,
-    owner: input.wallet as any,
-  })
-
-  console.log(`📦 Loading circuits...`)
-  // Circuits already loaded globally, just deposit
-
+  const walletAddress = input.wallet.publicKey.toString()
   const token = SUPPORTED_TOKENS[input.assetType]
   const baseUnits = Math.round(input.amount * token.units)
 
-  console.log(`💸 Depositing to Privacy Cash pool...`)
-  console.log(`   Amount: ${input.amount} ${input.assetType}`)
-
-  let result
-
-  if (input.assetType === 'SOL') {
-    result = await pc.deposit({ lamports: baseUnits })
-  } else {
-    // For SPL tokens
-    const token = SUPPORTED_TOKENS[input.assetType]
-    const mint = (token as any).mint
-    if (!mint) throw new Error(`Token ${input.assetType} not supported`)
-    
-    const mintKey = new PublicKey(mint)
-    result = await pc.depositSPL({
-      mintAddress: mintKey,
-      base_units: baseUnits,
+  try {
+    // Step 1: Initialize savings account on backend
+    console.log(`📌 Initializing savings account...`)
+    const initRes = await fetch(`${getApiUrl()}/api/savings/init`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        walletAddress,
+        assetType: input.assetType,
+      }),
     })
-  }
 
-  console.log(`✅ Deposit successful!`)
-  console.log(`   TX: ${result.tx}`)
+    if (!initRes.ok) {
+      const error = await initRes.json()
+      console.error('❌ Init failed:', error)
+      throw new Error(error.error || 'Failed to initialize savings account')
+    }
 
-  // Record on backend
-  const response = await fetch(`${getApiUrl()}/api/savings/init`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({
-      walletAddress: input.wallet.publicKey.toString(),
+    console.log(`✅ Savings account ready`)
+
+    // Step 2: Call backend to execute deposit with PrivacyCash
+    console.log(`💸 Requesting deposit from backend...`)
+    console.log(`   Amount: ${input.amount} ${input.assetType}`)
+    
+    const depositRes = await fetch(`${getApiUrl()}/api/savings/${walletAddress}/execute-deposit`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        amount: baseUnits,
+        assetType: input.assetType,
+      }),
+    })
+
+    if (!depositRes.ok) {
+      const error = await depositRes.json()
+      console.error('❌ Deposit failed:', error)
+      throw new Error(error.error || 'Deposit failed on backend')
+    }
+
+    const result = await depositRes.json()
+    console.log(`✅ Deposit successful!`)
+    console.log(`   TX: ${result.transactionHash}`)
+
+    return {
+      transactionHash: result.transactionHash,
+      amount: input.amount.toString(),
       assetType: input.assetType,
-    }),
-  })
-
-  if (!response.ok) {
-    const error = await response.json()
-    console.error('❌ Init failed:', error)
-    throw new Error(error.error || 'Failed to initialize savings account')
-  }
-
-  // Now record the deposit
-  const depositRes = await fetch(`${getApiUrl()}/api/savings/${input.wallet.publicKey.toString()}/deposit`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({
-      amount: baseUnits,
-      assetType: input.assetType,
-      transactionHash: result.tx,
-      memo: 'ShadowPay saving',
-    }),
-  })
-
-  if (!depositRes.ok) {
-    const error = await depositRes.json()
-    console.error('❌ Deposit record failed:', error)
-    throw new Error(error.error || 'Failed to record deposit')
-  }
-
-  return {
-    transactionHash: result.tx,
-    amount: input.amount.toString(),
-    assetType: input.assetType,
+    }
+  } catch (err: any) {
+    console.error('❌ Deposit error:', err.message)
+    throw err
   }
 }
 
@@ -203,73 +182,46 @@ export async function sendFromSavings(input: {
     throw new Error('Invalid recipient address')
   }
 
-  const rpcUrl = input.rpcUrl || process.env.VITE_SOLANA_RPC_URL || 'https://api.mainnet-beta.solana.com'
-
-  console.log(`📦 Initializing PrivacyCash client...`)
-  const pc = new PrivacyCash({
-    RPC_url: rpcUrl,
-    owner: input.wallet as any,
-  })
-
+  const walletAddress = input.wallet.publicKey.toString()
   const token = SUPPORTED_TOKENS[input.assetType]
   const baseUnits = Math.round(input.amount * token.units)
 
-  console.log(`🔐 Withdrawing from Privacy Cash pool...`)
-  console.log(`   Amount: ${input.amount} ${input.assetType}`)
-  console.log(`   To: ${input.recipientAddress}`)
-
-  let result
-
-  if (input.assetType === 'SOL') {
-    result = await pc.withdraw({
-      lamports: baseUnits,
-      recipientAddress: input.recipientAddress,
-    })
-  } else {
-    const tokenConfig = SUPPORTED_TOKENS[input.assetType]
-    const mint = (tokenConfig as any).mint
-    if (!mint) throw new Error(`Token ${input.assetType} not supported`)
+  try {
+    // Call backend to execute withdrawal with PrivacyCash
+    console.log(`📤 Requesting withdrawal from backend...`)
+    console.log(`   Amount: ${input.amount} ${input.assetType}`)
+    console.log(`   To: ${input.recipientAddress}`)
     
-    const mintKey = new PublicKey(mint)
-    result = await pc.withdrawSPL({
-      mintAddress: mintKey,
-      amount: input.amount,
-      recipientAddress: input.recipientAddress, // Not 'recipient'
-    })
-  }
-
-  console.log(`✅ Send successful!`)
-  console.log(`   TX: ${result.tx}`)
-  const receivedAmount = (result as any).amount_in_lamports || (result as any).base_units || input.amount
-  console.log(`   Recipient received: ${receivedAmount} ${input.assetType}`)
-
-  // Record on backend
-  const response = await fetch(
-    `${getApiUrl()}/api/savings/${input.wallet.publicKey.toString()}/send`,
-    {
+    const withdrawRes = await fetch(`${getApiUrl()}/api/savings/${walletAddress}/execute-send`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
         toAddress: input.recipientAddress,
         amount: baseUnits,
         assetType: input.assetType,
-        transactionHash: result.tx,
         memo: input.memo || 'ShadowPay send',
       }),
+    })
+
+    if (!withdrawRes.ok) {
+      const error = await withdrawRes.json()
+      console.error('❌ Send failed:', error)
+      throw new Error(error.error || 'Send failed on backend')
     }
-  )
 
-  if (!response.ok) {
-    const error = await response.json()
-    console.error('❌ Send record failed:', error)
-    throw new Error(error.error || 'Failed to record send transaction')
-  }
+    const result = await withdrawRes.json()
+    console.log(`✅ Send successful!`)
+    console.log(`   TX: ${result.transactionHash}`)
 
-  return {
-    transactionHash: result.tx,
-    recipient: input.recipientAddress,
-    amount: input.amount.toString(),
-    assetType: input.assetType,
+    return {
+      transactionHash: result.transactionHash,
+      recipient: input.recipientAddress,
+      amount: input.amount.toString(),
+      assetType: input.assetType,
+    }
+  } catch (err: any) {
+    console.error('❌ Send error:', err.message)
+    throw err
   }
 }
 
@@ -294,64 +246,42 @@ export async function withdrawFromSavings(input: {
 }> {
   console.log(`\n⬆️ WITHDRAWING ${input.amount} ${input.assetType} to own wallet`)
 
-  const rpcUrl = input.rpcUrl || process.env.VITE_SOLANA_RPC_URL || 'https://api.mainnet-beta.solana.com'
-
-  console.log(`📦 Initializing PrivacyCash client...`)
-  const pc = new PrivacyCash({
-    RPC_url: rpcUrl,
-    owner: input.wallet as any,
-  })
-
+  const walletAddress = input.wallet.publicKey.toString()
   const token = SUPPORTED_TOKENS[input.assetType]
   const baseUnits = Math.round(input.amount * token.units)
 
-  console.log(`🔓 Unshielding from Privacy Cash pool...`)
-
-  let result
-
-  if (input.assetType === 'SOL') {
-    result = await pc.withdraw({
-      lamports: baseUnits,
-      recipientAddress: input.wallet.publicKey.toString(),
-    })
-  } else {
-    const tokenConfig = SUPPORTED_TOKENS[input.assetType]
-    const mint = (tokenConfig as any).mint
-    if (!mint) throw new Error(`Token ${input.assetType} not supported`)
+  try {
+    // Call backend to execute withdrawal with PrivacyCash
+    console.log(`⬆️ Requesting withdrawal from backend...`)
     
-    const mintKey = new PublicKey(mint)
-    result = await pc.withdrawSPL({
-      mintAddress: mintKey,
-      amount: input.amount,
-      recipientAddress: input.wallet.publicKey.toString(),
+    const withdrawRes = await fetch(`${getApiUrl()}/api/savings/${walletAddress}/execute-withdraw`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        amount: baseUnits,
+        assetType: input.assetType,
+        memo: input.memo || 'ShadowPay withdrawal',
+      }),
     })
-  }
 
-  console.log(`✅ Withdrawal successful!`)
-  console.log(`   TX: ${result.tx}`)
+    if (!withdrawRes.ok) {
+      const error = await withdrawRes.json()
+      console.error('❌ Withdrawal failed:', error)
+      throw new Error(error.error || 'Withdrawal failed on backend')
+    }
 
-  // Record on backend
-  const response = await fetch(`${getApiUrl()}/api/savings/${input.wallet.publicKey.toString()}/withdraw`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({
-      amount: baseUnits,
+    const result = await withdrawRes.json()
+    console.log(`✅ Withdrawal successful!`)
+    console.log(`   TX: ${result.transactionHash}`)
+
+    return {
+      transactionHash: result.transactionHash,
+      amount: input.amount.toString(),
       assetType: input.assetType,
-      transactionHash: result.tx,
-      memo: input.memo || 'ShadowPay withdrawal',
-    }),
-  })
-
-  if (!response.ok) {
-    const error = await response.json()
-    console.error('❌ Withdraw record failed:', error)
-    throw new Error(error.error || 'Failed to record withdrawal')
-  }
-
-  return {
-    transactionHash: result.tx,
-    amount: input.amount.toString(),
-    assetType: input.assetType,
+    }
+  } catch (err: any) {
+    console.error('❌ Withdrawal error:', err.message)
+    throw err
   }
 }
 
@@ -372,40 +302,35 @@ export async function getPrivateBalance(input: {
   assetType: string
   displayBalance: string
 }> {
-  const rpcUrl = input.rpcUrl || process.env.VITE_SOLANA_RPC_URL || 'https://api.mainnet-beta.solana.com'
-
-  const pc = new PrivacyCash({
-    RPC_url: rpcUrl,
-    owner: input.wallet as any,
-  })
-
+  const walletAddress = input.wallet.publicKey.toString()
   const token = SUPPORTED_TOKENS[input.assetType]
 
-  let result
+  try {
+    // Call backend to get balance
+    console.log(`🔍 Checking private balance via backend...`)
 
-  console.log(`🔍 Checking private balance...`)
+    const res = await fetch(`${getApiUrl()}/api/savings/${walletAddress}/balance`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ assetType: input.assetType }),
+    })
 
-  if (input.assetType === 'SOL') {
-    result = await pc.getPrivateBalance()
-    const balance = result.lamports / token.units
+    if (!res.ok) {
+      const error = await res.json()
+      throw new Error(error.error || 'Failed to check balance')
+    }
+
+    const result = await res.json()
+    const balance = result.balance / token.units
+
     return {
       balance,
       assetType: input.assetType,
       displayBalance: `≈ ${balance.toFixed(4)} ${input.assetType}`,
     }
-  } else {
-    const tokenConfig = SUPPORTED_TOKENS[input.assetType]
-    const mint = (tokenConfig as any).mint
-    if (!mint) throw new Error(`Token ${input.assetType} not supported`)
-    
-    const mintKey = new PublicKey(mint)
-    result = await pc.getPrivateBalanceSpl(mintKey)
-    const balance = (result as any).amount / token.units
-    return {
-      balance,
-      assetType: input.assetType,
-      displayBalance: `≈ ${balance.toFixed(2)} ${input.assetType}`,
-    }
+  } catch (err: any) {
+    console.error('❌ Balance check error:', err.message)
+    throw err
   }
 }
 

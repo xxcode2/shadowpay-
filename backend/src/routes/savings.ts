@@ -13,6 +13,7 @@
 import { Router, Request, Response } from 'express'
 import prisma from '../lib/prisma.js'
 import { PublicKey } from '@solana/web3.js'
+import { getPrivacyCashClient, executeDeposit, executeWithdrawal, queryPrivateBalance, lamportsToSol } from '../services/privacyCash.js'
 
 const router = Router()
 const db = prisma as any  // Type assertion for Prisma models
@@ -130,6 +131,102 @@ router.get('/:walletAddress', async (req: Request, res: Response) => {
     })
   } catch (error: any) {
     console.error('❌ Get savings error:', error)
+    res.status(500).json({ error: error.message })
+  }
+})
+
+/**
+ * POST /api/savings/:walletAddress/execute-deposit
+ * Execute deposit with PrivacyCash SDK on backend
+ * This is what frontend should call (not try to use SDK directly)
+ */
+router.post('/:walletAddress/execute-deposit', async (req: Request<any, {}, any>, res: Response) => {
+  try {
+    const { walletAddress } = req.params
+    const { amount, assetType = 'SOL' } = req.body
+
+    if (!amount || amount <= 0) {
+      return res.status(400).json({ error: 'Invalid amount' })
+    }
+
+    // Validate wallet address
+    try {
+      new PublicKey(walletAddress)
+    } catch {
+      return res.status(400).json({ error: 'Invalid wallet address' })
+    }
+
+    // Step 1: Initialize PC client with operator keypair
+    let pc
+    try {
+      pc = getPrivacyCashClient()
+    } catch (err: any) {
+      console.error('❌ Failed to init PrivacyCash:', err.message)
+      return res.status(500).json({ error: 'Backend PrivacyCash not configured' })
+    }
+
+    // Step 2: Execute deposit with PrivacyCash SDK
+    let depositResult
+    try {
+      console.log(`💸 Executing deposit via PrivacyCash: ${amount} lamports`)
+      depositResult = await executeDeposit(pc, amount)
+      console.log(`✅ Deposit completed: ${depositResult.tx}`)
+    } catch (err: any) {
+      console.error('❌ Deposit execution failed:', err.message)
+      return res.status(500).json({ error: err.message })
+    }
+
+    // Step 3: Find or create savings account
+    let saving = await db.saving.findUnique({
+      where: { walletAddress },
+    })
+
+    if (!saving) {
+      console.log(`📌 Auto-creating savings account for ${walletAddress}`)
+      saving = await db.saving.create({
+        data: {
+          walletAddress,
+          assetType,
+        },
+      })
+    }
+
+    // Step 4: Record transaction in database
+    const transaction = await db.savingTransaction.create({
+      data: {
+        savingId: saving.id,
+        type: 'deposit',
+        status: 'confirmed',
+        amount: BigInt(amount),
+        assetType,
+        fromAddress: walletAddress,
+        transactionHash: depositResult.tx,
+        memo: 'Deposit to Privacy Cash',
+      },
+    })
+
+    // Step 5: Update balance
+    await db.saving.update({
+      where: { id: saving.id },
+      data: {
+        totalDeposited: { increment: BigInt(amount) },
+        currentBalance: { increment: BigInt(amount) },
+        lastSyncedAt: new Date(),
+      },
+    })
+
+    console.log(`✅ Deposit recorded: ${walletAddress} +${amount} (${lamportsToSol(amount)} SOL)`)
+
+    res.json({
+      transactionId: transaction.id,
+      status: 'confirmed',
+      transactionHash: depositResult.tx,
+      amount: amount.toString(),
+      amountSOL: depositResult.sol.toString(),
+      assetType,
+    })
+  } catch (error: any) {
+    console.error('❌ Execute deposit error:', error)
     res.status(500).json({ error: error.message })
   }
 })
@@ -602,5 +699,244 @@ function calculateNextSchedule(frequency: string): Date {
 
   return now
 }
+
+/**
+ * POST /api/savings/:walletAddress/execute-send
+ * Execute send/withdraw from Privacy Cash to another address
+ * Backend handles PrivacyCash SDK operations
+ */
+router.post('/:walletAddress/execute-send', async (req: Request<any, {}, any>, res: Response) => {
+  try {
+    const { walletAddress } = req.params
+    const { toAddress, amount, assetType = 'SOL', memo } = req.body
+
+    if (!toAddress || !amount || amount <= 0) {
+      return res.status(400).json({ error: 'Invalid parameters - need toAddress and amount' })
+    }
+
+    // Validate addresses
+    try {
+      new PublicKey(walletAddress)
+      new PublicKey(toAddress)
+    } catch {
+      return res.status(400).json({ error: 'Invalid wallet or recipient address' })
+    }
+
+    // Check savings account exists and has balance
+    const saving = await db.saving.findUnique({
+      where: { walletAddress },
+    })
+
+    if (!saving || saving.currentBalance < BigInt(amount)) {
+      return res.status(400).json({ error: 'Insufficient balance in savings' })
+    }
+
+    // Step 1: Initialize PC client with operator keypair
+    let pc
+    try {
+      pc = getPrivacyCashClient()
+    } catch (err: any) {
+      return res.status(500).json({ error: 'Backend PrivacyCash not configured' })
+    }
+
+    // Step 2: Execute send/withdrawal with PrivacyCash SDK
+    let sendResult
+    try {
+      console.log(`📤 Executing send via PrivacyCash: ${amount} lamports to ${toAddress}`)
+      sendResult = await executeWithdrawal(pc, amount, toAddress)
+      console.log(`✅ Send completed: ${sendResult.tx}`)
+    } catch (err: any) {
+      console.error('❌ Send execution failed:', err.message)
+      return res.status(500).json({ error: err.message })
+    }
+
+    // Step 3: Record transaction in database
+    const transaction = await db.savingTransaction.create({
+      data: {
+        savingId: saving.id,
+        type: 'send',
+        status: 'confirmed',
+        amount: BigInt(amount),
+        assetType,
+        fromAddress: walletAddress,
+        toAddress,
+        transactionHash: sendResult.tx,
+        memo: memo || 'Send from Privacy Cash',
+      },
+    })
+
+    // Step 4: Update balance
+    await db.saving.update({
+      where: { id: saving.id },
+      data: {
+        totalWithdrawn: { increment: BigInt(amount) },
+        currentBalance: { decrement: BigInt(amount) },
+        lastSyncedAt: new Date(),
+      },
+    })
+
+    console.log(`✅ Send recorded: ${walletAddress} -> ${toAddress} ${amount}`)
+
+    res.json({
+      transactionId: transaction.id,
+      status: 'confirmed',
+      transactionHash: sendResult.tx,
+      amount: amount.toString(),
+      amountSOL: sendResult.sol.toString(),
+      assetType,
+      recipient: toAddress,
+    })
+  } catch (error: any) {
+    console.error('❌ Execute send error:', error)
+    res.status(500).json({ error: error.message })
+  }
+})
+
+/**
+ * POST /api/savings/:walletAddress/execute-withdraw
+ * Execute withdraw from Privacy Cash to own wallet
+ * Backend handles PrivacyCash SDK operations
+ */
+router.post('/:walletAddress/execute-withdraw', async (req: Request<any, {}, any>, res: Response) => {
+  try {
+    const { walletAddress } = req.params
+    const { amount, assetType = 'SOL', memo } = req.body
+
+    if (!amount || amount <= 0) {
+      return res.status(400).json({ error: 'Invalid withdrawal amount' })
+    }
+
+    // Validate wallet address
+    try {
+      new PublicKey(walletAddress)
+    } catch {
+      return res.status(400).json({ error: 'Invalid wallet address' })
+    }
+
+    // Check savings account exists and has balance
+    const saving = await db.saving.findUnique({
+      where: { walletAddress },
+    })
+
+    if (!saving || saving.currentBalance < BigInt(amount)) {
+      return res.status(400).json({ error: 'Insufficient balance in savings' })
+    }
+
+    // Step 1: Initialize PC client with operator keypair
+    let pc
+    try {
+      pc = getPrivacyCashClient()
+    } catch (err: any) {
+      return res.status(500).json({ error: 'Backend PrivacyCash not configured' })
+    }
+
+    // Step 2: Execute withdrawal with PrivacyCash SDK
+    let withdrawResult
+    try {
+      console.log(`⬆️ Executing withdraw via PrivacyCash: ${amount} lamports`)
+      withdrawResult = await executeWithdrawal(pc, amount, walletAddress)
+      console.log(`✅ Withdrawal completed: ${withdrawResult.tx}`)
+    } catch (err: any) {
+      console.error('❌ Withdrawal execution failed:', err.message)
+      return res.status(500).json({ error: err.message })
+    }
+
+    // Step 3: Record transaction in database
+    const transaction = await db.savingTransaction.create({
+      data: {
+        savingId: saving.id,
+        type: 'withdraw',
+        status: 'confirmed',
+        amount: BigInt(amount),
+        assetType,
+        fromAddress: walletAddress,
+        toAddress: walletAddress,
+        transactionHash: withdrawResult.tx,
+        memo: memo || 'Withdraw from Privacy Cash',
+      },
+    })
+
+    // Step 4: Update balance
+    await db.saving.update({
+      where: { id: saving.id },
+      data: {
+        totalWithdrawn: { increment: BigInt(amount) },
+        currentBalance: { decrement: BigInt(amount) },
+        lastSyncedAt: new Date(),
+      },
+    })
+
+    console.log(`✅ Withdrawal recorded: ${walletAddress} -${amount}`)
+
+    res.json({
+      transactionId: transaction.id,
+      status: 'confirmed',
+      transactionHash: withdrawResult.tx,
+      amount: amount.toString(),
+      amountSOL: withdrawResult.sol.toString(),
+      assetType,
+    })
+  } catch (error: any) {
+    console.error('❌ Execute withdraw error:', error)
+    res.status(500).json({ error: error.message })
+  }
+})
+
+/**
+ * POST /api/savings/:walletAddress/balance
+ * Get private balance from Privacy Cash pool
+ * Backend handles PrivacyCash SDK operations
+ */
+router.post('/:walletAddress/balance', async (req: Request<any, {}, any>, res: Response) => {
+  try {
+    const { walletAddress } = req.params
+    const { assetType = 'SOL' } = req.body
+
+    // Validate wallet address
+    try {
+      new PublicKey(walletAddress)
+    } catch {
+      return res.status(400).json({ error: 'Invalid wallet address' })
+    }
+
+    // Check savings account exists
+    const saving = await db.saving.findUnique({
+      where: { walletAddress },
+    })
+
+    if (!saving) {
+      return res.status(404).json({ error: 'Savings account not found' })
+    }
+
+    // Step 1: Initialize PC client with operator keypair
+    let pc
+    try {
+      pc = getPrivacyCashClient()
+    } catch (err: any) {
+      return res.status(500).json({ error: 'Backend PrivacyCash not configured' })
+    }
+
+    // Step 2: Query balance from Privacy Cash
+    let balanceResult
+    try {
+      console.log(`🔍 Querying private balance for ${walletAddress}`)
+      balanceResult = await queryPrivateBalance(pc)
+      console.log(`   Balance: ${balanceResult.lamports} lamports`)
+    } catch (err: any) {
+      console.error('❌ Balance query failed:', err.message)
+      return res.status(500).json({ error: err.message })
+    }
+
+    res.json({
+      balance: balanceResult.lamports,
+      balanceSOL: lamportsToSol(balanceResult.lamports),
+      assetType,
+      formatted: `${lamportsToSol(balanceResult.lamports).toFixed(4)} SOL`,
+    })
+  } catch (error: any) {
+    console.error('❌ Get balance error:', error)
+    res.status(500).json({ error: error.message })
+  }
+})
 
 export default router
