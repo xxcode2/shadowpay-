@@ -17,20 +17,22 @@ import { Router, Request, Response } from 'express'
 import { PublicKey, LAMPORTS_PER_SOL } from '@solana/web3.js'
 import crypto from 'crypto'
 import prisma from '../lib/prisma.js'
-import { getPrivacyCashClient, executeDeposit, executeWithdrawal } from '../services/privacyCash.js'
 
 const router = Router()
 
 /**
  * 1️⃣  POST /api/links
  * 
- * CREATE LINK - Backend deposits to Privacy Cash
+ * CREATE LINK - Save User A's deposit metadata
+ * 
+ * ✅ User A deposits directly with their wallet
+ * ✅ Backend only records the deposit TX
  * 
  * Request:
  * {
  *   amount: 0.25,          // SOL
- *   memo?: "payment",      // Optional
- *   expiryDays?: 7         // Optional, default 30
+ *   depositTx: "5Tx...",   // TX from User A's deposit
+ *   memo?: "payment"       // Optional
  * }
  * 
  * Response:
@@ -38,13 +40,13 @@ const router = Router()
  *   linkId: "abc123...",
  *   amount: 0.25,
  *   status: "active",
- *   depositTx: "...",
+ *   depositTx: "5Tx...",
  *   shareUrl: "https://shadowpay.app/claim/abc123..."
  * }
  */
 router.post('/', async (req: Request, res: Response) => {
   try {
-    const { amount, memo, expiryDays } = req.body
+    const { amount, depositTx, memo } = req.body
 
     // ✅ VALIDATION
     if (!amount || typeof amount !== 'number' || amount <= 0) {
@@ -55,57 +57,22 @@ router.post('/', async (req: Request, res: Response) => {
       return res.status(400).json({ error: 'Amount too large - max 100 SOL' })
     }
 
-    const expiry = expiryDays || 30
+    if (!depositTx || typeof depositTx !== 'string') {
+      return res.status(400).json({ error: 'depositTx required - User must deposit first' })
+    }
 
     console.log(`\n📝 CREATE LINK`)
     console.log(`   Amount: ${amount} SOL`)
+    console.log(`   Deposit TX: ${depositTx.substring(0, 20)}...`)
     console.log(`   Memo: ${memo || 'none'}`)
-    console.log(`   Expiry: ${expiry} days`)
 
-    // ✅ STEP 1: Initialize Privacy Cash
-    console.log(`🔄 Initializing Privacy Cash...`)
-    let pc: any
-    try {
-      pc = getPrivacyCashClient()
-    } catch (err: any) {
-      console.error(`❌ SDK initialization failed: ${err.message}`)
-      return res.status(500).json({
-        error: 'Failed to initialize Privacy Cash SDK',
-        details: err.message
-      })
-    }
-
-    // ✅ STEP 2: Perform deposit to Privacy Cash pool
-    console.log(`💸 Depositing to Privacy Cash pool...`)
-    let depositResult: any
-    try {
-      const lamports = Math.round(amount * LAMPORTS_PER_SOL)
-      depositResult = await executeDeposit(pc, lamports)
-      console.log(`✅ Deposit successful: ${depositResult.tx}`)
-    } catch (err: any) {
-      console.error(`❌ Deposit failed: ${err.message}`)
-      
-      // Determine error message based on error type
-      let errorMsg = 'Deposit failed - check operator balance'
-      if (err.message.includes('Insufficient')) {
-        errorMsg = 'Operator wallet has insufficient SOL for deposit fee'
-      }
-      
-      return res.status(500).json({
-        error: errorMsg,
-        details: err.message
-      })
-    }
-
-    // ✅ STEP 3: Generate link ID
+    // ✅ STEP 1: Generate link ID
     const linkId = crypto.randomBytes(16).toString('hex')
     const lamports = BigInt(Math.round(amount * LAMPORTS_PER_SOL))
-    const expiryAt = new Date()
-    expiryAt.setDate(expiryAt.getDate() + expiry)
 
     console.log(`✅ Generated linkId: ${linkId}`)
 
-    // ✅ STEP 4: Save metadata to database
+    // ✅ STEP 2: Save metadata to database
     console.log(`💾 Saving to database...`)
     const link = await prisma.paymentLink.create({
       data: {
@@ -114,7 +81,7 @@ router.post('/', async (req: Request, res: Response) => {
         lamports,
         assetType: 'SOL',
         claimed: false,
-        depositTx: depositResult.tx,
+        depositTx: depositTx,
         createdAt: new Date(),
         updatedAt: new Date(),
       }
@@ -127,9 +94,9 @@ router.post('/', async (req: Request, res: Response) => {
       linkId,
       amount,
       status: 'active',
-      depositTx: depositResult.tx,
+      depositTx: depositTx,
       shareUrl: `https://shadowpay.app/claim/${linkId}`,
-      message: 'Payment link created successfully. Share the link with recipient.'
+      message: 'Payment link created successfully. Share with recipient!'
     })
 
   } catch (error: any) {
@@ -201,18 +168,22 @@ router.get('/:id', async (req: Request<{ id: string }>, res: Response) => {
 /**
  * 3️⃣  POST /api/links/:id/claim
  * 
- * CLAIM LINK - Backend withdraws from Privacy Cash to recipient
+ * CLAIM LINK - Record User B's withdrawal
+ * 
+ * ✅ User B withdraws directly with their wallet
+ * ✅ Backend only records the withdrawal TX
  * 
  * Request:
  * {
- *   recipientAddress: "ABC123..."  // Solana address
+ *   withdrawTx: "5Tx...",     // TX from User B's withdrawal
+ *   recipient: "ABC123..."    // Solana address
  * }
  * 
  * Response:
  * {
  *   success: true,
  *   linkId: "abc123...",
- *   withdrawTx: "...",
+ *   withdrawTx: "5Tx...",
  *   recipient: "ABC123...",
  *   amount: 0.25,
  *   status: "claimed"
@@ -221,19 +192,24 @@ router.get('/:id', async (req: Request<{ id: string }>, res: Response) => {
 router.post('/:id/claim', async (req: Request<{ id: string }>, res: Response) => {
   try {
     const { id } = req.params
-    const { recipientAddress } = req.body
+    const { withdrawTx, recipient } = req.body
 
     console.log(`\n🎁 CLAIM LINK`)
     console.log(`   LinkId: ${id}`)
-    console.log(`   Recipient: ${recipientAddress}`)
+    console.log(`   Recipient: ${recipient}`)
+    console.log(`   Withdrawal TX: ${withdrawTx?.substring(0, 20)}...`)
 
     // ✅ VALIDATION
-    if (!recipientAddress || typeof recipientAddress !== 'string') {
-      return res.status(400).json({ error: 'recipientAddress required' })
+    if (!withdrawTx || typeof withdrawTx !== 'string') {
+      return res.status(400).json({ error: 'withdrawTx required - User must withdraw first' })
+    }
+
+    if (!recipient || typeof recipient !== 'string') {
+      return res.status(400).json({ error: 'recipient required' })
     }
 
     try {
-      new PublicKey(recipientAddress)
+      new PublicKey(recipient)
     } catch {
       return res.status(400).json({ error: 'Invalid recipient address format' })
     }
@@ -263,45 +239,14 @@ router.post('/:id/claim', async (req: Request<{ id: string }>, res: Response) =>
       return res.status(400).json({ error: 'No valid deposit found for this link' })
     }
 
-    // ✅ STEP 2: Initialize Privacy Cash
-    console.log(`🔄 Initializing Privacy Cash...`)
-    let pc: any
-    try {
-      pc = getPrivacyCashClient()
-    } catch (err: any) {
-      console.error(`❌ SDK initialization failed`)
-      return res.status(500).json({
-        error: 'Failed to initialize Privacy Cash SDK',
-        details: err.message
-      })
-    }
-
-    // ✅ STEP 3: Perform withdrawal from Privacy Cash pool
-    console.log(`📤 Withdrawing from Privacy Cash pool...`)
-    console.log(`   Amount: ${link.amount} SOL`)
-    console.log(`   Recipient: ${recipientAddress}`)
-
-    let withdrawResult: any
-    try {
-      const lamports = Number(link.lamports)
-      withdrawResult = await executeWithdrawal(pc, lamports, recipientAddress)
-      console.log(`✅ Withdrawal successful: ${withdrawResult.tx}`)
-    } catch (err: any) {
-      console.error(`❌ Withdrawal failed: ${err.message}`)
-      return res.status(500).json({
-        error: 'Withdrawal failed - try again later',
-        details: err.message
-      })
-    }
-
-    // ✅ STEP 4: Update database - mark as claimed
+    // ✅ STEP 2: Update database - record the withdrawal
     console.log(`💾 Updating database...`)
     const updated = await prisma.paymentLink.update({
       where: { id },
       data: {
         claimed: true,
-        claimedBy: recipientAddress,
-        withdrawTx: withdrawResult.tx,
+        claimedBy: recipient,
+        withdrawTx: withdrawTx,
         updatedAt: new Date(),
       }
     })
@@ -311,8 +256,8 @@ router.post('/:id/claim', async (req: Request<{ id: string }>, res: Response) =>
     return res.json({
       success: true,
       linkId: id,
-      withdrawTx: withdrawResult.tx,
-      recipient: recipientAddress,
+      withdrawTx: withdrawTx,
+      recipient: recipient,
       amount: link.amount,
       status: 'claimed',
       message: 'Payment claimed successfully!'

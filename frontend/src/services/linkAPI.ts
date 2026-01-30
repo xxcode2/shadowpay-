@@ -1,181 +1,310 @@
 /**
- * ✅ SHADOWPAY LINK API - Frontend only
+ * ✅ SHADOWPAY LINK API - Frontend Integration
  * 
- * Communicates with backend for all link operations.
- * Backend handles Privacy Cash SDK calls.
+ * ARCHITECTURE:
+ * - User A deposits with their own wallet + gets link
+ * - User B withdraws with their own wallet + claims link
+ * - Backend only records TXs
  * 
- * NO SDK CALLS FROM FRONTEND!
+ * Flow:
+ * 1. createPaymentLink() - User A deposit + save to backend
+ * 2. getPaymentLink() - Get link details (amount, status, etc)
+ * 3. claimPaymentLink() - User B withdraw + record to backend
  */
 
-const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:5000/api'
+import { PublicKey, LAMPORTS_PER_SOL } from '@solana/web3.js'
+import { PrivacyCash } from 'privacycash'
 
-export interface CreateLinkRequest {
-  amount: number  // in SOL
-  memo?: string
-  expiryDays?: number
-}
+/**
+ * Load circuits for ZK proofs
+ */
+async function loadCircuits(): Promise<{
+  wasm: Uint8Array
+  zkey: Uint8Array
+}> {
+  const wasmResponse = await fetch('/circuits/transaction2.wasm')
+  const zkeyResponse = await fetch('/circuits/transaction2.zkey')
 
-export interface CreateLinkResponse {
-  success: boolean
-  linkId: string
-  amount: number
-  status: 'active'
-  depositTx: string
-  shareUrl: string
-  message: string
-}
+  if (!wasmResponse.ok || !zkeyResponse.ok) {
+    throw new Error('Failed to load circuits')
+  }
 
-export interface LinkDetails {
-  linkId: string
-  amount: number
-  assetType: string
-  status: 'active' | 'claimed' | 'expired'
-  claimed: boolean
-  claimedBy: string | null
-  createdAt: string
-  expiryAt: string
-}
+  const wasm = new Uint8Array(await wasmResponse.arrayBuffer())
+  const zkey = new Uint8Array(await zkeyResponse.arrayBuffer())
 
-export interface ClaimLinkRequest {
-  recipientAddress: string  // Solana address
-}
-
-export interface ClaimLinkResponse {
-  success: boolean
-  linkId: string
-  withdrawTx: string
-  recipient: string
-  amount: number
-  status: 'claimed'
-  message: string
+  return { wasm, zkey }
 }
 
 /**
- * 1️⃣  CREATE LINK - Backend deposits to Privacy Cash
- * 
- * POST /api/links
- * {
- *   amount: 0.25,
- *   memo?: "payment",
- *   expiryDays?: 7
- * }
- * 
- * Returns: { linkId, amount, status, depositTx, shareUrl }
+ * Backend API URL
  */
-export async function createPaymentLink(request: CreateLinkRequest): Promise<CreateLinkResponse> {
-  console.log(`\n📝 CREATE LINK`)
-  console.log(`   Amount: ${request.amount} SOL`)
-  console.log(`   Calling: POST /api/links`)
+function getApiUrl(): string {
+  if (typeof window === 'undefined') {
+    // SSR/Node
+    return process.env.VITE_API_URL || 'http://localhost:5000'
+  }
+  return window.location.origin
+}
+
+/**
+ * 1️⃣ CREATE PAYMENT LINK
+ * 
+ * User A deposits SOL with their wallet
+ * Backend records the deposit TX + creates link
+ * 
+ * Flow:
+ * 1. Load circuits
+ * 2. Initialize Privacy Cash with User A's wallet
+ * 3. Call SDK.deposit() with User A's keypair
+ * 4. Get depositTx from SDK
+ * 5. Send depositTx to backend
+ * 6. Backend creates link + returns linkId
+ * 
+ * @param input - amount and wallet info
+ * @returns linkId and shareUrl
+ */
+export async function createPaymentLink(input: {
+  amount: number
+  wallet: {
+    publicKey: PublicKey
+    signTransaction: (tx: any) => Promise<any>
+    signAllTransactions: (txs: any[]) => Promise<any[]>
+  }
+  memo?: string
+}): Promise<{
+  linkId: string
+  amount: number
+  status: string
+  depositTx: string
+  shareUrl: string
+}> {
+  console.log(`\n🔐 CREATING PAYMENT LINK`)
+  console.log(`   Amount: ${input.amount} SOL`)
+  console.log(`   Wallet: ${input.wallet.publicKey.toString()}`)
 
   try {
-    const response = await fetch(`${API_BASE_URL}/links`, {
+    // ✅ STEP 1: Load circuits
+    console.log(`📦 Loading circuits...`)
+    const circuits = await loadCircuits()
+    console.log(`✅ Circuits loaded\n`)
+
+    // ✅ STEP 2: Initialize Privacy Cash with USER's wallet
+    console.log(`🔄 Initializing Privacy Cash SDK...`)
+    const rpcUrl = process.env.VITE_SOLANA_RPC_URL || 'https://api.mainnet-beta.solana.com'
+    const pc = new PrivacyCash({
+      RPC_url: rpcUrl,
+      owner: input.wallet as any,
+    })
+    console.log(`✅ SDK initialized with your wallet\n`)
+
+    // ✅ STEP 3: User A deposits to Privacy Cash
+    console.log(`💸 Depositing ${input.amount} SOL to Privacy Cash pool...`)
+    console.log(`⏳ This may take 60+ seconds...\n`)
+
+    const lamports = Math.round(input.amount * LAMPORTS_PER_SOL)
+    const depositResult = await pc.deposit({
+      lamports,
+    })
+
+    const depositTx = depositResult.tx
+    console.log(`✅ DEPOSIT SUCCESSFUL!`)
+    console.log(`   TX: ${depositTx}\n`)
+
+    // ✅ STEP 4: Send deposit TX to backend
+    console.log(`📤 Creating link on backend...`)
+    const apiUrl = getApiUrl()
+    const response = await fetch(`${apiUrl}/api/links`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(request),
+      body: JSON.stringify({
+        amount: input.amount,
+        depositTx: depositTx,
+        memo: input.memo || 'ShadowPay payment',
+      }),
     })
 
     if (!response.ok) {
       const error = await response.json()
-      throw new Error(error.error || 'Failed to create link')
+      throw new Error(`Backend error: ${error.error}`)
     }
 
-    const data = await response.json() as CreateLinkResponse
-    console.log(`✅ Link created: ${data.linkId}`)
-    console.log(`   Share URL: ${data.shareUrl}`)
+    const link = await response.json()
+    console.log(`✅ LINK CREATED!`)
+    console.log(`   Link ID: ${link.linkId}`)
+    console.log(`   Share: ${link.shareUrl}\n`)
 
-    return data
+    return link
 
   } catch (error: any) {
-    console.error(`❌ Create link failed:`, error.message)
+    console.error(`❌ Failed to create link:`)
+    console.error(`   ${error.message}\n`)
     throw new Error(`Failed to create payment link: ${error.message}`)
   }
 }
 
 /**
- * 2️⃣  GET LINK DETAILS - Preview link
+ * 2️⃣ GET PAYMENT LINK
  * 
- * GET /api/links/:id
+ * Retrieve link details (amount, status, etc)
+ * Used when recipient opens the link
  * 
- * Returns: { linkId, amount, status, claimed, claimedBy, expiryAt }
+ * @param linkId - The link identifier
+ * @returns Link details
  */
-export async function getPaymentLink(linkId: string): Promise<LinkDetails> {
-  console.log(`\n👁️  GET LINK DETAILS`)
+export async function getPaymentLink(linkId: string): Promise<{
+  linkId: string
+  amount: number
+  assetType: string
+  status: string
+  claimed: boolean
+  claimedBy: string | null
+  createdAt: string
+  expiryAt: string
+}> {
+  console.log(`\n👁️ PREVIEWING LINK`)
   console.log(`   LinkId: ${linkId}`)
-  console.log(`   Calling: GET /api/links/${linkId}`)
 
   try {
-    const response = await fetch(`${API_BASE_URL}/links/${linkId}`)
+    const apiUrl = getApiUrl()
+    const response = await fetch(`${apiUrl}/api/links/${linkId}`)
 
     if (!response.ok) {
-      if (response.status === 404) {
-        throw new Error('Link not found')
-      }
       const error = await response.json()
-      throw new Error(error.error || 'Failed to get link')
+      throw new Error(error.error || 'Link not found')
     }
 
-    const data = await response.json() as LinkDetails
-    console.log(`✅ Link found`)
-    console.log(`   Amount: ${data.amount} SOL`)
-    console.log(`   Status: ${data.status}`)
+    const link = await response.json()
+    console.log(`✅ Found: ${link.amount} ${link.assetType}`)
+    console.log(`   Status: ${link.status}`)
+    console.log(`   Expires: ${link.expiryAt}\n`)
 
-    return data
+    return link
 
   } catch (error: any) {
-    console.error(`❌ Get link failed:`, error.message)
-    throw new Error(`Failed to get payment link: ${error.message}`)
+    console.error(`❌ Failed to get link: ${error.message}\n`)
+    throw new Error(`Failed to get link details: ${error.message}`)
   }
 }
 
 /**
- * 3️⃣  CLAIM LINK - Backend withdraws from Privacy Cash
+ * 3️⃣ CLAIM PAYMENT LINK
  * 
- * POST /api/links/:id/claim
- * {
- *   recipientAddress: "ABC123..."
- * }
+ * User B withdraws SOL with their wallet
+ * Backend records the withdrawal TX + marks link as claimed
  * 
- * Returns: { success, linkId, withdrawTx, recipient, amount, status }
+ * Flow:
+ * 1. Get link details (for amount)
+ * 2. Load circuits
+ * 3. Initialize Privacy Cash with User B's wallet
+ * 4. Call SDK.withdraw() with User B's wallet + amount
+ * 5. Get withdrawTx from SDK
+ * 6. Send withdrawTx to backend
+ * 7. Backend records claim + returns success
+ * 
+ * @param input - linkId, recipient wallet, and address
+ * @returns withdrawal result
  */
-export async function claimPaymentLink(
-  linkId: string,
-  recipientAddress: string
-): Promise<ClaimLinkResponse> {
-  console.log(`\n🎁 CLAIM LINK`)
-  console.log(`   LinkId: ${linkId}`)
-  console.log(`   Recipient: ${recipientAddress}`)
-  console.log(`   Calling: POST /api/links/${linkId}/claim`)
+export async function claimPaymentLink(input: {
+  linkId: string
+  recipientWallet: {
+    publicKey: PublicKey
+    signTransaction: (tx: any) => Promise<any>
+    signAllTransactions: (txs: any[]) => Promise<any[]>
+  }
+}): Promise<{
+  success: boolean
+  linkId: string
+  withdrawTx: string
+  recipient: string
+  amount: number
+  status: string
+}> {
+  console.log(`\n🎁 CLAIMING PAYMENT LINK`)
+  console.log(`   LinkId: ${input.linkId}`)
+  console.log(`   Recipient: ${input.recipientWallet.publicKey.toString()}`)
 
   try {
-    const response = await fetch(`${API_BASE_URL}/links/${linkId}/claim`, {
+    // ✅ STEP 1: Get link details from backend (for amount!)
+    console.log(`🔍 Fetching link details...`)
+    const link = await getPaymentLink(input.linkId)
+
+    if (link.claimed) {
+      throw new Error('Link already claimed')
+    }
+
+    if (link.status !== 'active') {
+      throw new Error(`Link is ${link.status}, cannot claim`)
+    }
+
+    const amount = link.amount
+    console.log(`✅ Amount to withdraw: ${amount} SOL\n`)
+
+    // ✅ STEP 2: Load circuits
+    console.log(`📦 Loading circuits...`)
+    const circuits = await loadCircuits()
+    console.log(`✅ Circuits loaded\n`)
+
+    // ✅ STEP 3: Initialize Privacy Cash with RECIPIENT's wallet
+    console.log(`🔄 Initializing Privacy Cash SDK...`)
+    const rpcUrl = process.env.VITE_SOLANA_RPC_URL || 'https://api.mainnet-beta.solana.com'
+    const pc = new PrivacyCash({
+      RPC_url: rpcUrl,
+      owner: input.recipientWallet as any,
+    })
+    console.log(`✅ SDK initialized with your wallet\n`)
+
+    // ✅ STEP 4: User B withdraws from Privacy Cash
+    console.log(`📤 Withdrawing ${amount} SOL from Privacy Cash pool...`)
+    console.log(`⏳ This may take 60+ seconds...\n`)
+
+    const lamports = Math.round(amount * LAMPORTS_PER_SOL)
+    const withdrawResult = await pc.withdraw({
+      lamports,
+      recipientAddress: input.recipientWallet.publicKey.toString(),
+    })
+
+    const withdrawTx = withdrawResult.tx
+    console.log(`✅ WITHDRAWAL SUCCESSFUL!`)
+    console.log(`   TX: ${withdrawTx}`)
+    console.log(`   Received: ${amount} SOL\n`)
+
+    // ✅ STEP 5: Record withdrawal on backend
+    console.log(`📝 Recording claim on backend...`)
+    const apiUrl = getApiUrl()
+    const response = await fetch(`${apiUrl}/api/links/${input.linkId}/claim`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ recipientAddress }),
+      body: JSON.stringify({
+        withdrawTx: withdrawTx,
+        recipient: input.recipientWallet.publicKey.toString(),
+      }),
     })
 
     if (!response.ok) {
       const error = await response.json()
-      throw new Error(error.error || 'Failed to claim link')
+      throw new Error(`Backend error: ${error.error}`)
     }
 
-    const data = await response.json() as ClaimLinkResponse
-    console.log(`✅ Link claimed!`)
-    console.log(`   TX: ${data.withdrawTx}`)
-    console.log(`   Amount: ${data.amount} SOL received`)
+    const result = await response.json()
+    console.log(`✅ LINK CLAIMED!`)
+    console.log(`   Status: ${result.status}`)
+    console.log(`   Amount: ${result.amount} SOL\n`)
 
-    return data
+    return result
 
   } catch (error: any) {
-    console.error(`❌ Claim link failed:`, error.message)
+    console.error(`❌ Failed to claim link:`)
+    console.error(`   ${error.message}\n`)
     throw new Error(`Failed to claim payment link: ${error.message}`)
   }
 }
 
 /**
- * Export for use in React components
+ * Export all functions
  */
 export const LinkAPI = {
   createPaymentLink,
   getPaymentLink,
   claimPaymentLink,
+  loadCircuits,
 }
