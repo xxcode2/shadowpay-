@@ -82,11 +82,31 @@ const corsOptions = {
     'http://localhost:5173',
     'http://localhost:3000',
   ],
-  methods: ['GET', 'POST', 'OPTIONS'],
+  methods: ['GET', 'POST', 'OPTIONS', 'PUT', 'DELETE'],
   allowedHeaders: ['Content-Type', 'Authorization'],
   credentials: false,
+  maxAge: 86400, // 24 hours
 }
 
+// Custom CORS handler
+app.use((req, res, next) => {
+  const origin = req.headers.origin
+  if (origin && corsOptions.origin.includes(origin)) {
+    res.header('Access-Control-Allow-Origin', origin)
+    res.header('Access-Control-Allow-Methods', corsOptions.methods.join(','))
+    res.header('Access-Control-Allow-Headers', corsOptions.allowedHeaders.join(','))
+    res.header('Access-Control-Max-Age', String(corsOptions.maxAge))
+  }
+  
+  // Handle preflight
+  if (req.method === 'OPTIONS') {
+    return res.status(200).end()
+  }
+  
+  next()
+})
+
+// Also use cors package as backup
 app.use(cors(corsOptions))
 app.options('*', cors(corsOptions))
 
