@@ -9,7 +9,7 @@
  * ❌ DON'T: Manual merkle/nullifier/buildCircuitInput
  */
 
-import PrivacyCash from 'privacycash'
+import { PrivacyCash } from 'privacycash'
 import { Keypair } from '@solana/web3.js'
 import dotenv from 'dotenv'
 import fs from 'fs'

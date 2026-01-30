@@ -7,7 +7,7 @@
  * - Simple deposit & withdraw
  */
 
-import PrivacyCash from 'privacycash'
+import { PrivacyCash } from 'privacycash'
 import { PublicKey } from '@solana/web3.js'
 
 /**
