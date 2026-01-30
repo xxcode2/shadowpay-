@@ -140,101 +140,76 @@
    </header><!-- Main -->
    <main class="relative z-10 max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-12"><!-- Tabs -->
     <div class="flex justify-center mb-12">
-     <div class="inline-flex gap-2 p-1.5 rounded-2xl glass-card"><button id="mode-create" class="mode-btn px-6 py-3 rounded-xl font-display font-medium transition-all duration-300 bg-gradient-to-r from-purple-600 to-blue-600 text-white text-sm"> Create Link </button> <button id="mode-claim" class="mode-btn px-6 py-3 rounded-xl font-display font-medium transition-all duration-300 text-gray-400 hover:text-white text-sm"> Claim Link </button> <button id="mode-history" class="mode-btn px-6 py-3 rounded-xl font-display font-medium transition-all duration-300 text-gray-400 hover:text-white text-sm"> History </button> <button id="mode-savings" class="mode-btn px-6 py-3 rounded-xl font-display font-medium transition-all duration-300 text-gray-400 hover:text-white text-sm"> 💰 Savings </button>
-     </div>
-    </div><!-- Create Section -->
-    <div id="section-create" class="section-content">
-     <div class="max-w-2xl mx-auto">
-      <div class="text-center mb-10">
-       <div class="inline-flex items-center gap-2 px-4 py-2 rounded-full glass-card mb-4"><span class="w-2 h-2 bg-purple-400 rounded-full animate-pulse"></span> <span class="text-sm text-gray-400 font-medium">You will deposit SOL</span>
-       </div>
-       <h2 class="text-4xl font-display font-bold text-white mb-3">Create Private Payment Link</h2>
-       <p class="text-gray-400">Deposit SOL and generate a link for recipient to claim</p>
-      </div>
-      <div class="gradient-border rounded-3xl p-8 glow-effect">
-       <form id="create-form" class="space-y-6">
-        <div><label for="amount-input" class="block text-sm font-medium text-gray-300 mb-2">Amount to Deposit (SOL)</label>
-         <div class="relative"><input type="number" id="amount-input" step="0.001" min="0.001" placeholder="0.00" class="w-full px-5 py-4 bg-gray-900/50 border border-purple-500/30 rounded-xl text-white text-2xl font-bold focus:outline-none focus:border-purple-500 transition-colors" required> <span class="absolute right-5 top-1/2 -translate-y-1/2 text-gray-500 font-display">SOL</span>
-         </div>
-        </div>
-        <div><label for="memo-input" class="block text-sm font-medium text-gray-300 mb-2">Memo (Optional)</label> <input type="text" id="memo-input" placeholder="e.g., Payment for services" maxlength="100" class="w-full px-5 py-3 bg-gray-900/50 border border-purple-500/30 rounded-xl text-white focus:outline-none focus:border-purple-500 transition-colors">
-        </div>
-        <div><label for="expiry-select" class="block text-sm font-medium text-gray-300 mb-2">Link Expiry</label> <select id="expiry-select" class="w-full px-5 py-3 bg-gray-900/50 border border-purple-500/30 rounded-xl text-white focus:outline-none focus:border-purple-500 transition-colors appearance-none cursor-pointer"> <option value="3600">1 Hour</option> <option value="21600">6 Hours</option> <option value="86400" selected>24 Hours</option> <option value="604800">7 Days</option> </select>
-        </div>
-        <div class="p-4 rounded-xl bg-purple-500/10 border border-purple-500/20">
-         <div class="flex gap-3">
-          <svg class="w-5 h-5 text-purple-400 flex-shrink-0 mt-0.5" fill="none" viewbox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
-          </svg>
-          <div class="text-sm text-gray-300"><strong class="text-purple-400">How it works:</strong> You will deposit SOL into Privacy Cash pool (shielded). Recipient can claim using the link without revealing the connection between you two.
-          </div>
-         </div>
-        </div><button type="submit" id="create-submit-btn" class="w-full py-4 rounded-xl bg-gradient-to-r from-purple-600 to-blue-600 hover:from-purple-700 hover:to-blue-700 text-white font-display font-bold text-lg transition-all duration-300 transform hover:scale-[1.02] glow-effect disabled:opacity-50 disabled:cursor-not-allowed"> <span id="create-button-text">Deposit &amp; Create Link</span> </button>
-       </form>
-      </div>
-     </div>
-    </div><!-- Claim Section -->
-    <div id="section-claim" class="section-content hidden">
-     <div class="max-w-2xl mx-auto">
-      <div class="text-center mb-10">
-       <div class="inline-flex items-center gap-2 px-4 py-2 rounded-full glass-card mb-4"><span class="w-2 h-2 bg-cyan-400 rounded-full animate-pulse"></span> <span class="text-sm text-gray-400 font-medium">You will receive SOL</span>
-       </div>
-       <h2 class="text-4xl font-display font-bold text-white mb-3">Claim Private Payment</h2>
-       <p class="text-gray-400">Enter link ID to preview and claim your payment</p>
-      </div><!-- Preview Card -->
-      <div id="preview-card" class="hidden gradient-border rounded-3xl p-8 glow-effect mb-6">
-       <div class="text-center mb-6">
-        <div class="inline-flex items-center gap-2 px-4 py-2 rounded-full bg-emerald-500/20 mb-4">
-         <svg class="w-4 h-4 text-emerald-400" fill="none" viewbox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7" />
-         </svg><span class="text-sm text-emerald-400 font-medium">Link Valid</span>
-        </div>
-        <h3 class="text-3xl font-display font-bold text-white mb-2">You will receive</h3>
-        <p class="text-5xl font-display font-bold text-transparent bg-clip-text bg-gradient-to-r from-cyan-400 to-blue-400 mb-4"><span id="preview-amount">0.000</span> SOL</p>
-        <div class="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-gray-800/50">
-         <svg class="w-4 h-4 text-gray-400" fill="none" viewbox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
-         </svg><span class="text-xs text-gray-400">Expires in <span id="preview-expiry" class="text-white font-medium">23h 45m</span></span>
-        </div>
-       </div>
-       <div class="p-4 rounded-xl bg-cyan-500/10 border border-cyan-500/20 mb-6">
-        <p class="text-sm text-gray-300"><strong class="text-cyan-400">Memo:</strong> <span id="preview-memo">No memo</span></p>
-       </div><button id="confirm-claim-btn" class="w-full py-4 rounded-xl bg-gradient-to-r from-cyan-600 to-blue-600 hover:from-cyan-700 hover:to-blue-700 text-white font-display font-bold text-lg transition-all duration-300 transform hover:scale-[1.02] glow-effect"> Confirm &amp; Claim Payment </button>
-      </div><!-- Claim Form -->
-      <div class="gradient-border rounded-3xl p-8 glow-effect">
-       <form id="claim-form" class="space-y-6">
-        <div><label for="link-id-input" class="block text-sm font-medium text-gray-300 mb-2">Payment Link ID</label> <input type="text" id="link-id-input" placeholder="e.g., a1b2c3d4-e5f6-7890-abcd-ef1234567890" class="w-full px-5 py-4 bg-gray-900/50 border border-cyan-500/30 rounded-xl text-white font-mono focus:outline-none focus:border-cyan-500 transition-colors" required>
-        </div><button type="submit" id="check-link-btn" class="w-full py-4 rounded-xl bg-gradient-to-r from-cyan-600 to-blue-600 hover:from-cyan-700 hover:to-blue-700 text-white font-display font-bold text-lg transition-all duration-300 transform hover:scale-[1.02] glow-effect disabled:opacity-50 disabled:cursor-not-allowed"> Check Link </button>
-       </form>
-       <div class="mt-6 p-4 rounded-xl bg-cyan-500/10 border border-cyan-500/20">
-        <div class="flex gap-3">
-         <svg class="w-5 h-5 text-cyan-400 flex-shrink-0 mt-0.5" fill="none" viewbox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
-         </svg>
-         <div class="text-sm text-gray-300">
-          Enter the Link ID to preview the amount. You'll need to connect your wallet to claim.
-         </div>
-        </div>
-       </div>
-      </div>
-     </div>
-    </div><!-- History Section -->
-    <div id="section-history" class="section-content hidden">
-     <div class="max-w-4xl mx-auto">
-      <div class="text-center mb-10">
-       <h2 class="text-4xl font-display font-bold text-white mb-3">Transaction History</h2>
-       <p class="text-gray-400">View your sent and received private payments</p>
-       <button id="fetch-history-btn" class="mt-4 px-6 py-3 rounded-xl bg-gradient-to-r from-purple-600 to-blue-600 hover:from-purple-700 hover:to-blue-700 text-white font-medium transition-all">
-        🔄 Refresh History
-       </button>
-      </div>
-      <div id="history-container" class="space-y-4">
-       <div class="text-center py-12">
-        <p class="text-gray-400">Click Refresh to load your transaction history</p>
-       </div>
-      </div>
+     <div class="inline-flex gap-2 p-1.5 rounded-2xl glass-card"><button id="mode-savings" class="mode-btn px-6 py-3 rounded-xl font-display font-medium transition-all duration-300 bg-gradient-to-r from-purple-600 to-blue-600 text-white text-sm"> 💰 Savings </button> <button id="mode-send" class="mode-btn px-6 py-3 rounded-xl font-display font-medium transition-all duration-300 text-gray-400 hover:text-white text-sm"> 📤 Send </button> <button id="mode-withdraw" class="mode-btn px-6 py-3 rounded-xl font-display font-medium transition-all duration-300 text-gray-400 hover:text-white text-sm"> 💸 Withdraw </button> <button id="mode-profile" class="mode-btn px-6 py-3 rounded-xl font-display font-medium transition-all duration-300 text-gray-400 hover:text-white text-sm"> 👤 Profile </button>
      </div>
     </div><!-- Savings Section -->
-    <div id="section-savings" class="section-content hidden">
+    <div id="section-savings" class="section-content">
      <div class="max-w-6xl mx-auto">
       <div id="savings-dashboard-root">
        <!-- React component will mount here -->
+      </div>
+     </div>
+    </div><!-- Send Section -->
+    <div id="section-send" class="section-content hidden">
+     <div class="max-w-2xl mx-auto">
+      <div class="text-center mb-10">
+       <h2 class="text-4xl font-display font-bold text-white mb-3">📤 Send to Address</h2>
+       <p class="text-gray-400">Send SOL/tokens from your savings to any Solana address (private)</p>
+      </div>
+      <div class="gradient-border rounded-3xl p-8 glow-effect">
+       <form id="send-form" class="space-y-6">
+        <div><label for="send-amount-input" class="block text-sm font-medium text-gray-300 mb-2">Amount</label>
+         <div class="relative"><input type="number" id="send-amount-input" step="0.001" min="0.001" placeholder="0.00" class="w-full px-5 py-4 bg-gray-900/50 border border-blue-500/30 rounded-xl text-white text-2xl font-bold focus:outline-none focus:border-blue-500 transition-colors" required> <span class="absolute right-5 top-1/2 -translate-y-1/2 text-gray-500 font-display">SOL</span>
+         </div>
+        </div>
+        <div><label for="send-recipient-input" class="block text-sm font-medium text-gray-300 mb-2">Recipient Address</label> <input type="text" id="send-recipient-input" placeholder="e.g., 7xLk...9zEb" class="w-full px-5 py-4 bg-gray-900/50 border border-blue-500/30 rounded-xl text-white font-mono focus:outline-none focus:border-blue-500 transition-colors" required>
+        </div>
+        <div><label for="send-memo-input" class="block text-sm font-medium text-gray-300 mb-2">Memo (Optional)</label> <input type="text" id="send-memo-input" placeholder="e.g., Payment for work" maxlength="100" class="w-full px-5 py-3 bg-gray-900/50 border border-blue-500/30 rounded-xl text-white focus:outline-none focus:border-blue-500 transition-colors">
+        </div>
+        <div class="p-4 rounded-xl bg-blue-500/10 border border-blue-500/20">
+         <div class="flex gap-3">
+          <svg class="w-5 h-5 text-blue-400 flex-shrink-0 mt-0.5" fill="none" viewbox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+          </svg>
+          <div class="text-sm text-gray-300"><strong class="text-blue-400">Privacy:</strong> Transaction is private - recipient receives funds directly without knowing sender.</div>
+         </div>
+        </div><button type="submit" id="send-submit-btn" class="w-full py-4 rounded-xl bg-gradient-to-r from-blue-600 to-cyan-600 hover:from-blue-700 hover:to-cyan-700 text-white font-display font-bold text-lg transition-all duration-300 transform hover:scale-[1.02] glow-effect disabled:opacity-50 disabled:cursor-not-allowed"> Send Now </button>
+       </form>
+      </div>
+     </div>
+    </div><!-- Withdraw Section -->
+    <div id="section-withdraw" class="section-content hidden">
+     <div class="max-w-2xl mx-auto">
+      <div class="text-center mb-10">
+       <h2 class="text-4xl font-display font-bold text-white mb-3">💸 Withdraw to Wallet</h2>
+       <p class="text-gray-400">Unshield SOL/tokens back to your Solana wallet</p>
+      </div>
+      <div class="gradient-border rounded-3xl p-8 glow-effect">
+       <form id="withdraw-form" class="space-y-6">
+        <div><label for="withdraw-amount-input" class="block text-sm font-medium text-gray-300 mb-2">Amount</label>
+         <div class="relative"><input type="number" id="withdraw-amount-input" step="0.001" min="0.001" placeholder="0.00" class="w-full px-5 py-4 bg-gray-900/50 border border-orange-500/30 rounded-xl text-white text-2xl font-bold focus:outline-none focus:border-orange-500 transition-colors" required> <span class="absolute right-5 top-1/2 -translate-y-1/2 text-gray-500 font-display">SOL</span>
+         </div>
+        </div>
+        <div><label for="withdraw-memo-input" class="block text-sm font-medium text-gray-300 mb-2">Memo (Optional)</label> <input type="text" id="withdraw-memo-input" placeholder="e.g., Withdrawing savings" maxlength="100" class="w-full px-5 py-3 bg-gray-900/50 border border-orange-500/30 rounded-xl text-white focus:outline-none focus:border-orange-500 transition-colors">
+        </div>
+        <div class="p-4 rounded-xl bg-orange-500/10 border border-orange-500/20">
+         <div class="flex gap-3">
+          <svg class="w-5 h-5 text-orange-400 flex-shrink-0 mt-0.5" fill="none" viewbox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+          </svg>
+          <div class="text-sm text-gray-300"><strong class="text-orange-400">Fee:</strong> 0.35% withdrawal fee + network fees (~0.002 SOL)</div>
+         </div>
+        </div><button type="submit" id="withdraw-submit-btn" class="w-full py-4 rounded-xl bg-gradient-to-r from-orange-600 to-red-600 hover:from-orange-700 hover:to-red-700 text-white font-display font-bold text-lg transition-all duration-300 transform hover:scale-[1.02] glow-effect disabled:opacity-50 disabled:cursor-not-allowed"> Withdraw Now </button>
+       </form>
+      </div>
+     </div>
+    </div><!-- Profile Section -->
+    <div id="section-profile" class="section-content hidden">
+     <div class="max-w-4xl mx-auto">
+      <div class="text-center mb-10">
+       <h2 class="text-4xl font-display font-bold text-white mb-3">👤 Your Holdings</h2>
+       <p class="text-gray-400">See your balance in Privacy Cash pool</p>
+      </div>
+      <div id="profile-container" class="space-y-6">
+       <!-- Holdings will be loaded here -->
       </div>
      </div>
     </div>

@@ -59,6 +59,23 @@ export const SUPPORTED_TOKENS = {
 }
 
 // ═══════════════════════════════════════════════════════════
+// INIT ACCOUNT
+// ═══════════════════════════════════════════════════════════
+
+export async function initAccount(walletAddress: string, assetType: string = 'SOL'): Promise<void> {
+  try {
+    const apiUrl = getApiUrl()
+    await fetch(`${apiUrl}/api/savings/${walletAddress}/init`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ assetType }),
+    })
+  } catch (err) {
+    console.log('Account already initialized or error:', err)
+  }
+}
+
+// ═══════════════════════════════════════════════════════════
 // DEPOSIT (SAVING)
 // ═══════════════════════════════════════════════════════════
 
@@ -493,6 +510,7 @@ function getApiUrl(): string {
 }
 
 export const SavingsSDK = {
+  initAccount,
   depositToSavings,
   sendFromSavings,
   withdrawFromSavings,
