@@ -7,6 +7,7 @@ dotenv.config()
 import depositRoute from './routes/deposit.js'
 import withdrawRoute from './routes/withdraw.js'
 import linkRoute from './routes/link.js'
+import savingsRoute from './routes/savings.js'
 
 const app = express()
 
@@ -32,6 +33,7 @@ app.use(express.json())
 app.use('/api/deposit', depositRoute)
 app.use('/api/withdraw', withdrawRoute)
 app.use('/api/link', linkRoute)
+app.use('/api/savings', savingsRoute)
 
 const PORT = Number(process.env.PORT) || 3001
 app.listen(PORT, () => {

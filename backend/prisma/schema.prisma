@@ -10,6 +10,137 @@ datasource db {
   url      = env("DATABASE_URL")
 }
 
+// ═══════════════════════════════════════════════════════════
+// SAVINGS: User's private savings in Privacy Cash pool
+// ═══════════════════════════════════════════════════════════
+model Saving {
+  id              String   @id @default(cuid())
+  
+  // User info
+  walletAddress   String   @unique  // User's Solana wallet
+  
+  // Total saved (in base units)
+  totalDeposited  BigInt   @default(0)  // Total amount ever deposited
+  totalWithdrawn  BigInt   @default(0)  // Total amount ever withdrawn
+  currentBalance  BigInt   @default(0)  // Current balance in Privacy Cash
+  
+  // Assets
+  assetType       String   @default("SOL")  // "SOL", "USDC", "USDT", "ZEC", "ORE", "STORE"
+  
+  // Status
+  lastSyncedAt    DateTime?  // Last time balance was synced
+  
+  // Relations
+  transactions    SavingTransaction[]
+  autoDeposits    AutoDeposit[]
+  goals           SavingGoal[]
+  
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+  
+  @@map("savings")
+}
+
+// ═══════════════════════════════════════════════════════════
+// SAVING TRANSACTIONS: Deposit, withdraw, send history
+// ═══════════════════════════════════════════════════════════
+model SavingTransaction {
+  id              String   @id @default(cuid())
+  
+  // Type of transaction
+  type            String   // "deposit", "withdraw", "send"
+  status          String   @default("pending")  // pending | confirmed | failed
+  
+  // Amount info
+  amount          BigInt   // Amount in base units (lamports for SOL, 1e6 for USDC, etc)
+  assetType       String   // "SOL", "USDC", etc
+  
+  // Addresses
+  fromAddress     String?  // Wallet address (for tracking)
+  toAddress       String?  // Recipient address (for send/withdraw)
+  
+  // Transaction hash on-chain
+  transactionHash String?
+  
+  // Memo
+  memo            String?
+  
+  // Relations
+  savingId        String
+  saving          Saving   @relation(fields: [savingId], references: [id], onDelete: Cascade)
+  
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+  
+  @@index([savingId])
+  @@map("saving_transactions")
+}
+
+// ═══════════════════════════════════════════════════════════
+// AUTO DEPOSIT: Recurring deposits
+// ═══════════════════════════════════════════════════════════
+model AutoDeposit {
+  id              String   @id @default(cuid())
+  
+  // Schedule
+  frequency       String   // "daily", "weekly", "monthly"
+  amount          BigInt   // Amount in base units
+  assetType       String   // "SOL", "USDC", etc
+  
+  // Status
+  enabled         Boolean  @default(true)
+  lastExecutedAt  DateTime?
+  nextScheduledAt DateTime?
+  
+  // Failure tracking
+  failureCount    Int      @default(0)
+  lastFailureMsg  String?
+  
+  // Relations
+  savingId        String
+  saving          Saving   @relation(fields: [savingId], references: [id], onDelete: Cascade)
+  
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+  
+  @@index([savingId])
+  @@map("auto_deposits")
+}
+
+// ═══════════════════════════════════════════════════════════
+// SAVING GOALS: User's savings targets
+// ═══════════════════════════════════════════════════════════
+model SavingGoal {
+  id              String   @id @default(cuid())
+  
+  // Goal info
+  name            String   // "Liburan", "Laptop", etc
+  description     String?
+  targetAmount    BigInt   // Amount to save (in base units)
+  deadline        DateTime?
+  
+  // Progress
+  currentAmount   BigInt   @default(0)
+  status          String   @default("active")  // "active", "completed", "abandoned"
+  
+  // Motivation
+  emoji           String   @default("🎯")
+  color           String   @default("blue")
+  
+  // Relations
+  savingId        String
+  saving          Saving   @relation(fields: [savingId], references: [id], onDelete: Cascade)
+  
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+  
+  @@index([savingId])
+  @@map("saving_goals")
+}
+
+// ═══════════════════════════════════════════════════════════
+// LEGACY: Keep old model for backward compatibility
+// ═══════════════════════════════════════════════════════════
 model PaymentLink {
   id          String   @id @default(cuid())
 
