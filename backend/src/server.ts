@@ -113,11 +113,26 @@ app.options('*', cors(corsOptions))
 // ✅ STEP 2: BODY PARSING
 app.use(express.json())
 
-// ✅ STEP 3: HEALTH CHECK
+// ✅ STEP 3: DATABASE AVAILABILITY CHECK MIDDLEWARE
+const isDatabaseAvailable = () => !!process.env.DATABASE_URL
+
+app.use('/api/savings', (req, res, next) => {
+  if (!isDatabaseAvailable()) {
+    console.warn(`⚠️  Request to ${req.path} but DATABASE_URL not set`)
+    return res.status(503).json({ 
+      error: 'Database service unavailable',
+      message: 'DATABASE_URL environment variable not configured'
+    })
+  }
+  next()
+})
+
+// ✅ STEP 3.5: HEALTH CHECK
 app.get('/health', (_req: express.Request, res: express.Response) => {
   res.status(200).json({
     status: 'ok',
-    port: process.env.PORT,
+    port: process.env.PORT || 'not set',
+    database: process.env.DATABASE_URL ? 'configured' : 'NOT CONFIGURED',
     timestamp: new Date().toISOString(),
   })
 })
@@ -155,21 +170,29 @@ app.use((err: any, _req: express.Request, res: express.Response, _next: express.
 
 // ✅ STEP 7: ENSURE DATABASE SCHEMA - Run before listening
 async function startServer() {
-  try {
-    await validateEnvironment()
-    // Run schema check with timeout - don't block server startup
-    Promise.race([
-      ensureDbSchema(),
-      new Promise((_, reject) => 
-        setTimeout(() => reject(new Error('Schema check timeout')), 5000)
-      )
-    ]).catch(err => {
-      console.warn('⚠️  Schema check failed/timeout:', err.message)
-      // Continue anyway - let Prisma handle it
-    })
-  } catch (err: any) {
-    console.error('⚠️  Validation failed:', err.message)
-    // Continue anyway
+  const hasDatabaseUrl = !!process.env.DATABASE_URL
+  
+  if (!hasDatabaseUrl) {
+    console.warn('\n⚠️  DATABASE_URL NOT SET - Running in API-only mode')
+    console.warn('   Database operations will return 503 Service Unavailable')
+    console.warn('   Set DATABASE_URL environment variable to enable database features\n')
+  } else {
+    try {
+      await validateEnvironment()
+      // Run schema check with timeout - don't block server startup
+      Promise.race([
+        ensureDbSchema(),
+        new Promise((_, reject) => 
+          setTimeout(() => reject(new Error('Schema check timeout')), 5000)
+        )
+      ]).catch(err => {
+        console.warn('⚠️  Schema check failed/timeout:', err.message)
+        // Continue anyway - let Prisma handle it
+      })
+    } catch (err: any) {
+      console.error('⚠️  Validation failed:', err.message)
+      // Continue anyway
+    }
   }
 
   // ✅ STEP 7.5: SETUP OPERATOR BALANCE MONITORING

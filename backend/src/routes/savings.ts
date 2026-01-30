@@ -49,36 +49,67 @@ router.post('/init', async (req: Request<{}, {}, any>, res: Response) => {
       return res.status(400).json({ error: 'Invalid wallet address' })
     }
 
+    // Check database is available
+    if (!process.env.DATABASE_URL) {
+      console.error('❌ DATABASE_URL not set, cannot initialize savings account')
+      return res.status(503).json({ 
+        error: 'Database service unavailable',
+        message: 'DATABASE_URL environment variable not configured'
+      })
+    }
+
     // Check database connection
     if (!db || !db.saving) {
-      console.error('❌ Database connection failed - Prisma client not available')
+      console.error('❌ Database client not available')
       return res.status(503).json({ error: 'Database service unavailable' })
     }
 
-    // Find or create
-    let saving = await db.saving.findUnique({
-      where: { walletAddress },
-    })
-
-    if (!saving) {
-      saving = await db.saving.create({
-        data: {
-          walletAddress,
-          assetType,
-        },
+    // Try to create or find account
+    try {
+      let saving = await db.saving.findUnique({
+        where: { walletAddress },
       })
-      console.log(`✅ Created savings account for ${walletAddress}`)
-    }
 
-    res.json({
-      id: saving.id,
-      walletAddress: saving.walletAddress,
-      assetType: saving.assetType,
-      totalDeposited: saving.totalDeposited.toString(),
-      totalWithdrawn: saving.totalWithdrawn.toString(),
-      currentBalance: saving.currentBalance.toString(),
-      createdAt: saving.createdAt,
-    })
+      if (!saving) {
+        saving = await db.saving.create({
+          data: {
+            walletAddress,
+            assetType,
+          },
+        })
+        console.log(`✅ Created savings account for ${walletAddress}`)
+      }
+
+      res.json({
+        id: saving.id,
+        walletAddress: saving.walletAddress,
+        assetType: saving.assetType,
+        totalDeposited: saving.totalDeposited.toString(),
+        totalWithdrawn: saving.totalWithdrawn.toString(),
+        currentBalance: saving.currentBalance.toString(),
+        createdAt: saving.createdAt,
+      })
+    } catch (dbError: any) {
+      console.error('❌ Database error:', dbError.message)
+      
+      // Check if it's a connection error
+      if (dbError.code === 'P1000' || dbError.message.includes('connect')) {
+        return res.status(503).json({ 
+          error: 'Database connection failed',
+          message: 'Could not connect to database'
+        })
+      }
+      
+      // Check if it's a missing table error
+      if (dbError.code === 'P2021') {
+        return res.status(503).json({ 
+          error: 'Database schema not ready',
+          message: 'Savings tables have not been created. Run migrations.'
+        })
+      }
+      
+      throw dbError
+    }
   } catch (error: any) {
     console.error('❌ Init savings error:', error.message || error)
     res.status(500).json({ error: error.message || 'Failed to initialize savings account' })
