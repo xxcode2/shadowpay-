@@ -74,7 +74,32 @@ import savingsRouter from './routes/savings.js'
 
 const app = express()
 
-// ✅ STEP 1: CORS MUST BE FIRST - BEFORE ALL MIDDLEWARE
+// ✅ STEP 0: HANDLE ALL OPTIONS (PREFLIGHT) REQUESTS IMMEDIATELY
+// This MUST be the VERY FIRST middleware - before ANYTHING else
+app.options('*', (req, res) => {
+  const origin = req.headers.origin as string
+  const allowedOrigins = [
+    'https://shadowpayy.vercel.app',
+    'https://shadowpay.vercel.app',
+    'http://localhost:5173',
+    'http://localhost:3000',
+  ]
+
+  if (origin && allowedOrigins.includes(origin)) {
+    res.header('Access-Control-Allow-Origin', origin)
+  } else {
+    res.header('Access-Control-Allow-Origin', '*')
+  }
+
+  res.header('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, OPTIONS')
+  res.header('Access-Control-Allow-Headers', 'Content-Type, Authorization')
+  res.header('Access-Control-Max-Age', '86400')
+
+  // Immediately return 200 for preflight
+  return res.status(200).end()
+})
+
+// ✅ STEP 1: CORS HEADERS FOR ALL OTHER REQUESTS
 const corsOptions = {
   origin: [
     'https://shadowpayy.vercel.app',
@@ -85,41 +110,35 @@ const corsOptions = {
   methods: ['GET', 'POST', 'OPTIONS', 'PUT', 'DELETE'],
   allowedHeaders: ['Content-Type', 'Authorization'],
   credentials: false,
-  maxAge: 86400, // 24 hours
+  maxAge: 86400,
 }
 
-// Custom CORS handler
+app.use(cors(corsOptions))
+
+// Add CORS headers to all responses
 app.use((req, res, next) => {
-  const origin = req.headers.origin
+  const origin = req.headers.origin as string
   if (origin && corsOptions.origin.includes(origin)) {
     res.header('Access-Control-Allow-Origin', origin)
-    res.header('Access-Control-Allow-Methods', corsOptions.methods.join(','))
-    res.header('Access-Control-Allow-Headers', corsOptions.allowedHeaders.join(','))
-    res.header('Access-Control-Max-Age', String(corsOptions.maxAge))
   }
-  
-  // Handle preflight
-  if (req.method === 'OPTIONS') {
-    return res.status(200).end()
-  }
-  
   next()
 })
-
-// Also use cors package as backup
-app.use(cors(corsOptions))
-app.options('*', cors(corsOptions))
 
 // ✅ STEP 2: BODY PARSING
 app.use(express.json())
 
-// ✅ STEP 3: DATABASE AVAILABILITY CHECK MIDDLEWARE
+// ✅ STEP 3: DATABASE AVAILABILITY CHECK MIDDLEWARE (skip OPTIONS - already handled above)
 const isDatabaseAvailable = () => !!process.env.DATABASE_URL
 
 app.use('/api/savings', (req, res, next) => {
+  // OPTIONS already handled in Step 0, but double-check
+  if (req.method === 'OPTIONS') {
+    return res.status(200).end()
+  }
+
   if (!isDatabaseAvailable()) {
     console.warn(`⚠️  Request to ${req.path} but DATABASE_URL not set`)
-    return res.status(503).json({ 
+    return res.status(503).json({
       error: 'Database service unavailable',
       message: 'DATABASE_URL environment variable not configured'
     })
