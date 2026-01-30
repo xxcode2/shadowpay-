@@ -65,6 +65,7 @@ import depositRouter from './routes/deposit.js'
 import claimLinkRouter from './routes/claimLink.js'
 import withdrawRouter from './routes/withdraw.js'
 import linkRouter from './routes/link.js'
+import linksRouter from './routes/links.js'
 import historyRouter from './routes/history.js'
 import configRouter from './routes/config.js'
 import healthRouter from './routes/health.js'
@@ -106,6 +107,7 @@ app.use('/api/deposit', depositRouter)
 app.use('/api/claim-link', claimLinkRouter)
 app.use('/api/withdraw', withdrawRouter)
 app.use('/api/link', linkRouter)
+app.use('/api/links', linksRouter)
 app.use('/api/history', historyRouter)
 app.use('/api/config', configRouter)
 app.use('/api/health', healthRouter)
