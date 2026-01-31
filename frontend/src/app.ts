@@ -352,7 +352,7 @@ export class App {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          paymentId,
+          linkId: paymentId,  // Backend expects 'linkId', not 'paymentId'
           recipientAddress: this.walletAddress,
         }),
       })
