@@ -2,7 +2,6 @@ import { Router, Request, Response } from 'express'
 import { PublicKey, Keypair, LAMPORTS_PER_SOL } from '@solana/web3.js'
 import prisma from '../lib/prisma.js'
 import crypto from 'crypto'
-import { getPrivacyCashClient, executeDeposit } from '../services/privacyCash.js'
 
 const router = Router()
 
@@ -138,8 +137,9 @@ router.post('/', async (req: Request, res: Response) => {
 /**
  * POST /api/private-send/confirm
  *
- * Confirm that the sender's deposit transaction was successful.
- * This updates the payment status and triggers the privacy deposit.
+ * Confirm that the user successfully deposited to Privacy Cash.
+ * The deposit was already completed by the frontend using the user's keys.
+ * This endpoint just marks the payment as confirmed in our database.
  */
 router.post('/confirm', async (req: Request, res: Response) => {
   try {
@@ -155,9 +155,9 @@ router.post('/confirm', async (req: Request, res: Response) => {
 
     console.log(`\n✅ CONFIRMING PRIVATE SEND`)
     console.log(`   Payment ID: ${paymentId}`)
-    console.log(`   Deposit TX: ${depositTx}`)
+    console.log(`   Privacy Cash TX: ${depositTx}`)
 
-    // Get payment details
+    // Get payment details to verify it exists
     const payment = await prisma.paymentLink.findUnique({
       where: { id: paymentId },
     })
@@ -166,11 +166,8 @@ router.post('/confirm', async (req: Request, res: Response) => {
       return res.status(404).json({ error: 'Payment not found' })
     }
 
-    const lamports = Number(payment.lamports)
-    const amountSOL = lamports / LAMPORTS_PER_SOL
-
-    // Step 1: Update database with deposit tx
-    console.log(`   📝 Recording deposit transaction...`)
+    // Update database to mark as confirmed
+    console.log(`   📝 Recording Privacy Cash deposit...`)
     await prisma.paymentLink.update({
       where: { id: paymentId },
       data: {
@@ -179,7 +176,7 @@ router.post('/confirm', async (req: Request, res: Response) => {
       },
     })
 
-    // Update transaction record to mark as pending privacy deposit
+    // Update transaction record to confirmed status
     await prisma.transaction.updateMany({
       where: {
         linkId: paymentId,
@@ -187,67 +184,19 @@ router.post('/confirm', async (req: Request, res: Response) => {
       },
       data: {
         type: 'deposit',
-        status: 'pending_privacy_deposit',
+        status: 'confirmed',
         transactionHash: depositTx,
       },
     })
 
-    // Step 2: Execute Privacy Cash deposit with operator keypair
-    console.log(`   🔐 Depositing ${amountSOL} SOL to Privacy Cash pool...`)
-    
-    try {
-      const pc = getPrivacyCashClient()
-      const depositResult = await executeDeposit(pc, lamports)
+    console.log(`✅ Payment confirmed - recipient can now withdraw from Privacy Cash pool`)
 
-      console.log(`   ✅ Privacy Cash deposit successful`)
-      console.log(`      TX: ${depositResult.tx.slice(0, 20)}...`)
-      console.log(`      Amount: ${depositResult.sol} SOL`)
-
-      // Mark transaction as confirmed now that it's in Privacy Cash
-      await prisma.transaction.updateMany({
-        where: {
-          linkId: paymentId,
-          type: 'deposit',
-        },
-        data: {
-          status: 'confirmed',
-        },
-      })
-
-      console.log(`✅ Payment confirmed and ready for recipient`)
-
-      return res.status(200).json({
-        success: true,
-        paymentId,
-        depositTx,
-        privacyCashTx: depositResult.tx,
-        amount: amountSOL,
-      })
-
-    } catch (privacyCashErr: any) {
-      console.warn(`   ⚠️  Privacy Cash deposit failed, but SOL transfer confirmed`)
-      console.warn(`      Error: ${privacyCashErr.message}`)
-      
-      // Mark as failed privacy deposit - user can retry
-      await prisma.transaction.updateMany({
-        where: {
-          linkId: paymentId,
-          type: 'deposit',
-          status: 'pending_privacy_deposit',
-        },
-        data: {
-          status: 'privacy_deposit_failed',
-        },
-      })
-
-      // Still return success for the SOL transfer, but note the Privacy Cash issue
-      return res.status(200).json({
-        success: true,
-        paymentId,
-        depositTx,
-        warning: `SOL transferred but Privacy Cash deposit failed. User may need to retry. Error: ${privacyCashErr.message}`,
-      })
-    }
+    return res.status(200).json({
+      success: true,
+      paymentId,
+      depositTx,
+      message: 'Payment confirmed and ready for withdrawal',
+    })
 
   } catch (err: any) {
     console.error('❌ Confirm error:', err.message)

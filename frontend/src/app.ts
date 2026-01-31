@@ -167,8 +167,8 @@ export class App {
     this.showLoading('Preparing private payment...')
 
     try {
-      // Step 1: Call backend to create private payment
-      this.updateLoading('Creating shielded UTXO...')
+      // Step 1: Call backend to create private payment record
+      this.updateLoading('Creating payment record...')
 
       const createRes = await fetch(`${BACKEND_URL}/api/private-send`, {
         method: 'POST',
@@ -185,41 +185,24 @@ export class App {
         throw new Error(err.error || 'Failed to create private payment')
       }
 
-      const { paymentId, operatorAddress, lamports } = await createRes.json()
+      const { paymentId, lamports } = await createRes.json()
 
-      // Step 2: User signs transaction to send SOL to operator
-      this.updateLoading('Please approve transaction in Phantom...')
-
-      const fromPubkey = new PublicKey(this.walletAddress)
-      const toPubkey = new PublicKey(operatorAddress)
-
-      const transaction = new Transaction().add(
-        SystemProgram.transfer({
-          fromPubkey,
-          toPubkey,
-          lamports: BigInt(lamports),
-        })
+      // Step 2: Deposit to Privacy Cash with user's keys (non-custodial)
+      this.updateLoading('Depositing to Privacy Cash...')
+      
+      // Import Privacy Cash SDK directly
+      const { executeNonCustodialDeposit } = await import('./flows/depositFlow.js')
+      
+      const depositTxSig = await executeNonCustodialDeposit(
+        {
+          linkId: paymentId,
+          amount: amount.toString(),
+          publicKey: this.walletAddress,
+        },
+        window.solana
       )
 
-      const { blockhash, lastValidBlockHeight } = await this.connection.getLatestBlockhash()
-      transaction.recentBlockhash = blockhash
-      transaction.feePayer = fromPubkey
-
-      const signedTx = await window.solana.signTransaction(transaction)
-
-      // Step 3: Send transaction
-      this.updateLoading('Sending transaction...')
-      const txSignature = await this.connection.sendRawTransaction(signedTx.serialize())
-
-      // Step 4: Wait for confirmation
-      this.updateLoading('Confirming transaction...')
-      await this.connection.confirmTransaction({
-        blockhash,
-        lastValidBlockHeight,
-        signature: txSignature,
-      })
-
-      // Step 5: Notify backend of successful deposit
+      // Step 3: Notify backend of successful Privacy Cash deposit
       this.updateLoading('Finalizing private payment...')
 
       const confirmRes = await fetch(`${BACKEND_URL}/api/private-send/confirm`, {
@@ -227,12 +210,12 @@ export class App {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           paymentId,
-          depositTx: txSignature,
+          depositTx: depositTxSig,
         }),
       })
 
       if (!confirmRes.ok) {
-        console.warn('Failed to confirm with backend, but transaction succeeded')
+        console.warn('Failed to confirm with backend, but deposit succeeded on Privacy Cash')
       }
 
       // Success!
