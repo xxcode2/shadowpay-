@@ -6,8 +6,8 @@
   "scripts": {
     "dev": "node --import tsx src/server.ts",
     "build": "prisma generate && tsc",
-    "fix-db": "node fix-db.js",
-    "ensure-migrations": "node ensure-migrations.js",
+    "fix-db": "timeout 10 node fix-db.js || true",
+    "ensure-migrations": "node safe-migrations.js",
     "start": "npm run fix-db && npm run ensure-migrations && node dist/server.js",
     "check-operator-balance": "node check-operator-balance.js"
   },

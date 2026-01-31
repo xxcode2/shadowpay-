@@ -18,29 +18,44 @@ const pool = new Pool({ connectionString: DATABASE_URL });
 
 async function fixDatabase() {
   let client;
+  const startTime = Date.now();
   try {
-    client = await pool.connect();
-    console.log('🔧 Attempting to fix database schema...');
+    // Set a 15 second timeout for DB operations
+    const timeout = new Promise((_, reject) =>
+      setTimeout(() => reject(new Error('Database fix timeout after 15s')), 15000)
+    );
     
-    // Make depositTx nullable - ignore errors if already nullable
-    try {
-      await client.query(`
-        ALTER TABLE "payment_links" ALTER COLUMN "depositTx" DROP NOT NULL
-      `);
-      console.log('✅ depositTx set to nullable');
-    } catch (alterErr) {
-      if (alterErr.code === '42P16') {
-        console.log('✅ depositTx already nullable');
-      } else {
-        console.warn('⚠️ Could not modify depositTx:', alterErr.message);
+    const dbPromise = (async () => {
+      client = await pool.connect();
+      console.log('🔧 Attempting to fix database schema...');
+      
+      // Make depositTx nullable - ignore errors if already nullable
+      try {
+        await client.query(`
+          ALTER TABLE "payment_links" ALTER COLUMN "depositTx" DROP NOT NULL
+        `);
+        console.log('✅ depositTx set to nullable');
+      } catch (alterErr) {
+        if (alterErr.code === '42P16') {
+          console.log('✅ depositTx already nullable');
+        } else {
+          console.warn('⚠️ Could not modify depositTx:', alterErr.message);
+        }
       }
-    }
+    })();
+    
+    await Promise.race([dbPromise, timeout]);
   } catch (err) {
-    console.error('⚠️ DB connection failed:', err.message);
+    if (err.message.includes('timeout')) {
+      console.warn('⚠️ Database fix operation timed out - continuing anyway');
+    } else {
+      console.error('⚠️ DB connection failed:', err.message);
+    }
   } finally {
     if (client) client.release();
     await pool.end();
-    console.log('✅ DB fix complete');
+    const duration = Date.now() - startTime;
+    console.log(`✅ DB fix complete (${duration}ms)`);
   }
 }
 

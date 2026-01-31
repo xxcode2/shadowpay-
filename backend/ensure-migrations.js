@@ -23,17 +23,28 @@ console.log('═'.repeat(60));
 
 try {
   console.log('📍 Database URL configured:', DATABASE_URL.split('@')[1] ? 'YES' : 'NO');
-  console.log('\n🔄 Running: prisma migrate deploy');
+  console.log('\n🔄 Running: prisma migrate deploy (timeout: 30s)');
   
-  execSync('npx prisma migrate deploy', {
-    stdio: 'inherit',
-    env: {
-      ...process.env,
-      DATABASE_URL,
-    },
-  });
-  
-  console.log('\n✅ Migrations completed successfully!');
+  // Run with 30 second timeout to prevent hanging
+  const startTime = Date.now();
+  try {
+    execSync('npx prisma migrate deploy', {
+      stdio: 'inherit',
+      env: {
+        ...process.env,
+        DATABASE_URL,
+      },
+      timeout: 30000, // 30 seconds
+    });
+    const duration = Date.now() - startTime;
+    console.log(`\n✅ Migrations completed successfully! (${duration}ms)`);
+  } catch (timeoutErr) {
+    if (timeoutErr.killed) {
+      console.warn('\n⚠️  Migrations timed out after 30 seconds - continuing anyway');
+    } else {
+      throw timeoutErr;
+    }
+  }
   console.log('═'.repeat(60));
   process.exit(0);
   
