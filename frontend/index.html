@@ -78,7 +78,7 @@
      <div class="flex items-center justify-between">
       <div class="flex items-center gap-3">
        <div class="flex-shrink-0 w-10 h-10 rounded-lg overflow-hidden bg-gray-800">
-        <img src="/assets/images/pay.png" alt="ShadowPay" class="w-full h-full object-contain">
+        <img src="/assets/pay.png" alt="ShadowPay" class="w-full h-full object-contain">
        </div>
        <div>
         <h1 class="text-xl font-bold text-white">ShadowPay</h1>
@@ -125,33 +125,6 @@
        <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
        About
       </button>
-     </div>
-    </div>
-     <div class="p-6 rounded-lg bg-blue-900/15 border border-blue-700/40">
-      <h3 class="text-lg font-bold text-white mb-4 flex items-center gap-2">
-       <svg class="w-5 h-5 text-blue-400" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
-       Why Trust ShadowPay?
-      </h3>
-      <ul class="space-y-3 text-sm text-gray-300">
-       <li class="flex gap-2"><span class="text-green-400">✓</span> Open-source Privacy Cash integration - no proprietary black boxes</li>
-       <li class="flex gap-2"><span class="text-green-400">✓</span> Non-custodial architecture - you maintain complete control</li>
-       <li class="flex gap-2"><span class="text-green-400">✓</span> Solana network security - immutable on-chain verification</li>
-       <li class="flex gap-2"><span class="text-green-400">✓</span> Transparent verification - all transactions are auditable</li>
-       <li class="flex gap-2"><span class="text-green-400">✓</span> No tracking - we don't know your identity or activity</li>
-      </ul>
-     </div>
-     <div class="p-6 rounded-lg bg-purple-900/15 border border-purple-700/40">
-      <h3 class="text-lg font-bold text-white mb-4 flex items-center gap-2">
-       <svg class="w-5 h-5 text-purple-400" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
-       How Privacy Works
-      </h3>
-      <ol class="space-y-3 text-sm text-gray-300">
-       <li><strong class="text-white">1. Send:</strong> Your payment is encrypted with recipient's public key</li>
-       <li><strong class="text-white">2. ZK Proof:</strong> We prove you own the funds without revealing amount</li>
-       <li><strong class="text-white">3. Deposit:</strong> Funds enter Privacy Cash shielded pool on Solana</li>
-       <li><strong class="text-white">4. Receive:</strong> Recipient decrypts with their private key (only they can)</li>
-       <li><strong class="text-white">5. Withdraw:</strong> Recipient can withdraw to their wallet anytime</li>
-      </ol>
      </div>
     </div>
 
@@ -239,64 +212,120 @@
 
     <!-- About Section -->
     <div id="section-about" class="section-content hidden">
-     <div class="max-w-5xl mx-auto">
-      <!-- What is ShadowPay -->
+     <div class="max-w-4xl mx-auto">
+      <div class="text-center mb-12">
+       <h2 class="text-4xl font-bold text-white mb-3">About ShadowPay</h2>
+       <p class="text-gray-400">Learn how ShadowPay protects your financial privacy</p>
+      </div>
+
+      <!-- What is ShadowPay Section -->
       <div class="mb-16">
-       <div class="text-center mb-10">
-        <h2 class="text-3xl font-bold text-white mb-2">What is ShadowPay?</h2>
-        <p class="text-gray-400">Private payment infrastructure built on Solana with zero-knowledge proofs</p>
-       </div>
-       <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 mb-12">
-        <div class="p-4 rounded-lg bg-gray-900/50 border border-gray-700/50">
-         <div class="text-2xl mb-3">🔐</div>
-         <h3 class="text-white font-semibold mb-2">Zero-Knowledge Privacy</h3>
-         <p class="text-sm text-gray-400">Transactions are private by default. No third party knows who sent to whom.</p>
+       <h3 class="text-2xl font-bold text-white mb-8 text-center">What is ShadowPay?</h3>
+       <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+        <div class="glass-card p-6 rounded-xl border border-gray-700/50 hover:border-purple-500/50 transition-colors">
+         <div class="text-3xl mb-3">🔐</div>
+         <h4 class="text-lg font-bold text-white mb-2">Private Payments</h4>
+         <p class="text-gray-400 text-sm">Send SOL without revealing sender, recipient, or amount on the blockchain. Only you and your recipient know the transaction happened.</p>
         </div>
-        <div class="p-4 rounded-lg bg-gray-900/50 border border-gray-700/50">
-         <div class="text-2xl mb-3">⚡</div>
-         <h3 class="text-white font-semibold mb-2">Solana-Powered</h3>
-         <p class="text-sm text-gray-400">Built on Solana blockchain for fast, low-cost private transfers.</p>
+        <div class="glass-card p-6 rounded-xl border border-gray-700/50 hover:border-purple-500/50 transition-colors">
+         <div class="text-3xl mb-3">⚡</div>
+         <h4 class="text-lg font-bold text-white mb-2">Fast & Cheap</h4>
+         <p class="text-gray-400 text-sm">Solana's blockchain is incredibly fast and cost-effective. Send private payments in seconds for just a few cents.</p>
         </div>
-        <div class="p-4 rounded-lg bg-gray-900/50 border border-gray-700/50">
-         <div class="text-2xl mb-3">🛡️</div>
-         <h3 class="text-white font-semibold mb-2">Non-Custodial</h3>
-         <p class="text-sm text-gray-400">You control your funds. We never hold or access your private keys.</p>
+        <div class="glass-card p-6 rounded-xl border border-gray-700/50 hover:border-purple-500/50 transition-colors">
+         <div class="text-3xl mb-3">🎯</div>
+         <h4 class="text-lg font-bold text-white mb-2">Total Control</h4>
+         <p class="text-gray-400 text-sm">Your private key never leaves your device. You maintain complete control over your funds and transaction data.</p>
         </div>
-        <div class="p-4 rounded-lg bg-gray-900/50 border border-gray-700/50">
-         <div class="text-2xl mb-3">✓</div>
-         <h3 class="text-white font-semibold mb-2">Open Source</h3>
-         <p class="text-sm text-gray-400">Auditable code. Built on Privacy Cash SDK. Transparent & trustworthy.</p>
+        <div class="glass-card p-6 rounded-xl border border-gray-700/50 hover:border-purple-500/50 transition-colors">
+         <div class="text-3xl mb-3">🔓</div>
+         <h4 class="text-lg font-bold text-white mb-2">Open Source</h4>
+         <p class="text-gray-400 text-sm">ShadowPay is built on open-source technology. Verify the code yourself and audit our implementation.</p>
         </div>
        </div>
       </div>
 
-      <!-- Trust & Privacy Section -->
-      <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
-       <div class="p-6 rounded-lg bg-blue-900/15 border border-blue-700/40">
-        <h3 class="text-lg font-bold text-white mb-4 flex items-center gap-2">
-         <svg class="w-5 h-5 text-blue-400" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
-         Why Trust ShadowPay?
-        </h3>
-        <ul class="space-y-3 text-sm text-gray-300">
-         <li class="flex gap-2"><span class="text-green-400">✓</span> Open-source Privacy Cash integration - no proprietary black boxes</li>
-         <li class="flex gap-2"><span class="text-green-400">✓</span> Non-custodial architecture - you maintain complete control</li>
-         <li class="flex gap-2"><span class="text-green-400">✓</span> Solana network security - immutable on-chain verification</li>
-         <li class="flex gap-2"><span class="text-green-400">✓</span> Transparent verification - all transactions are auditable</li>
-         <li class="flex gap-2"><span class="text-green-400">✓</span> No tracking - we don't know your identity or activity</li>
-        </ul>
+      <!-- Why Trust ShadowPay Section -->
+      <div class="mb-16">
+       <h3 class="text-2xl font-bold text-white mb-8 text-center">Why Trust ShadowPay</h3>
+       <div class="space-y-4">
+        <div class="flex gap-4 p-4 rounded-lg glass-card border border-gray-700/50">
+         <div class="text-2xl flex-shrink-0">✅</div>
+         <div>
+          <h4 class="text-white font-semibold mb-1">Zero-Knowledge Proofs</h4>
+          <p class="text-gray-400 text-sm">Uses battle-tested ZK cryptography to prove transaction validity without revealing transaction details.</p>
+         </div>
+        </div>
+        <div class="flex gap-4 p-4 rounded-lg glass-card border border-gray-700/50">
+         <div class="text-2xl flex-shrink-0">✅</div>
+         <div>
+          <h4 class="text-white font-semibold mb-1">Built on Solana</h4>
+          <p class="text-gray-400 text-sm">Leverages Solana's secure, decentralized blockchain. No centralized servers storing your data.</p>
+         </div>
+        </div>
+        <div class="flex gap-4 p-4 rounded-lg glass-card border border-gray-700/50">
+         <div class="text-2xl flex-shrink-0">✅</div>
+         <div>
+          <h4 class="text-white font-semibold mb-1">Non-Custodial</h4>
+          <p class="text-gray-400 text-sm">ShadowPay never holds your funds. You control your private keys and maintain custody at all times.</p>
+         </div>
+        </div>
+        <div class="flex gap-4 p-4 rounded-lg glass-card border border-gray-700/50">
+         <div class="text-2xl flex-shrink-0">✅</div>
+         <div>
+          <h4 class="text-white font-semibold mb-1">Privacy by Design</h4>
+          <p class="text-gray-400 text-sm">Privacy isn't an afterthought—it's the core feature. Every transaction is private by default.</p>
+         </div>
+        </div>
+        <div class="flex gap-4 p-4 rounded-lg glass-card border border-gray-700/50">
+         <div class="text-2xl flex-shrink-0">✅</div>
+         <div>
+          <h4 class="text-white font-semibold mb-1">Developer Community</h4>
+          <p class="text-gray-400 text-sm">Built by developers, for developers. Part of the open Privacy Cash ecosystem.</p>
+         </div>
+        </div>
        </div>
-       <div class="p-6 rounded-lg bg-purple-900/15 border border-purple-700/40">
-        <h3 class="text-lg font-bold text-white mb-4 flex items-center gap-2">
-         <svg class="w-5 h-5 text-purple-400" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
-         How Privacy Works
-        </h3>
-        <ol class="space-y-3 text-sm text-gray-300">
-         <li><strong class="text-white">1. Send:</strong> Your payment is encrypted with recipient's public key</li>
-         <li><strong class="text-white">2. ZK Proof:</strong> We prove you own the funds without revealing amount</li>
-         <li><strong class="text-white">3. Deposit:</strong> Funds enter Privacy Cash shielded pool on Solana</li>
-         <li><strong class="text-white">4. Receive:</strong> Recipient decrypts with their private key (only they can)</li>
-         <li><strong class="text-white">5. Withdraw:</strong> Recipient can withdraw to their wallet anytime</li>
-        </ol>
+      </div>
+
+      <!-- How Privacy Works Section -->
+      <div>
+       <h3 class="text-2xl font-bold text-white mb-8 text-center">How Privacy Works</h3>
+       <div class="space-y-4">
+        <div class="flex gap-4 p-4 rounded-lg glass-card border border-gray-700/50">
+         <div class="flex-shrink-0 w-10 h-10 rounded-full bg-purple-600 flex items-center justify-center text-white font-bold text-sm">1</div>
+         <div>
+          <h4 class="text-white font-semibold mb-1">Create Shielded Pool Entry</h4>
+          <p class="text-gray-400 text-sm">Deposit funds into Privacy Cash shielded pool. Your public address and amount are encrypted.</p>
+         </div>
+        </div>
+        <div class="flex gap-4 p-4 rounded-lg glass-card border border-gray-700/50">
+         <div class="flex-shrink-0 w-10 h-10 rounded-full bg-purple-600 flex items-center justify-center text-white font-bold text-sm">2</div>
+         <div>
+          <h4 class="text-white font-semibold mb-1">Generate Zero-Knowledge Proof</h4>
+          <p class="text-gray-400 text-sm">Your wallet generates a cryptographic proof that you have funds, without revealing your identity or amount.</p>
+         </div>
+        </div>
+        <div class="flex gap-4 p-4 rounded-lg glass-card border border-gray-700/50">
+         <div class="flex-shrink-0 w-10 h-10 rounded-full bg-purple-600 flex items-center justify-center text-white font-bold text-sm">3</div>
+         <div>
+          <h4 class="text-white font-semibold mb-1">Obfuscate Transaction Details</h4>
+          <p class="text-gray-400 text-sm">Your recipient's address is encrypted. No one can link sender to receiver on the blockchain.</p>
+         </div>
+        </div>
+        <div class="flex gap-4 p-4 rounded-lg glass-card border border-gray-700/50">
+         <div class="flex-shrink-0 w-10 h-10 rounded-full bg-purple-600 flex items-center justify-center text-white font-bold text-sm">4</div>
+         <div>
+          <h4 class="text-white font-semibold mb-1">Submit to Blockchain</h4>
+          <p class="text-gray-400 text-sm">Transaction is validated by zero-knowledge proof without exposing sender, receiver, or amount.</p>
+         </div>
+        </div>
+        <div class="flex gap-4 p-4 rounded-lg glass-card border border-gray-700/50">
+         <div class="flex-shrink-0 w-10 h-10 rounded-full bg-purple-600 flex items-center justify-center text-white font-bold text-sm">5</div>
+         <div>
+          <h4 class="text-white font-semibold mb-1">Recipient Decrypts Privately</h4>
+          <p class="text-gray-400 text-sm">Recipient uses their private key to decrypt and claim funds. Only they can access their payment.</p>
+         </div>
+        </div>
        </div>
       </div>
      </div>

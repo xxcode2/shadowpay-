@@ -76,9 +76,6 @@ export class App {
     document.getElementById('close-success-modal')?.addEventListener('click', () => {
       document.getElementById('success-modal')?.classList.add('hidden')
     })
-
-    // Mode tabs
-    document.getElementById('mode-about')?.addEventListener('click', () => this.switchMode('about'))
   }
 
   private switchMode(mode: 'send' | 'receive' | 'history' | 'about') {
