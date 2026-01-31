@@ -9,6 +9,7 @@ export interface DepositRequest {
   amount: string
   publicKey: string
   recipientAddress?: string  // ✅ Recipient wallet - Privacy Cash binds UTXO to them
+  token?: string  // ✅ Token type: "SOL", "USDC", "USDT", etc. (defaults to "SOL")
 }
 
 /**

@@ -12,6 +12,7 @@ export interface DepositRequest {
   linkId: string
   amount: string
   publicKey: string
+  token?: string  // ✅ Token type: "SOL", "USDC", "USDT", etc.
 }
 
 /**
