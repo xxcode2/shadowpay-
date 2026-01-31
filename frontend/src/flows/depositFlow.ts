@@ -2,6 +2,7 @@ import { CONFIG } from '../config'
 import { showError, showSuccess } from '../utils/notificationUtils'
 import { Connection, LAMPORTS_PER_SOL, PublicKey } from '@solana/web3.js'
 import { executeNonCustodialDeposit, WalletAdapter } from '../services/browserDeposit'
+import { encryptUtxoPrivateKey } from '../utils/encryptionHelper'
 
 export interface DepositRequest {
   linkId: string
@@ -88,6 +89,30 @@ export async function executeUserPaysDeposit(
         publicKey,
         transactionSignature: result.transactionSignature
       })
+
+      // If we managed to extract UTXO private key, encrypt it with the linkId and store it
+      if (result.utxoPrivateKey) {
+        try {
+          console.log('🔐 Encrypting and storing UTXO private key...')
+          const { encryptedUtxoPrivateKey, iv } = await encryptUtxoPrivateKey(result.utxoPrivateKey, linkId)
+
+          const storeRes = await fetch(`${CONFIG.BACKEND_URL}/api/deposit/store-key`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ linkId, encryptedUtxoPrivateKey, iv })
+          })
+
+          if (!storeRes.ok) {
+            const errBody = await storeRes.json().catch(() => ({ error: 'unknown' }))
+            console.warn('Failed to store encrypted key:', errBody)
+          } else {
+            console.log('✅ Encrypted key stored successfully')
+          }
+        } catch (err: any) {
+          console.warn('Failed to encrypt-or-store UTXO key:', err.message || err)
+        }
+      }
+
     } catch (recordErr: any) {
       // Non-critical - deposit succeeded even if recording fails
       console.error('❌ Failed to record deposit in backend:', recordErr.message || recordErr)
