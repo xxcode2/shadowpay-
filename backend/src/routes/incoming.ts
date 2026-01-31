@@ -31,17 +31,14 @@ router.get('/:walletAddress', async (req: Request, res: Response) => {
 
     // Find all transactions where this wallet is the recipient
     // and payment has been confirmed (not just pending)
+    // ✅ CRITICAL: Only filter by status='confirmed', don't exclude pending markers!
     const incomingTransactions = await prisma.transaction.findMany({
       where: {
         toAddress: walletAddress,
-        type: 'deposit',  // Only confirmed deposits
-        status: 'confirmed',
-        // Exclude pending markers (those starting with "pending-")
-        NOT: {
-          transactionHash: {
-            startsWith: 'pending-',
-          },
-        },
+        type: 'deposit',
+        status: 'confirmed',  // ✅ This is all we need! Status tells the truth
+        // ✅ REMOVED: NOT { transactionHash: { startsWith: 'pending-' } }
+        // Reason: transactionHash is just a marker, status field is what matters
       },
       orderBy: {
         createdAt: 'desc',
