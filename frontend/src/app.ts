@@ -191,7 +191,7 @@ export class App {
       // This creates UTXOs that ONLY the recipient can decrypt
       this.updateLoading('Depositing to Privacy Cash...')
       
-      // Import deposit flow
+      // Import deposit flow - using Privacy Cash SDK with recipient encryption key binding
       const { executeUserPaysDeposit } = await import('./flows/depositFlow.js')
       
       const depositTxSig = await executeUserPaysDeposit(
