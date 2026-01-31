@@ -71,19 +71,8 @@ import configRouter from './routes/config.js'
 import healthRouter from './routes/health.js'
 import tokensRouter from './routes/tokens.js'
 
-// Dynamic import for savings router - allows server to start even if it fails
-let savingsRouter: any = null
-let savingsLoadError: string | null = null
-
-try {
-  const savingsModule = await import('./routes/savings.js')
-  savingsRouter = savingsModule.default
-  console.log('✅ Savings router loaded successfully')
-} catch (err: any) {
-  savingsLoadError = err.message
-  console.error('❌ Failed to load savings router:', err.message)
-  console.error('   Savings API will be unavailable, but other routes will work')
-}
+// NOTE: Savings feature temporarily disabled - focusing on core send/withdraw functionality
+// Savings will be added back after core features are stable
 
 const app = express()
 
@@ -140,24 +129,8 @@ app.use((req, res, next) => {
 // ✅ STEP 2: BODY PARSING
 app.use(express.json())
 
-// ✅ STEP 3: DATABASE AVAILABILITY CHECK MIDDLEWARE (skip OPTIONS - already handled above)
+// ✅ STEP 3: DATABASE AVAILABILITY CHECK
 const isDatabaseAvailable = () => !!process.env.DATABASE_URL
-
-app.use('/api/savings', (req, res, next) => {
-  // OPTIONS already handled in Step 0, but double-check
-  if (req.method === 'OPTIONS') {
-    return res.status(200).end()
-  }
-
-  if (!isDatabaseAvailable()) {
-    console.warn(`⚠️  Request to ${req.path} but DATABASE_URL not set`)
-    return res.status(503).json({
-      error: 'Database service unavailable',
-      message: 'DATABASE_URL environment variable not configured'
-    })
-  }
-  next()
-})
 
 // ✅ STEP 3.5: HEALTH CHECK
 app.get('/health', (_req: express.Request, res: express.Response) => {
@@ -181,21 +154,8 @@ app.use('/api/config', configRouter)
 app.use('/api/health', healthRouter)
 app.use('/api/tokens', tokensRouter)
 
-// Mount savings router only if it loaded successfully
-if (savingsRouter) {
-  app.use('/api/savings', savingsRouter)
-  console.log('✅ Savings routes mounted at /api/savings')
-} else {
-  // Fallback route if savings failed to load
-  app.use('/api/savings', (_req, res) => {
-    res.status(503).json({
-      error: 'Savings service unavailable',
-      message: savingsLoadError || 'Savings router failed to load',
-      hint: 'Check server logs for details'
-    })
-  })
-  console.warn('⚠️  Savings routes unavailable - using fallback error handler')
-}
+// NOTE: Savings routes temporarily disabled
+// Use /api/create-link, /api/deposit, /api/withdraw for core functionality
 
 // ✅ STEP 5: 404 HANDLER - Must come AFTER routes
 app.use((_req: express.Request, res: express.Response) => {

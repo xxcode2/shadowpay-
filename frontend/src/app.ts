@@ -1,7 +1,6 @@
 /// <reference types="vite/client" />
 
-import { Connection } from '@solana/web3.js'
-import { SavingsSDK } from './services/savingsSDK.js'
+import { Connection, PublicKey, LAMPORTS_PER_SOL, Transaction, SystemProgram } from '@solana/web3.js'
 
 const BACKEND_URL =
   import.meta.env.VITE_BACKEND_URL ||
@@ -19,6 +18,11 @@ declare global {
 export class App {
   private walletAddress: string | null = null
   private bound: boolean = false
+  private connection: Connection
+
+  constructor() {
+    this.connection = new Connection(SOLANA_RPC_URL, 'confirmed')
+  }
 
   init() {
     if (this.bound) return
@@ -28,10 +32,7 @@ export class App {
   }
 
   private bindEvents() {
-    // Tab switching
-    document.getElementById('mode-savings')?.addEventListener('click', () => {
-      this.switchMode('savings')
-    })
+    // Tab switching (no savings tab anymore)
     document.getElementById('mode-send')?.addEventListener('click', () => {
       this.switchMode('send')
     })
@@ -52,14 +53,27 @@ export class App {
 
     // Forms
     document.getElementById('send-form')?.addEventListener('submit', (e) => {
-      this.handleSend(e)
+      this.handleCreateLink(e)
     })
     document.getElementById('withdraw-form')?.addEventListener('submit', (e) => {
-      this.handleWithdraw(e)
+      this.handleClaimLink(e)
+    })
+
+    // Link preview on input change
+    document.getElementById('claim-link-input')?.addEventListener('blur', () => {
+      this.previewLink()
+    })
+
+    // Success card handlers
+    document.getElementById('close-success-card')?.addEventListener('click', () => {
+      document.getElementById('success-card')?.classList.add('hidden')
+    })
+    document.getElementById('copy-success-link-btn')?.addEventListener('click', () => {
+      this.copySuccessLink()
     })
   }
 
-  private switchMode(mode: 'savings' | 'send' | 'withdraw' | 'profile') {
+  private switchMode(mode: 'send' | 'withdraw' | 'profile') {
     // Update active button
     document.querySelectorAll('.mode-btn').forEach(btn => {
       btn.classList.remove('bg-gradient-to-r', 'from-purple-600', 'to-blue-600', 'text-white')
@@ -68,9 +82,9 @@ export class App {
 
     const active = document.getElementById(`mode-${mode}`)
     active?.classList.add('bg-gradient-to-r', 'from-purple-600', 'to-blue-600', 'text-white')
+    active?.classList.remove('text-gray-400')
 
     // Hide all sections
-    document.getElementById('section-savings')?.classList.add('hidden')
     document.getElementById('section-send')?.classList.add('hidden')
     document.getElementById('section-withdraw')?.classList.add('hidden')
     document.getElementById('section-profile')?.classList.add('hidden')
@@ -78,26 +92,24 @@ export class App {
     // Show selected section
     document.getElementById(`section-${mode}`)?.classList.remove('hidden')
 
-    // Load specific mode
-    if (mode === 'savings') {
-      this.loadSavingsDashboard()
-    } else if (mode === 'profile') {
-      this.loadProfile()
+    // Load profile data
+    if (mode === 'profile') {
+      this.loadHistory()
     }
   }
 
   private async connectWallet() {
     if (!window.solana || !window.solana.isPhantom) {
-      alert('❌ Phantom wallet not found. Install from phantom.app')
+      alert('Phantom wallet not found. Install from phantom.app')
       return
     }
 
     try {
       const res = await window.solana.connect({ onlyIfTrusted: false })
       if (!res || !res.publicKey) throw new Error('No public key')
-      
+
       this.walletAddress = res.publicKey.toString()
-      
+
       // Update UI
       document.getElementById('connect-wallet-btn')?.classList.add('hidden')
       document.getElementById('wallet-connected')?.classList.remove('hidden')
@@ -106,14 +118,9 @@ export class App {
         walletEl.textContent = `${this.walletAddress.slice(0, 4)}...${this.walletAddress.slice(-4)}`
       }
 
-      this.setStatus('✅ Wallet connected')
-      
-      // Initialize account
-      if (this.walletAddress) {
-        await SavingsSDK.initAccount(this.walletAddress, 'SOL')
-      }
+      this.setStatus('Wallet connected')
     } catch (err: any) {
-      this.setStatus(`❌ Connection failed: ${err.message}`)
+      this.setStatus(`Connection failed: ${err.message}`)
     }
   }
 
@@ -124,196 +131,367 @@ export class App {
     this.setStatus('Disconnected')
   }
 
-  private async handleSend(e: Event) {
+  /**
+   * Create Payment Link Flow:
+   * 1. User enters amount
+   * 2. User signs transaction to send SOL to operator wallet
+   * 3. Backend deposits to Privacy Cash pool
+   * 4. User gets shareable link
+   */
+  private async handleCreateLink(e: Event) {
     e.preventDefault()
     if (!this.walletAddress) {
-      alert('❌ Connect wallet first')
+      alert('Connect wallet first')
       return
     }
 
-    const form = e.target as HTMLFormElement
-    const amount = (document.getElementById('send-amount-input') as HTMLInputElement).value
-    const recipient = (document.getElementById('send-recipient-input') as HTMLInputElement).value
+    const amountInput = document.getElementById('send-amount-input') as HTMLInputElement
+    const amount = parseFloat(amountInput.value)
 
-    if (!amount || !recipient) {
-      alert('❌ Fill all required fields')
+    if (!amount || amount <= 0) {
+      alert('Enter a valid amount')
       return
     }
+
+    const btn = document.getElementById('send-submit-btn') as HTMLButtonElement
+    btn.disabled = true
+    this.setStatus('Creating payment link...')
+    this.showLoading('Preparing transaction...')
 
     try {
-      const btn = document.getElementById('send-submit-btn') as HTMLButtonElement
-      btn.disabled = true
-      this.setStatus('⏳ Sending...')
-
-      const wallet = this.getWallet()
-      await SavingsSDK.sendFromSavings({
-        amount: parseFloat(amount),
-        assetType: 'SOL',
-        recipientAddress: recipient,
-        wallet,
+      // Step 1: Call backend to create link and get deposit instructions
+      this.updateLoading('Creating link on backend...')
+      const createRes = await fetch(`${BACKEND_URL}/api/create-link`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          amount,
+          creatorAddress: this.walletAddress,
+        }),
       })
 
-      this.setStatus('✅ Sent successfully!')
-      form.reset()
-      btn.disabled = false
-      alert('✅ Transaction sent!')
+      if (!createRes.ok) {
+        const err = await createRes.json()
+        throw new Error(err.error || 'Failed to create link')
+      }
+
+      const linkData = await createRes.json()
+      const { linkId, operatorAddress, lamports } = linkData
+
+      // Step 2: Create transaction to send SOL to operator
+      this.updateLoading('Please approve transaction in Phantom...')
+
+      const fromPubkey = new PublicKey(this.walletAddress)
+      const toPubkey = new PublicKey(operatorAddress)
+
+      const transaction = new Transaction().add(
+        SystemProgram.transfer({
+          fromPubkey,
+          toPubkey,
+          lamports: BigInt(lamports),
+        })
+      )
+
+      // Get latest blockhash
+      const { blockhash, lastValidBlockHeight } = await this.connection.getLatestBlockhash()
+      transaction.recentBlockhash = blockhash
+      transaction.feePayer = fromPubkey
+
+      // Sign with Phantom
+      const signedTx = await window.solana.signTransaction(transaction)
+
+      // Send transaction
+      this.updateLoading('Sending transaction...')
+      const txSignature = await this.connection.sendRawTransaction(signedTx.serialize())
+
+      // Wait for confirmation
+      this.updateLoading('Confirming transaction...')
+      await this.connection.confirmTransaction({
+        blockhash,
+        lastValidBlockHeight,
+        signature: txSignature,
+      })
+
+      // Step 3: Record deposit on backend
+      this.updateLoading('Recording deposit...')
+      const recordRes = await fetch(`${BACKEND_URL}/api/deposit/record`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          linkId,
+          depositTx: txSignature,
+          fromAddress: this.walletAddress,
+        }),
+      })
+
+      if (!recordRes.ok) {
+        console.warn('Failed to record deposit, but transaction was successful')
+      }
+
+      // Step 4: Show success with link
+      this.hideLoading()
+      this.showSuccessCard(linkId, amount)
+      amountInput.value = ''
+      this.setStatus('Payment link created!')
+
     } catch (err: any) {
-      this.setStatus(`❌ Error: ${err.message}`)
-      const btn = document.getElementById('send-submit-btn') as HTMLButtonElement
+      this.hideLoading()
+      this.setStatus(`Error: ${err.message}`)
+      alert(`Failed to create link: ${err.message}`)
+    } finally {
       btn.disabled = false
-      alert(`❌ ${err.message}`)
     }
   }
 
-  private async handleWithdraw(e: Event) {
-    e.preventDefault()
-    if (!this.walletAddress) {
-      alert('❌ Connect wallet first')
-      return
-    }
+  /**
+   * Preview link details before claiming
+   */
+  private async previewLink() {
+    const linkInput = document.getElementById('claim-link-input') as HTMLInputElement
+    const linkId = linkInput.value.trim()
 
-    const form = e.target as HTMLFormElement
-    const amount = (document.getElementById('withdraw-amount-input') as HTMLInputElement).value
-
-    if (!amount) {
-      alert('❌ Enter amount')
+    if (!linkId) {
+      document.getElementById('link-preview')?.classList.add('hidden')
       return
     }
 
     try {
-      const btn = document.getElementById('withdraw-submit-btn') as HTMLButtonElement
-      btn.disabled = true
-      this.setStatus('⏳ Withdrawing...')
+      const res = await fetch(`${BACKEND_URL}/api/link/${linkId}`)
+      if (!res.ok) {
+        document.getElementById('link-preview')?.classList.add('hidden')
+        return
+      }
 
-      const wallet = this.getWallet()
-      await SavingsSDK.withdrawFromSavings({
-        amount: parseFloat(amount),
-        assetType: 'SOL',
-        wallet,
-      })
+      const link = await res.json()
 
-      this.setStatus('✅ Withdrawn successfully!')
-      form.reset()
-      btn.disabled = false
-      alert('✅ Withdrawal complete!')
-    } catch (err: any) {
-      this.setStatus(`❌ Error: ${err.message}`)
-      const btn = document.getElementById('withdraw-submit-btn') as HTMLButtonElement
-      btn.disabled = false
-      alert(`❌ ${err.message}`)
+      const previewEl = document.getElementById('link-preview')
+      const amountEl = document.getElementById('link-preview-amount')
+
+      if (previewEl && amountEl) {
+        amountEl.textContent = `${link.amount} SOL`
+        previewEl.classList.remove('hidden')
+
+        if (link.claimed) {
+          amountEl.textContent = 'Already claimed'
+          amountEl.classList.remove('text-green-400')
+          amountEl.classList.add('text-red-400')
+        }
+      }
+    } catch {
+      document.getElementById('link-preview')?.classList.add('hidden')
     }
   }
 
-  private async loadProfile() {
-    if (!this.walletAddress) return
+  /**
+   * Claim Payment Link Flow:
+   * 1. User enters link ID
+   * 2. Backend executes Privacy Cash withdrawal to user's wallet
+   * 3. User receives SOL
+   */
+  private async handleClaimLink(e: Event) {
+    e.preventDefault()
+    if (!this.walletAddress) {
+      alert('Connect wallet first')
+      return
+    }
+
+    const linkInput = document.getElementById('claim-link-input') as HTMLInputElement
+    const linkId = linkInput.value.trim()
+
+    if (!linkId) {
+      alert('Enter a link ID')
+      return
+    }
+
+    const btn = document.getElementById('withdraw-submit-btn') as HTMLButtonElement
+    btn.disabled = true
+    this.setStatus('Claiming payment...')
+    this.showLoading('Processing withdrawal...')
 
     try {
-      this.setStatus('⏳ Loading profile...')
-      const profile = await SavingsSDK.getSavingsProfile(this.walletAddress)
-      
+      // Call backend to execute withdrawal
+      const res = await fetch(`${BACKEND_URL}/api/withdraw`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          linkId,
+          recipientAddress: this.walletAddress,
+        }),
+      })
+
+      const data = await res.json()
+
+      if (!res.ok) {
+        throw new Error(data.error || 'Withdrawal failed')
+      }
+
+      this.hideLoading()
+      this.setStatus('Payment claimed!')
+      alert(`Success! You received ${data.amount} SOL\n\nTransaction: ${data.withdrawalTx}`)
+      linkInput.value = ''
+      document.getElementById('link-preview')?.classList.add('hidden')
+
+    } catch (err: any) {
+      this.hideLoading()
+      this.setStatus(`Error: ${err.message}`)
+      alert(`Failed to claim: ${err.message}`)
+    } finally {
+      btn.disabled = false
+    }
+  }
+
+  /**
+   * Load transaction history from backend
+   */
+  private async loadHistory() {
+    if (!this.walletAddress) {
+      const container = document.getElementById('profile-container')
+      if (container) {
+        container.innerHTML = `
+          <div class="text-center py-12 text-gray-400">
+            Connect your wallet to view history
+          </div>
+        `
+      }
+      return
+    }
+
+    this.setStatus('Loading history...')
+
+    try {
+      const res = await fetch(`${BACKEND_URL}/api/history/${this.walletAddress}`)
+
+      if (!res.ok) {
+        throw new Error('Failed to load history')
+      }
+
+      const { sent, received } = await res.json()
+
       const container = document.getElementById('profile-container')
       if (!container) return
 
-      const balanceInSOL = (balance: string) => {
-        try {
-          return (BigInt(balance) / BigInt(1e9)).toString()
-        } catch {
-          return '0'
-        }
+      const formatDate = (dateStr: string) => {
+        return new Date(dateStr).toLocaleDateString('en-US', {
+          month: 'short',
+          day: 'numeric',
+          hour: '2-digit',
+          minute: '2-digit',
+        })
       }
 
-      container.innerHTML = `
+      const sentHtml = sent.length > 0 ? `
         <div class="gradient-border rounded-3xl p-8 glow-effect">
-          <div class="grid grid-cols-3 gap-6">
-            <div class="text-center p-6 rounded-xl bg-purple-500/10 border border-purple-500/20">
-              <div class="text-sm text-gray-400 mb-2">Current Balance</div>
-              <div class="text-3xl font-bold text-purple-400">${balanceInSOL(profile.currentBalance)}</div>
-              <div class="text-xs text-gray-500 mt-2">${profile.assetType}</div>
-            </div>
-            <div class="text-center p-6 rounded-xl bg-green-500/10 border border-green-500/20">
-              <div class="text-sm text-gray-400 mb-2">Total Deposited</div>
-              <div class="text-3xl font-bold text-green-400">+${balanceInSOL(profile.totalDeposited)}</div>
-              <div class="text-xs text-gray-500 mt-2">${profile.assetType}</div>
-            </div>
-            <div class="text-center p-6 rounded-xl bg-red-500/10 border border-red-500/20">
-              <div class="text-sm text-gray-400 mb-2">Total Withdrawn</div>
-              <div class="text-3xl font-bold text-red-400">-${balanceInSOL(profile.totalWithdrawn)}</div>
-              <div class="text-xs text-gray-500 mt-2">${profile.assetType}</div>
-            </div>
-          </div>
-        </div>
-
-        ${profile.transactions.length > 0 ? `
-          <div class="gradient-border rounded-3xl p-8 glow-effect">
-            <h3 class="text-xl font-bold text-white mb-6">Recent Transactions</h3>
-            <div class="space-y-3">
-              ${profile.transactions.slice(0, 10).map((tx: any) => `
-                <div class="flex justify-between items-center p-4 rounded-xl bg-gray-900/50 border border-gray-700/30">
-                  <div>
-                    <div class="font-semibold text-white">
-                      ${tx.type === 'deposit' ? '💳 Deposit' : tx.type === 'send' ? '📤 Send' : '💸 Withdraw'}
-                    </div>
-                    <div class="text-xs text-gray-400">${new Date(tx.createdAt).toLocaleDateString()}</div>
-                  </div>
-                  <div class="text-right">
-                    <div class="font-bold ${tx.type === 'deposit' ? 'text-green-400' : 'text-red-400'}">
-                      ${tx.type === 'deposit' ? '+' : '-'}${balanceInSOL(tx.amount)} ${profile.assetType}
-                    </div>
-                    <div class="text-xs text-gray-400">${tx.status}</div>
+          <h3 class="text-xl font-bold text-white mb-6 flex items-center gap-2">
+            <span class="text-2xl">📤</span> Sent Payments
+          </h3>
+          <div class="space-y-3">
+            ${sent.map((tx: any) => `
+              <div class="flex justify-between items-center p-4 rounded-xl bg-gray-900/50 border border-gray-700/30">
+                <div>
+                  <div class="font-mono text-sm text-gray-400">${tx.linkId.slice(0, 8)}...</div>
+                  <div class="text-xs text-gray-500">${formatDate(tx.createdAt)}</div>
+                </div>
+                <div class="text-right">
+                  <div class="font-bold text-purple-400">-${tx.amount} SOL</div>
+                  <div class="text-xs ${tx.claimed ? 'text-green-400' : 'text-yellow-400'}">
+                    ${tx.claimed ? 'Claimed' : 'Pending'}
                   </div>
                 </div>
-              `).join('')}
-            </div>
+              </div>
+            `).join('')}
           </div>
-        ` : ''}
-      `
-      
-      this.setStatus('✅ Profile loaded')
+        </div>
+      ` : ''
+
+      const receivedHtml = received.length > 0 ? `
+        <div class="gradient-border rounded-3xl p-8 glow-effect">
+          <h3 class="text-xl font-bold text-white mb-6 flex items-center gap-2">
+            <span class="text-2xl">💰</span> Received Payments
+          </h3>
+          <div class="space-y-3">
+            ${received.map((tx: any) => `
+              <div class="flex justify-between items-center p-4 rounded-xl bg-gray-900/50 border border-gray-700/30">
+                <div>
+                  <div class="font-mono text-sm text-gray-400">${tx.linkId.slice(0, 8)}...</div>
+                  <div class="text-xs text-gray-500">${formatDate(tx.claimedAt)}</div>
+                </div>
+                <div class="text-right">
+                  <div class="font-bold text-green-400">+${tx.amount} SOL</div>
+                  <div class="text-xs text-green-400">Received</div>
+                </div>
+              </div>
+            `).join('')}
+          </div>
+        </div>
+      ` : ''
+
+      if (sent.length === 0 && received.length === 0) {
+        container.innerHTML = `
+          <div class="text-center py-12">
+            <div class="text-6xl mb-4">📭</div>
+            <div class="text-xl text-gray-400">No transactions yet</div>
+            <p class="text-gray-500 mt-2">Create or claim a payment link to get started</p>
+          </div>
+        `
+      } else {
+        container.innerHTML = sentHtml + receivedHtml
+      }
+
+      this.setStatus('History loaded')
+
     } catch (err: any) {
-      this.setStatus(`❌ Error: ${err.message}`)
+      this.setStatus(`Error: ${err.message}`)
+      const container = document.getElementById('profile-container')
+      if (container) {
+        container.innerHTML = `
+          <div class="text-center py-12 text-red-400">
+            Failed to load history: ${err.message}
+          </div>
+        `
+      }
     }
   }
 
-  private async loadSavingsDashboard() {
-    if (!this.walletAddress) {
-      this.setStatus('❌ Connect wallet first')
-      return
-    }
+  private showSuccessCard(linkId: string, amount: number) {
+    const card = document.getElementById('success-card')
+    const linkIdEl = document.getElementById('success-link-id')
+    const linkUrlEl = document.getElementById('success-link-url') as HTMLInputElement
 
-    try {
-      this.setStatus('⏳ Loading dashboard...')
-      
-      // Ensure account exists
-      await SavingsSDK.initAccount(this.walletAddress, 'SOL')
-      
-      // Load React component
-      const { renderSavingsDashboard } = await import('./components/SavingsDashboardRoot.js')
-      renderSavingsDashboard(this.walletAddress, this.getWallet())
-      
-      this.setStatus('✅ Dashboard loaded')
-    } catch (err: any) {
-      console.error('Error loading dashboard:', err)
-      this.setStatus('⚠️ Dashboard: ' + (err.message || 'Check console'))
+    const shareUrl = `${window.location.origin}/claim/${linkId}`
+
+    if (linkIdEl) linkIdEl.textContent = linkId
+    if (linkUrlEl) linkUrlEl.value = shareUrl
+
+    card?.classList.remove('hidden')
+  }
+
+  private copySuccessLink() {
+    const linkUrlEl = document.getElementById('success-link-url') as HTMLInputElement
+    if (linkUrlEl) {
+      navigator.clipboard.writeText(linkUrlEl.value)
+
+      const notification = document.getElementById('copy-notification')
+      notification?.classList.remove('hidden')
+      setTimeout(() => {
+        notification?.classList.add('hidden')
+      }, 2000)
     }
   }
 
-  private getWallet() {
-    if (!window.solana) throw new Error('Wallet not connected')
-    const connection = new Connection(SOLANA_RPC_URL, 'confirmed')
+  private showLoading(message: string) {
+    const modal = document.getElementById('loading-modal')
+    const msgEl = document.getElementById('loading-message')
+    if (msgEl) msgEl.textContent = message
+    modal?.classList.remove('hidden')
+  }
 
-    return {
-      publicKey: window.solana.publicKey,
-      signMessage: (message: Uint8Array) => window.solana.signMessage(message),
-      signTransaction: (tx: any) => window.solana.signTransaction(tx),
-      signAllTransactions: (txs: any[]) => window.solana.signAllTransactions(txs),
-      sendTransaction: async (signedTx: any, options?: any) => {
-        const serialized = signedTx.serialize()
-        return await connection.sendRawTransaction(serialized, {
-          preflightCommitment: options?.preflightCommitment || 'confirmed',
-          skipPreflight: false,
-        })
-      },
-    }
+  private updateLoading(message: string) {
+    const msgEl = document.getElementById('loading-message')
+    if (msgEl) msgEl.textContent = message
+  }
+
+  private hideLoading() {
+    document.getElementById('loading-modal')?.classList.add('hidden')
   }
 
   private setStatus(msg: string) {
