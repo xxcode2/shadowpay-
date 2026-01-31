@@ -17,11 +17,6 @@ export const config = {
  * Backend server-side operations configuration
  */
 export const PRIVACY_CASH_CONFIG = {
-/**
- * Privacy Cash SDK Configuration
- * Backend server-side operations configuration
- */
-export const PRIVACY_CASH_CONFIG = {
   // RPC Configuration for on-chain operations
   rpcUrl: process.env.SOLANA_RPC_URL || config.SOLANA_RPC_URL,
 
