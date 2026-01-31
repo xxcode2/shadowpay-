@@ -32,6 +32,12 @@ export class App {
   private currentHistoryPage: number = 1
   private historyTab: 'sent' | 'received' = 'sent'
   private readonly ITEMS_PER_PAGE = 10
+  
+  // Receive section state
+  private incomingData: any[] = []
+  private currentIncomingPage: number = 1
+  private incomingTab: 'available' | 'withdrawn' = 'available'
+  private readonly ITEMS_PER_PAGE_RECEIVE = 5
 
   constructor() {
     this.connection = new Connection(SOLANA_RPC_URL, 'confirmed')
@@ -267,12 +273,9 @@ export class App {
    * LOAD INCOMING PAYMENTS WITH PAGINATION
    *
    * For the connected wallet, fetch incoming private payments
-   * with 5 items per page
+   * Separated into Available and Withdrawn tabs with 5 items per page
    */
-  private currentIncomingPage = 1
-  private incomingTotalPages = 1
-
-  private async loadIncomingPayments(page: number = 1) {
+  private async loadIncomingPayments() {
     const container = document.getElementById('receive-container')
     if (!container) return
 
@@ -293,90 +296,31 @@ export class App {
     `
 
     try {
-      const res = await fetch(`${BACKEND_URL}/api/incoming/${this.walletAddress}?page=${page}&limit=5`)
+      const res = await fetch(`${BACKEND_URL}/api/incoming/${this.walletAddress}`)
 
       if (!res.ok) {
         throw new Error('Failed to load incoming payments')
       }
 
-      const { payments, total, totalPages, page: currentPage } = await res.json()
-
-      this.currentIncomingPage = currentPage
-      this.incomingTotalPages = totalPages
+      const { payments } = await res.json()
 
       if (!payments || payments.length === 0) {
         container.innerHTML = `
-          <div class="gradient-border rounded-3xl p-8 text-center">
+          <div class="text-center py-12">
             <div class="text-6xl mb-4">📭</div>
-            <h3 class="text-xl font-bold text-white mb-2">No Incoming Payments</h3>
-            <p class="text-gray-400">When someone sends you a private payment, it will appear here.</p>
+            <h3 class="text-xl text-gray-400">No Incoming Payments</h3>
+            <p class="text-gray-500 mt-2">When someone sends you a private payment, it will appear here.</p>
           </div>
         `
         return
       }
 
-      let html = payments.map((payment: any) => `
-        <div class="gradient-border rounded-3xl p-6 glow-effect">
-          <div class="flex justify-between items-center mb-4">
-            <div>
-              <div class="text-3xl font-bold text-green-400">+${payment.amount} SOL</div>
-              <div class="text-sm text-gray-400">Received ${this.formatDate(payment.createdAt)}</div>
-            </div>
-            <div class="text-right">
-              <span class="px-3 py-1 rounded-full text-sm ${payment.withdrawn ? 'bg-gray-500/20 text-gray-400' : 'bg-green-500/20 text-green-400'}">
-                ${payment.withdrawn ? 'Withdrawn' : 'Available'}
-              </span>
-            </div>
-          </div>
-          ${!payment.withdrawn ? `
-            <button
-              onclick="window.shadowpay.withdrawPayment('${payment.id}')"
-              class="w-full py-3 rounded-xl bg-gradient-to-r from-green-600 to-emerald-600 hover:from-green-700 hover:to-emerald-700 text-white font-bold transition-all"
-            >
-              Withdraw to Wallet
-            </button>
-          ` : ''}
-        </div>
-      `).join('')
-
-      // Add pagination controls if more than 1 page
-      if (totalPages > 1) {
-        html += `
-          <div class="flex justify-center gap-2 mt-6">
-            ${currentPage > 1 ? `
-              <button
-                onclick="window.shadowpay.loadIncomingPage(${currentPage - 1})"
-                class="px-4 py-2 rounded-lg bg-gray-700 hover:bg-gray-600 text-white"
-              >
-                ← Previous
-              </button>
-            ` : ''}
-            <div class="flex gap-1">
-              ${Array.from({ length: totalPages }, (_, i) => {
-                const pageNum = i + 1
-                return `
-                  <button
-                    onclick="window.shadowpay.loadIncomingPage(${pageNum})"
-                    class="px-3 py-2 rounded-lg ${pageNum === currentPage ? 'bg-purple-600 text-white' : 'bg-gray-700 hover:bg-gray-600 text-gray-300'}"
-                  >
-                    ${pageNum}
-                  </button>
-                `
-              }).join('')}
-            </div>
-            ${currentPage < totalPages ? `
-              <button
-                onclick="window.shadowpay.loadIncomingPage(${currentPage + 1})"
-                class="px-4 py-2 rounded-lg bg-gray-700 hover:bg-gray-600 text-white"
-              >
-                Next →
-              </button>
-            ` : ''}
-          </div>
-        `
-      }
-
-      container.innerHTML = html
+      // Separate into available and withdrawn
+      this.incomingData = payments
+      this.currentIncomingPage = 1
+      this.incomingTab = 'available'
+      
+      this.renderIncomingTab()
 
     } catch (err: any) {
       container.innerHTML = `
@@ -387,8 +331,145 @@ export class App {
     }
   }
 
-  loadIncomingPage(page: number) {
-    this.loadIncomingPayments(page)
+  private renderIncomingTab() {
+    const container = document.getElementById('receive-container')
+    if (!container) return
+
+    const isAvailable = this.incomingTab === 'available'
+    const filteredData = this.incomingData.filter((p: any) => 
+      isAvailable ? !p.withdrawn : p.withdrawn
+    )
+
+    const totalPages = Math.ceil(filteredData.length / this.ITEMS_PER_PAGE_RECEIVE)
+    const startIdx = (this.currentIncomingPage - 1) * this.ITEMS_PER_PAGE_RECEIVE
+    const endIdx = startIdx + this.ITEMS_PER_PAGE_RECEIVE
+    const pageData = filteredData.slice(startIdx, endIdx)
+
+    const availableCount = this.incomingData.filter((p: any) => !p.withdrawn).length
+    const withdrawnCount = this.incomingData.filter((p: any) => p.withdrawn).length
+
+    let html = `
+      <!-- Tab Navigation -->
+      <div class="flex gap-4 mb-8">
+        <button id="receive-tab-available" class="px-6 py-2 rounded-lg font-medium transition ${
+          this.incomingTab === 'available' 
+            ? 'bg-green-600 text-white' 
+            : 'bg-gray-800 text-gray-400 hover:bg-gray-700'
+        }">
+          Available ${availableCount > 0 ? `(${availableCount})` : ''}
+        </button>
+        <button id="receive-tab-withdrawn" class="px-6 py-2 rounded-lg font-medium transition ${
+          this.incomingTab === 'withdrawn' 
+            ? 'bg-gray-600 text-white' 
+            : 'bg-gray-800 text-gray-400 hover:bg-gray-700'
+        }">
+          Withdrawn ${withdrawnCount > 0 ? `(${withdrawnCount})` : ''}
+        </button>
+      </div>
+    `
+
+    if (pageData.length === 0) {
+      html += `
+        <div class="text-center py-8">
+          <div class="text-gray-400">${isAvailable ? 'No available payments' : 'No withdrawn payments'}</div>
+        </div>
+      `
+    } else {
+      html += `
+        <div class="space-y-4 mb-6">
+          ${pageData.map((payment: any) => `
+            <div class="p-4 rounded-lg bg-gray-850 border border-gray-700 hover:border-green-500/50 transition">
+              <div class="flex justify-between items-start">
+                <div class="flex-1">
+                  <div class="text-2xl font-semibold text-green-400">+${payment.amount} SOL</div>
+                  <div class="text-xs text-gray-500 mt-1">Received ${this.formatDate(payment.createdAt)}</div>
+                </div>
+                <div class="text-right">
+                  <div class="text-xs font-medium ${isAvailable ? 'text-green-500' : 'text-gray-400'}">
+                    ${isAvailable ? '✓ Available' : '✓ Withdrawn'}
+                  </div>
+                </div>
+              </div>
+              ${isAvailable ? `
+                <button
+                  onclick="window.shadowpay.withdrawPayment('${payment.id}')"
+                  class="w-full mt-4 py-2.5 rounded-lg bg-green-600 hover:bg-green-700 text-white font-medium transition-colors"
+                >
+                  Withdraw to Wallet
+                </button>
+              ` : ''}
+            </div>
+          `).join('')}
+        </div>
+      `
+    }
+
+    // Add pagination if more than 1 page
+    if (totalPages > 1) {
+      html += `
+        <div class="flex justify-center items-center gap-2 mt-6">
+          <button id="incoming-prev-page" class="px-3 py-1 rounded border border-gray-700 text-sm text-gray-400 hover:text-gray-200 hover:border-gray-600 transition ${this.currentIncomingPage === 1 ? 'opacity-50 cursor-not-allowed' : ''}">
+            ← Prev
+          </button>
+          <div class="flex gap-1">
+            ${Array.from({ length: totalPages }, (_, i) => i + 1).map(page => `
+              <button class="incoming-page-btn px-3 py-1 rounded text-sm transition ${
+                page === this.currentIncomingPage 
+                  ? 'bg-green-600 text-white' 
+                  : 'border border-gray-700 text-gray-400 hover:text-gray-200 hover:border-gray-600'
+              }" data-page="${page}">
+                ${page}
+              </button>
+            `).join('')}
+          </div>
+          <button id="incoming-next-page" class="px-3 py-1 rounded border border-gray-700 text-sm text-gray-400 hover:text-gray-200 hover:border-gray-600 transition ${this.currentIncomingPage === totalPages ? 'opacity-50 cursor-not-allowed' : ''}">
+            Next →
+          </button>
+        </div>
+      `
+    }
+
+    container.innerHTML = html
+
+    // Attach event listeners
+    document.getElementById('receive-tab-available')?.addEventListener('click', () => {
+      this.incomingTab = 'available'
+      this.currentIncomingPage = 1
+      this.renderIncomingTab()
+    })
+
+    document.getElementById('receive-tab-withdrawn')?.addEventListener('click', () => {
+      this.incomingTab = 'withdrawn'
+      this.currentIncomingPage = 1
+      this.renderIncomingTab()
+    })
+
+    document.getElementById('incoming-prev-page')?.addEventListener('click', () => {
+      if (this.currentIncomingPage > 1) {
+        this.currentIncomingPage--
+        this.renderIncomingTab()
+      }
+    })
+
+    document.getElementById('incoming-next-page')?.addEventListener('click', () => {
+      if (this.currentIncomingPage < totalPages) {
+        this.currentIncomingPage++
+        this.renderIncomingTab()
+      }
+    })
+
+    document.querySelectorAll('.incoming-page-btn').forEach(btn => {
+      btn.addEventListener('click', (e) => {
+        const page = parseInt((e.target as HTMLElement).getAttribute('data-page') || '1')
+        this.currentIncomingPage = page
+        this.renderIncomingTab()
+      })
+    })
+  }
+
+  private loadIncomingPage(page: number) {
+    this.currentIncomingPage = page
+    this.renderIncomingTab()
   }
 
   /**
