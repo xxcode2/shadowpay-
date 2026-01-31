@@ -1,6 +1,7 @@
 /// <reference types="vite/client" />
 
 import { Connection, PublicKey, LAMPORTS_PER_SOL, Transaction, SystemProgram } from '@solana/web3.js'
+import type { DepositRequest } from './flows/depositFlow'
 
 const BACKEND_URL =
   import.meta.env.VITE_BACKEND_URL ||
@@ -27,6 +28,10 @@ export class App {
   private walletAddress: string | null = null
   private bound: boolean = false
   private connection: Connection
+  private historyData: { sent: any[], received: any[] } = { sent: [], received: [] }
+  private currentHistoryPage: number = 1
+  private historyTab: 'sent' | 'received' = 'sent'
+  private readonly ITEMS_PER_PAGE = 10
 
   constructor() {
     this.connection = new Connection(SOLANA_RPC_URL, 'confirmed')
@@ -70,13 +75,13 @@ export class App {
   private switchMode(mode: 'send' | 'receive' | 'history') {
     // Update active button
     document.querySelectorAll('.mode-btn').forEach(btn => {
-      btn.classList.remove('bg-gradient-to-r', 'from-purple-600', 'to-blue-600', 'text-white')
-      btn.classList.add('text-gray-400')
+      btn.classList.remove('tab-active')
+      btn.classList.add('tab-inactive')
     })
 
     const active = document.getElementById(`mode-${mode}`)
-    active?.classList.add('bg-gradient-to-r', 'from-purple-600', 'to-blue-600', 'text-white')
-    active?.classList.remove('text-gray-400')
+    active?.classList.remove('tab-inactive')
+    active?.classList.add('tab-active')
 
     // Hide all sections
     document.getElementById('section-send')?.classList.add('hidden')
@@ -206,7 +211,7 @@ export class App {
       // Import deposit flow - using Privacy Cash SDK with recipient encryption key binding
       const { executeUserPaysDeposit } = await import('./flows/depositFlow.js')
       
-      const depositRequest: any = {
+      const depositRequest: DepositRequest = {
         linkId: paymentId,
         amount: amount.toString(),
         publicKey: this.walletAddress,
@@ -463,80 +468,15 @@ export class App {
         throw new Error('Failed to load history')
       }
 
-      const { sent, received } = await res.json()
-
-      if ((!sent || sent.length === 0) && (!received || received.length === 0)) {
-        container.innerHTML = `
-          <div class="text-center py-12">
-            <div class="text-6xl mb-4">📭</div>
-            <div class="text-xl text-gray-400">No transactions yet</div>
-            <p class="text-gray-500 mt-2">Send or receive a private payment to get started</p>
-          </div>
-        `
-        return
+      const data = await res.json()
+      this.historyData = {
+        sent: data.sent || [],
+        received: data.received || []
       }
+      this.currentHistoryPage = 1
+      this.historyTab = 'sent'
 
-      let html = ''
-
-      // Sent payments
-      if (sent && sent.length > 0) {
-        html += `
-          <div class="gradient-border rounded-3xl p-6">
-            <h3 class="text-xl font-bold text-white mb-4 flex items-center gap-2">
-              <svg class="w-5 h-5 text-purple-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 19l9 2-9-18-9 18 9-2zm0 0v-8"/>
-              </svg>
-              Sent Payments
-            </h3>
-            <div class="space-y-3">
-              ${sent.map((tx: any) => `
-                <div class="flex justify-between items-center p-4 rounded-xl bg-gray-900/50 border border-gray-700/30">
-                  <div>
-                    <div class="text-sm text-gray-400">To: ${tx.recipientAddress ? tx.recipientAddress.slice(0, 8) + '...' : 'Unknown'}</div>
-                    <div class="text-xs text-gray-500">${this.formatDate(tx.createdAt)}</div>
-                  </div>
-                  <div class="text-right">
-                    <div class="font-bold text-purple-400">-${tx.amount} SOL</div>
-                    <div class="text-xs ${tx.claimed ? 'text-green-400' : 'text-yellow-400'}">
-                      ${tx.claimed ? 'Claimed' : 'Pending'}
-                    </div>
-                  </div>
-                </div>
-              `).join('')}
-            </div>
-          </div>
-        `
-      }
-
-      // Received payments
-      if (received && received.length > 0) {
-        html += `
-          <div class="gradient-border rounded-3xl p-6 mt-6">
-            <h3 class="text-xl font-bold text-white mb-4 flex items-center gap-2">
-              <svg class="w-5 h-5 text-green-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 10h10a8 8 0 018 8v2M3 10l6 6m-6-6l6-6"/>
-              </svg>
-              Received Payments
-            </h3>
-            <div class="space-y-3">
-              ${received.map((tx: any) => `
-                <div class="flex justify-between items-center p-4 rounded-xl bg-gray-900/50 border border-gray-700/30">
-                  <div>
-                    <div class="text-sm text-gray-400">Private payment</div>
-                    <div class="text-xs text-gray-500">${this.formatDate(tx.claimedAt || tx.createdAt)}</div>
-                  </div>
-                  <div class="text-right">
-                    <div class="font-bold text-green-400">+${tx.amount} SOL</div>
-                    <div class="text-xs text-green-400">Received</div>
-                  </div>
-                </div>
-              `).join('')}
-            </div>
-          </div>
-        `
-      }
-
-      container.innerHTML = html
+      this.renderHistoryTab()
 
     } catch (err: any) {
       container.innerHTML = `
@@ -545,6 +485,148 @@ export class App {
         </div>
       `
     }
+  }
+
+  private renderHistoryTab() {
+    const container = document.getElementById('history-container')
+    if (!container) return
+
+    if (this.historyData.sent.length === 0 && this.historyData.received.length === 0) {
+      container.innerHTML = `
+        <div class="text-center py-12">
+          <div class="text-6xl mb-4">📭</div>
+          <div class="text-xl text-gray-400">No transactions yet</div>
+          <p class="text-gray-500 mt-2">Send or receive a private payment to get started</p>
+        </div>
+      `
+      return
+    }
+
+    const isSent = this.historyTab === 'sent'
+    const data = isSent ? this.historyData.sent : this.historyData.received
+    const totalPages = Math.ceil(data.length / this.ITEMS_PER_PAGE)
+    const startIdx = (this.currentHistoryPage - 1) * this.ITEMS_PER_PAGE
+    const endIdx = startIdx + this.ITEMS_PER_PAGE
+    const pageData = data.slice(startIdx, endIdx)
+
+    let html = `
+      <!-- Tab Navigation -->
+      <div class="flex gap-4 mb-8">
+        <button id="history-tab-sent" class="px-6 py-2 rounded-lg font-medium transition ${
+          this.historyTab === 'sent' 
+            ? 'bg-purple-600 text-white' 
+            : 'bg-gray-800 text-gray-400 hover:bg-gray-700'
+        }">
+          Sent ${this.historyData.sent.length > 0 ? `(${this.historyData.sent.length})` : ''}
+        </button>
+        <button id="history-tab-received" class="px-6 py-2 rounded-lg font-medium transition ${
+          this.historyTab === 'received' 
+            ? 'bg-purple-600 text-white' 
+            : 'bg-gray-800 text-gray-400 hover:bg-gray-700'
+        }">
+          Received ${this.historyData.received.length > 0 ? `(${this.historyData.received.length})` : ''}
+        </button>
+      </div>
+
+      <!-- Transactions List -->
+      <div class="space-y-3 mb-6">
+        ${pageData.map((tx: any) => {
+          if (isSent) {
+            return `
+              <div class="p-4 rounded-lg bg-gray-850 border border-gray-700 hover:border-purple-500/50 transition">
+                <div class="flex justify-between items-start">
+                  <div class="flex-1">
+                    <div class="text-sm font-medium text-gray-300">To: ${tx.recipientAddress ? tx.recipientAddress.slice(0, 8) + '...' + tx.recipientAddress.slice(-4) : 'Unknown'}</div>
+                    <div class="text-xs text-gray-500 mt-1">${this.formatDate(tx.createdAt)}</div>
+                  </div>
+                  <div class="text-right">
+                    <div class="font-semibold text-gray-100">-${tx.amount} SOL</div>
+                    <div class="text-xs font-medium mt-1 ${tx.claimed ? 'text-green-500' : 'text-amber-500'}">
+                      ${tx.claimed ? '✓ Claimed' : '⏱ Pending'}
+                    </div>
+                  </div>
+                </div>
+              </div>
+            `
+          } else {
+            return `
+              <div class="p-4 rounded-lg bg-gray-850 border border-gray-700 hover:border-green-500/50 transition">
+                <div class="flex justify-between items-start">
+                  <div class="flex-1">
+                    <div class="text-sm font-medium text-gray-300">Private payment received</div>
+                    <div class="text-xs text-gray-500 mt-1">${this.formatDate(tx.claimedAt || tx.createdAt)}</div>
+                  </div>
+                  <div class="text-right">
+                    <div class="font-semibold text-gray-100">+${tx.amount} SOL</div>
+                    <div class="text-xs font-medium mt-1 text-green-500">✓ Available</div>
+                  </div>
+                </div>
+              </div>
+            `
+          }
+        }).join('')}
+      </div>
+
+      <!-- Pagination -->
+      ${totalPages > 1 ? `
+        <div class="flex justify-center items-center gap-2 mt-6">
+          <button id="prev-page" class="px-3 py-1 rounded border border-gray-700 text-sm text-gray-400 hover:text-gray-200 hover:border-gray-600 transition ${this.currentHistoryPage === 1 ? 'opacity-50 cursor-not-allowed' : ''}">
+            ← Prev
+          </button>
+          <div class="flex gap-1">
+            ${Array.from({ length: totalPages }, (_, i) => i + 1).map(page => `
+              <button class="page-btn px-3 py-1 rounded text-sm transition ${
+                page === this.currentHistoryPage 
+                  ? 'bg-purple-600 text-white' 
+                  : 'border border-gray-700 text-gray-400 hover:text-gray-200 hover:border-gray-600'
+              }" data-page="${page}">
+                ${page}
+              </button>
+            `).join('')}
+          </div>
+          <button id="next-page" class="px-3 py-1 rounded border border-gray-700 text-sm text-gray-400 hover:text-gray-200 hover:border-gray-600 transition ${this.currentHistoryPage === totalPages ? 'opacity-50 cursor-not-allowed' : ''}">
+            Next →
+          </button>
+        </div>
+      ` : ''}
+    `
+
+    container.innerHTML = html
+
+    // Attach event listeners
+    document.getElementById('history-tab-sent')?.addEventListener('click', () => {
+      this.historyTab = 'sent'
+      this.currentHistoryPage = 1
+      this.renderHistoryTab()
+    })
+
+    document.getElementById('history-tab-received')?.addEventListener('click', () => {
+      this.historyTab = 'received'
+      this.currentHistoryPage = 1
+      this.renderHistoryTab()
+    })
+
+    document.getElementById('prev-page')?.addEventListener('click', () => {
+      if (this.currentHistoryPage > 1) {
+        this.currentHistoryPage--
+        this.renderHistoryTab()
+      }
+    })
+
+    document.getElementById('next-page')?.addEventListener('click', () => {
+      if (this.currentHistoryPage < totalPages) {
+        this.currentHistoryPage++
+        this.renderHistoryTab()
+      }
+    })
+
+    document.querySelectorAll('.page-btn').forEach(btn => {
+      btn.addEventListener('click', (e) => {
+        const page = parseInt((e.target as HTMLElement).getAttribute('data-page') || '1')
+        this.currentHistoryPage = page
+        this.renderHistoryTab()
+      })
+    })
   }
 
   // Utility methods
