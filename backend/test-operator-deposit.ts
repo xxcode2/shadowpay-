@@ -25,16 +25,17 @@ async function main() {
     const balanceBefore = await pc.getPrivateBalance()
     console.log(`   Current: ${(balanceBefore / 1e9).toFixed(6)} SOL\n`)
 
-    // ✅ Deposit 0.1 SOL to pool
-    console.log('3️⃣  Depositing 0.1 SOL to Privacy Cash pool...')
+    // ✅ Deposit amount to pool (use 0.01 SOL or available balance - 0.005 for fees)
+    console.log('3️⃣  Depositing to Privacy Cash pool...')
     console.log('   This may take 30-60 seconds...\n')
 
-    const depositAmount = 0.1 * 1e9 // 0.1 SOL in lamports
+    // Use 0.01 SOL (enough for testing withdrawals) or calculate from available balance
+    const depositAmount = 0.01 * 1e9 // 0.01 SOL in lamports
     const depositResult = await executeDeposit(pc, depositAmount)
 
     console.log(`✅ DEPOSIT SUCCESSFUL!`)
     console.log(`   TX: ${depositResult.tx}`)
-    console.log(`   Amount: 0.1 SOL\n`)
+    console.log(`   Amount: ${(depositAmount / 1e9).toFixed(6)} SOL\n`)
 
     // ✅ Check private balance AFTER
     console.log('4️⃣  Verifying private balance after deposit...')
