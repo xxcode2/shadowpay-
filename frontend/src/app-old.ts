@@ -9,7 +9,7 @@ const BACKEND_URL =
   'https://shadowpay-backend-production.up.railway.app'
 
 const API_URL = `${BACKEND_URL}/api`
-const SOLANA_RPC_URL = 'https://mainnet.helius-rpc.com/?api-key=c455719c-354b-4a44-98d4-27f8a18aa79c'
+const SOLANA_RPC_URL = 'https://mainnet.helius-rpc.com'
 
 declare global {
   interface Window {

@@ -74,7 +74,7 @@ console.log(`\n📋 STEP 3: Testing RPC Connection`)
 console.log(`-`.repeat(60))
 
 const rpcUrl = process.env.RPC_URL || process.env.SOLANA_RPC_URL || 
-  'https://mainnet.helius-rpc.com/?api-key=c455719c-354b-4a44-98d4-27f8a18aa79c'
+  'https://mainnet.helius-rpc.com'
 
 console.log(`RPC URL: ${rpcUrl.substring(0, 60)}...`)
 
