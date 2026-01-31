@@ -617,7 +617,14 @@ export class App {
               <div class="p-4 rounded-lg bg-gray-850 border border-gray-700 hover:border-purple-500/50 transition">
                 <div class="flex justify-between items-start">
                   <div class="flex-1">
-                    <div class="text-sm font-medium text-gray-300">To: ${tx.recipientAddress ? tx.recipientAddress.slice(0, 8) + '...' + tx.recipientAddress.slice(-4) : 'Unknown'}</div>
+                    <div class="text-sm font-medium text-gray-300">
+                      To: <span class="inline-flex items-center gap-1 group relative cursor-help">
+                        🔒 Shielded Recipient
+                        <span class="opacity-0 group-hover:opacity-100 absolute bottom-full left-1/2 -translate-x-1/2 mb-2 px-3 py-2 bg-gray-900 border border-gray-700 rounded text-xs text-gray-300 whitespace-nowrap transition-opacity pointer-events-none">
+                          Recipient address is encrypted on-chain
+                        </span>
+                      </span>
+                    </div>
                     <div class="text-xs text-gray-500 mt-1">${this.formatDate(tx.createdAt)}</div>
                   </div>
                   <div class="text-right">

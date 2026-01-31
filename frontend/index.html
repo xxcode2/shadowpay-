@@ -77,7 +77,9 @@
     <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-4">
      <div class="flex items-center justify-between">
       <div class="flex items-center gap-3">
-       <img src="/assets/images/pay.jpg" alt="ShadowPay" class="w-10 h-10 rounded-lg object-cover">
+       <div class="flex-shrink-0 w-10 h-10 rounded-lg overflow-hidden bg-gray-800">
+        <img src="/assets/images/pay.jpg" alt="ShadowPay" class="w-full h-full object-contain">
+       </div>
        <div>
         <h1 class="text-xl font-bold text-white">ShadowPay</h1>
         <p class="text-xs text-gray-500">Private Payments</p>
@@ -105,16 +107,79 @@
 
    <!-- Main -->
    <main class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-12">
+    <!-- Project Overview Section -->
+    <div class="mb-16">
+     <div class="text-center mb-10">
+      <h2 class="text-3xl font-bold text-white mb-2">What is ShadowPay?</h2>
+      <p class="text-gray-400">Private payment infrastructure built on Solana with zero-knowledge proofs</p>
+     </div>
+     <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 mb-12">
+      <div class="p-4 rounded-lg bg-gray-900/50 border border-gray-700/50">
+       <div class="text-2xl mb-3">🔐</div>
+       <h3 class="text-white font-semibold mb-2">Zero-Knowledge Privacy</h3>
+       <p class="text-sm text-gray-400">Transactions are private by default. No third party knows who sent to whom.</p>
+      </div>
+      <div class="p-4 rounded-lg bg-gray-900/50 border border-gray-700/50">
+       <div class="text-2xl mb-3">⚡</div>
+       <h3 class="text-white font-semibold mb-2">Solana-Powered</h3>
+       <p class="text-sm text-gray-400">Built on Solana blockchain for fast, low-cost private transfers.</p>
+      </div>
+      <div class="p-4 rounded-lg bg-gray-900/50 border border-gray-700/50">
+       <div class="text-2xl mb-3">🛡️</div>
+       <h3 class="text-white font-semibold mb-2">Non-Custodial</h3>
+       <p class="text-sm text-gray-400">You control your funds. We never hold or access your private keys.</p>
+      </div>
+      <div class="p-4 rounded-lg bg-gray-900/50 border border-gray-700/50">
+       <div class="text-2xl mb-3">✓</div>
+       <h3 class="text-white font-semibold mb-2">Open Source</h3>
+       <p class="text-sm text-gray-400">Auditable code. Built on Privacy Cash SDK. Transparent & trustworthy.</p>
+      </div>
+     </div>
+    </div>
+
+    <!-- Trust & Security Section -->
+    <div class="mb-16 grid grid-cols-1 lg:grid-cols-2 gap-6">
+     <div class="p-6 rounded-lg bg-blue-900/15 border border-blue-700/40">
+      <h3 class="text-lg font-bold text-white mb-4 flex items-center gap-2">
+       <svg class="w-5 h-5 text-blue-400" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
+       Why Trust ShadowPay?
+      </h3>
+      <ul class="space-y-3 text-sm text-gray-300">
+       <li class="flex gap-2"><span class="text-green-400">✓</span> Open-source Privacy Cash integration - no proprietary black boxes</li>
+       <li class="flex gap-2"><span class="text-green-400">✓</span> Non-custodial architecture - you maintain complete control</li>
+       <li class="flex gap-2"><span class="text-green-400">✓</span> Solana network security - immutable on-chain verification</li>
+       <li class="flex gap-2"><span class="text-green-400">✓</span> Transparent verification - all transactions are auditable</li>
+       <li class="flex gap-2"><span class="text-green-400">✓</span> No tracking - we don't know your identity or activity</li>
+      </ul>
+     </div>
+     <div class="p-6 rounded-lg bg-purple-900/15 border border-purple-700/40">
+      <h3 class="text-lg font-bold text-white mb-4 flex items-center gap-2">
+       <svg class="w-5 h-5 text-purple-400" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
+       How Privacy Works
+      </h3>
+      <ol class="space-y-3 text-sm text-gray-300">
+       <li><strong class="text-white">1. Send:</strong> Your payment is encrypted with recipient's public key</li>
+       <li><strong class="text-white">2. ZK Proof:</strong> We prove you own the funds without revealing amount</li>
+       <li><strong class="text-white">3. Deposit:</strong> Funds enter Privacy Cash shielded pool on Solana</li>
+       <li><strong class="text-white">4. Receive:</strong> Recipient decrypts with their private key (only they can)</li>
+       <li><strong class="text-white">5. Withdraw:</strong> Recipient can withdraw to their wallet anytime</li>
+      </ol>
+     </div>
+    </div>
+
     <!-- Tabs -->
     <div class="flex justify-center mb-12">
-     <div class="inline-flex gap-2 p-1.5 rounded-xl glass-card">
-      <button id="mode-send" class="mode-btn px-6 py-2.5 rounded-lg font-medium transition-all text-sm tab-active">
+     <div class="inline-flex gap-2 p-1.5 rounded-xl glass-card border border-gray-700/50">
+      <button id="mode-send" class="mode-btn px-6 py-2.5 rounded-lg font-medium transition-all text-sm tab-active flex items-center gap-2">
+       <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 19l9 2-9-18-9 18 9-2zm0 0v-8"/></svg>
        Send
       </button>
-      <button id="mode-receive" class="mode-btn px-6 py-2.5 rounded-lg font-medium transition-all text-sm tab-inactive">
+      <button id="mode-receive" class="mode-btn px-6 py-2.5 rounded-lg font-medium transition-all text-sm tab-inactive flex items-center gap-2">
+       <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 10h10a8 8 0 018 8v2M3 10l6 6m-6-6l6-6"/></svg>
        Receive
       </button>
-      <button id="mode-history" class="mode-btn px-6 py-2.5 rounded-lg font-medium transition-all text-sm tab-inactive">
+      <button id="mode-history" class="mode-btn px-6 py-2.5 rounded-lg font-medium transition-all text-sm tab-inactive flex items-center gap-2">
+       <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
        History
       </button>
      </div>
@@ -146,18 +211,20 @@
           <input type="number" id="send-amount-input" step="0.001" min="0.001" placeholder="0.00" class="w-full px-4 py-3 bg-gray-900 border border-gray-700 rounded-lg text-white text-lg font-semibold focus:outline-none focus:border-purple-500 transition-colors">
           <span class="absolute right-4 top-1/2 -translate-y-1/2 text-gray-500 font-medium" id="send-token-symbol">SOL</span>
          </div>
+         <p class="text-xs text-gray-500 mt-2">⚠️ Minimum: 0.01 SOL required</p>
         </div>
         <div>
          <label for="send-recipient-input" class="block text-sm font-medium text-gray-300 mb-2">Recipient Wallet Address</label>
          <input type="text" id="send-recipient-input" placeholder="Enter Solana wallet address..." class="w-full px-4 py-3 bg-gray-900 border border-gray-700 rounded-lg text-gray-200 font-mono text-sm focus:outline-none focus:border-purple-500 transition-colors">
         </div>
-        <div class="p-4 rounded-lg bg-purple-900/20 border border-purple-700/30">
+        <div class="p-4 rounded-lg bg-purple-900/15 border border-purple-700/40 backdrop-blur-sm">
          <div class="flex gap-3">
           <svg class="w-5 h-5 text-purple-400 flex-shrink-0 mt-0.5" fill="none" viewbox="0 0 24 24" stroke="currentColor">
            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" />
           </svg>
-          <div class="text-sm text-gray-300">
-           <strong class="text-purple-300">Zero-Knowledge Privacy:</strong> This payment uses ZK proofs. No on-chain link exists between you and the recipient.
+          <div class="text-sm">
+           <strong class="text-purple-300 block">🔐 Zero-Knowledge Privacy</strong>
+           <span class="text-gray-400">Uses ZK proofs. No on-chain link between sender & recipient.</span>
           </div>
          </div>
         </div>
@@ -175,6 +242,9 @@
       <div class="text-center mb-10">
        <h2 class="text-3xl font-bold text-white mb-2">Receive Payments</h2>
        <p class="text-gray-400 text-sm">View and withdraw your incoming private payments</p>
+      </div>
+      <div class="mb-6 p-4 rounded-lg bg-blue-900/15 border border-blue-700/40 text-center">
+       <p class="text-sm text-blue-300">💡 Payments are automatically decrypted using your wallet's keys</p>
       </div>
       <div id="receive-container" class="space-y-4">
        <div class="text-center py-12 text-gray-400">
