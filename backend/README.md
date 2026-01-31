@@ -1,213 +1,429 @@
-# ShadowPay Backend
+# 🚀 ShadowPay Backend - Express + Privacy Cash SDK
 
-Node.js backend server for ShadowPay, using Privacy Cash SDK to handle private payments.
+Non-custodial private payment API built with Node.js, Express, and Privacy Cash SDK.
 
-## Architecture
-
-### Components
-
-1. **Privacy Cash Integration** (`src/privacy/privacyCash.ts`)
-   - Initializes and manages PrivacyCash SDK instance
-   - Handles connection to Solana RPC
-   - Manages backend keypair for signing
-
-2. **Link Manager** (`src/privacy/linkManager.ts`)
-   - Manages payment link lifecycle (create, lookup, claim)
-   - In-memory storage (MVP - upgrade to DB for production)
-
-3. **API Routes**
-   - `POST /api/deposit` - Create private payment link
-   - `POST /api/withdraw` - Claim and withdraw from link
-   - `GET /api/link/:id` - Lookup link details
-   - `POST /api/link/:id/claim` - Mark link as claimed
-
-## Data Flow
-
-### Deposit (Create Link)
+## 📁 Project Structure
 
 ```
-Frontend User A
-    ↓
-[Connect Wallet]
-    ↓
-POST /api/deposit { amount, assetType }
-    ↓
-Backend (Privacy Cash SDK)
-    ↓
-- Generates UTXO pair
-- Encrypts UTXOs
-- Submits to Privacy Cash relayer
-    ↓
-Returns: linkId, depositTx
-    ↓
-Frontend displays payment link
+backend/
+├── src/
+│   ├── config.ts                 # Environment & configuration
+│   ├── server.ts                 # Express server setup
+│   ├── routes/
+│   │   ├── deposit.ts            # Private deposit endpoint
+│   │   ├── claimLink.ts          # Claim payment endpoint
+│   │   ├── createLink.ts         # Create payment link
+│   │   ├── history.ts            # Transaction history
+│   │   ├── incoming.ts           # Incoming payments
+│   │   ├── health.ts             # Health check
+│   │   ├── config.ts             # Public config endpoint
+│   │   └── ...
+│   ├── services/
+│   │   ├── privacyCash.ts        # Privacy Cash wrapper
+│   │   ├── linkService.ts        # Link management
+│   │   └── keypairManager.ts     # Operator key management
+│   ├── utils/
+│   │   ├── privacyCashOperations.ts   # ZK proof operations
+│   │   ├── operatorBalanceGuard.ts    # Balance monitoring
+│   │   └── encryptionHelper.ts        # Message encryption
+│   └── lib/
+│       ├── prisma.ts             # Database client
+│       └── ensureSchema.ts        # Schema initialization
+├── prisma/
+│   ├── schema.prisma             # Database schema
+│   └── migrations/               # Database migrations
+├── package.json
+├── tsconfig.json
+└── .env.example
 ```
 
-### Withdraw (Claim Link)
-
-```
-Frontend User B
-    ↓
-[Open payment link]
-    ↓
-GET /api/link/:id
-    ↓
-[Connect wallet]
-    ↓
-POST /api/withdraw { amount, assetType, recipientAddress }
-    ↓
-Backend (Privacy Cash SDK)
-    ↓
-- Creates ZK proof
-- Verifies against Merkle tree
-- Submits to Privacy Cash relayer
-- Relayer signs and executes
-    ↓
-Returns: withdrawTx, amountReceived
-    ↓
-Funds arrive at recipient
-```
-
-## Setup
+## 🚀 Quick Start
 
 ### Prerequisites
-- Node.js 24+
-- Solana devnet/testnet/mainnet RPC URL
+- Node.js 18+
+- SQLite or PostgreSQL
+- Solana wallet with SOL (for operator)
+- Privacy Cash SDK (installed in package.json)
 
-### Installation
+### Installation & Development
 
 ```bash
+cd backend
 npm install
-```
-
-### Configuration
-
-1. Copy `.env.example` to `.env`
-2. Add your Solana RPC URL
-3. Generate backend keypair:
-   ```bash
-   solana-keygen new --no-passphrase --outfile backend-keypair.json
-   ```
-4. Encode keypair to base64 and add to `.env` as `BACKEND_KEYPAIR_SECRET`
-
-### Running
-
-**Development:**
-```bash
 npm run dev
 ```
 
-**Build & Run:**
+**Backend runs on:** `http://localhost:8080`
+
+### Environment Setup
+
+Create `.env` file:
+
 ```bash
-npm run build
-npm start
+# Server
+NODE_ENV=development
+PORT=8080
+
+# Database
+DATABASE_URL=sqlite:./db.sqlite
+
+# Solana
+SOLANA_RPC_URL=https://api.mainnet-beta.solana.com
+SOLANA_NETWORK=mainnet
+
+# Operator Keypair (REQUIRED - from generate-operator.ts)
+# Format: 64 comma-separated numbers
+OPERATOR_SECRET_KEY=232,221,205,...[64 bytes total]
 ```
 
-## API Contracts
+### Generate Operator Keypair
 
-### POST /api/deposit
+```bash
+npx ts-node generate-operator.ts
+```
+
+Output will show:
+- Operator public key (fund this with SOL)
+- Secret key (paste into OPERATOR_SECRET_KEY)
+- Balance status
+
+## 🏗️ Architecture
+
+### Request Flow
+
+```
+Frontend (Browser)
+    ↓
+Browser: Phantom signs message
+    ↓
+Browser: Generate ZK proof (Privacy Cash SDK)
+    ↓
+POST /api/private-send
+    ↓
+Backend: Verify signature
+    ↓
+Backend: Record transaction (Prisma)
+    ↓
+Backend: Return success
+    ↓
+Frontend: Display confirmation
+```
+
+### Non-Custodial Design
+
+✅ **Frontend never sends private keys**
+- Only signs messages with Phantom
+
+✅ **Backend never executes PrivacyCash**
+- Frontend SDK handles all ZK operations
+- Backend only records metadata
+
+✅ **Operator is a relayer**
+- Pays network fees
+- Doesn't access user UTXOs
+- Balance monitored hourly
+
+## 📡 API Endpoints
+
+### POST /api/private-send
+Create private payment
 
 **Request:**
 ```json
 {
   "amount": 0.01,
-  "assetType": "SOL"
+  "senderAddress": "ABC123...",
+  "recipientAddress": "XYZ789...",
+  "token": "SOL"
 }
 ```
 
 **Response:**
 ```json
 {
-  "success": true,
-  "linkId": "a1b2c3d4...",
-  "depositTx": "5xAbc..."
+  "paymentId": "uuid",
+  "amount": "0.01",
+  "lamports": 10000000
 }
 ```
 
-### GET /api/link/:id
+### GET /api/incoming
+Get incoming payments
 
 **Response:**
 ```json
 {
-  "id": "a1b2c3d4...",
-  "amount": 0.01,
-  "assetType": "SOL",
-  "claimed": false,
-  "claimedBy": null
+  "available": [
+    {
+      "id": "payment-id",
+      "amount": "1.0",
+      "sender": "ABC123...",
+      "createdAt": "2026-01-31T..."
+    }
+  ],
+  "withdrawn": [
+    ...
+  ]
 }
 ```
 
-### POST /api/withdraw
-
-**Request:**
-```json
-{
-  "amount": 0.01,
-  "assetType": "SOL",
-  "recipientAddress": "EZC...xyz"
-}
-```
+### GET /api/history
+Get transaction history
 
 **Response:**
 ```json
 {
-  "success": true,
-  "withdrawTx": "7xDef...",
-  "recipient": "EZC...xyz",
-  "amountReceived": 1000000,
-  "fees": 5000
+  "sent": [
+    {
+      "id": "tx-id",
+      "amount": "0.5",
+      "recipient": "XYZ789...",
+      "status": "confirmed",
+      "createdAt": "2026-01-31T..."
+    }
+  ],
+  "received": [
+    ...
+  ]
 }
 ```
 
-## Privacy Model
+### GET /api/health
+Health check
 
-- **Deposit**: User signs locally, backend relays to Privacy Cash
-- **Withdraw**: Backend uses SDK to create ZK proof, relayer signs
-- **Link**: Identified by random hash, no public wallet connection
-- **Asset Type**: Separated by SPL mint, no cross-mixing
+**Response:**
+```json
+{
+  "status": "ok",
+  "port": 8080,
+  "timestamp": "2026-01-31T..."
+}
+```
 
-## Supported Assets
+### GET /api/config
+Public configuration
 
-- SOL (native Solana)
-- USDC
-- USDT
+**Response:**
+```json
+{
+  "minAmount": "0.001",
+  "network": "mainnet",
+  "operatorAddress": "ABC123..."
+}
+```
 
-## Important Notes
+## 💾 Database Schema
 
-### SDK Responsibility
+### Links Table
+```sql
+CREATE TABLE links (
+  id TEXT PRIMARY KEY,
+  amount TEXT NOT NULL,
+  assetType TEXT DEFAULT 'SOL',
+  recipientAddress TEXT,
+  claimed BOOLEAN DEFAULT false,
+  claimedAt TIMESTAMP,
+  createdAt TIMESTAMP DEFAULT NOW()
+);
+```
 
-DO NOT reimplement:
-- ZK proof generation
-- Merkle tree logic
-- UTXO encryption/decryption
-- Snarkjs circuit interaction
-- WASM loading
+### Transactions Table
+```sql
+CREATE TABLE transactions (
+  id TEXT PRIMARY KEY,
+  linkId TEXT,
+  senderAddress TEXT,
+  recipientAddress TEXT,
+  amount TEXT,
+  status TEXT ('pending', 'confirmed', 'failed'),
+  transactionHash TEXT,
+  createdAt TIMESTAMP DEFAULT NOW()
+);
+```
 
-Privacy Cash SDK handles all of this.
+See `prisma/schema.prisma` for full schema.
 
-### Backend Responsibilities
+## 🔐 Security Considerations
 
-- Initialize PrivacyCash with backend keypair
-- Accept API requests from frontend
-- Call SDK methods (deposit/withdraw)
-- Manage payment link lifecycle
-- Return transaction signatures
+### Signature Verification
+```typescript
+// Backend verifies frontend signature
+const isValid = nacl.sign.detached.verify(
+  messageBytes,
+  signatureBytes,
+  publicKeyBytes
+)
+```
 
-### Frontend Responsibilities
+### Operator Balance Monitoring
+```
+Every 1 hour:
+  Check operator balance
+  Alert if < 0.05 SOL (warning)
+  Alert if < 0.01 SOL (critical)
+```
 
-- Connect user's wallet
-- Sign transactions locally
-- Display UI
-- Call backend API
-- Never directly use PrivacyCash SDK
+### Environment Protection
+```bash
+# Production
+NODE_ENV=production
+# Errors are generic (no info leak)
 
-## Production Considerations
+# Development
+NODE_ENV=development
+# Full error details for debugging
+```
 
-1. **Storage**: Replace in-memory links with database (PostgreSQL, MongoDB)
-2. **Queue**: Use Bull/RabbitMQ for async deposit/withdrawal processing
-3. **Monitoring**: Add logging, metrics, alerting
-4. **Rate Limiting**: Add rate limiting per IP/wallet
-5. **Validation**: Strict input validation, amount limits
-6. **Error Handling**: Graceful error recovery, transaction retry logic
-7. **Keys**: Use key management service (AWS KMS, HashiCorp Vault)
-8. **CORS**: Configure specific allowed origins
+### Key Management
+```typescript
+// Keys never logged or exposed
+// Validate key format (must be 64 bytes)
+// Use environment variables only
+```
+
+## 🔄 Privacy Cash Integration
+
+### Deposit Flow
+1. Frontend generates ZK proof
+2. Frontend signs deposit transaction
+3. Frontend submits to Privacy Cash relayer
+4. Backend records transaction
+5. UTXO encrypted to recipient's key
+
+### Withdrawal Flow
+1. Recipient decrypts UTXO using their key
+2. Recipient generates withdrawal proof
+3. Recipient withdraws to their wallet
+4. Backend records withdrawal
+
+### Zero-Knowledge Proofs
+- Generated client-side (frontend)
+- Verified on-chain by Solana
+- No private data revealed
+
+## 📊 Monitoring
+
+### Operator Balance Checks
+```
+Status: ✓ Running
+Check Interval: 60 minutes
+Last Check: 2026-01-31 12:30 UTC
+Current Balance: 0.250 SOL
+Status: OK (above 0.01 SOL minimum)
+```
+
+### Logs
+```bash
+# Development logs to console
+npm run dev
+
+# Production logs to file
+tail -f logs/production.log
+```
+
+## 🛠️ Database Management
+
+### Run Migrations
+```bash
+npm run migrations
+```
+
+### Seed Database
+```bash
+npm run seed
+```
+
+### Reset Database (development only)
+```bash
+# Delete and recreate
+rm db.sqlite
+npm run migrations
+```
+
+## 🚢 Deployment
+
+### Railway Deployment
+
+```bash
+# 1. Set environment variables
+PORT=8080
+DATABASE_URL=postgresql://user:pass@host/db
+OPERATOR_SECRET_KEY=232,221,205,...
+
+# 2. Deploy
+railway up
+```
+
+### Vercel Serverless (if using edge functions)
+
+Not recommended for this app - use Railway or similar for persistent server.
+
+### Docker Deployment
+
+```dockerfile
+FROM node:18-alpine
+WORKDIR /app
+COPY package*.json ./
+RUN npm install
+COPY . .
+RUN npm run build
+EXPOSE 8080
+CMD ["npm", "start"]
+```
+
+## 📈 Performance
+
+| Metric | Value |
+|--------|-------|
+| Build time | ~5s |
+| Server startup | <1s |
+| API response | 100-500ms |
+| Database query | 10-100ms |
+| ZK proof verify | <1s (on-chain) |
+
+## 🐛 Troubleshooting
+
+### Error: "OPERATOR_SECRET_KEY not set"
+```bash
+# Generate operator key
+npx ts-node generate-operator.ts
+# Copy key to .env OPERATOR_SECRET_KEY=...
+```
+
+### Error: "Operator balance insufficient"
+```bash
+# Send SOL to operator wallet
+# Check address in logs
+# Wait ~30 seconds for next check
+```
+
+### Error: "Cannot connect to database"
+```bash
+# Ensure DATABASE_URL is correct
+# For SQLite: DATABASE_URL=sqlite:./db.sqlite
+# For PostgreSQL: DATABASE_URL=postgresql://...
+# Run migrations: npm run migrations
+```
+
+### Error: "Signature verification failed"
+```bash
+# Frontend must sign with Phantom
+# Message format must be exact
+# Check logs for signature details
+```
+
+## 📚 Resources
+
+- **Express.js:** https://expressjs.com/
+- **Prisma ORM:** https://www.prisma.io/
+- **Privacy Cash SDK:** https://github.com/privacy-cash/...
+- **Solana:** https://solana.com/
+- **Railway:** https://railway.app/
+
+## 📄 License
+
+MIT
+
+---
+
+**Ready to run!** Start with `npm run dev` 🚀

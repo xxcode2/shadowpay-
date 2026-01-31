@@ -49,7 +49,7 @@ export class App {
     this.bound = true
     
     // Set logo dynamically (Vite will handle bundling)
-    const logoImg = document.querySelector('img[alt="ShadowPay"]') as HTMLImageElement
+    const logoImg = document.getElementById('logo-img') as HTMLImageElement
     if (logoImg) {
       logoImg.src = logo
     }
