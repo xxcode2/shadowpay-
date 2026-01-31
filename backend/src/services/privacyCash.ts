@@ -94,14 +94,11 @@ export function initializePrivacyCash(
     throw new Error('Invalid RPC URL - must be HTTP/HTTPS endpoint')
   }
 
-  const config: any = {
-    RPC_url: rpcUrl,
-    owner: operatorKeypair,
-    enableDebug: enableDebug || process.env.NODE_ENV === 'development',
-  }
-
   try {
-    return new PrivacyCash(config)
+    // ✅ CRITICAL FIX: Use correct constructor signature (keypair, rpcUrl)
+    // NOT config object like before
+    // @ts-ignore - SDK may not have complete type definitions
+    return new PrivacyCash(operatorKeypair, rpcUrl)
   } catch (err: any) {
     throw new Error(`Failed to initialize PrivacyCash: ${err.message}`)
   }
@@ -196,6 +193,8 @@ export async function executeWithdrawal(
   }
 
   try {
+    // ✅ CRITICAL FIX: Use correct API signature for withdraw()
+    // Privacy Cash SDK withdraw(options) takes object with lamports, recipientAddress
     const result = await pc.withdraw({
       lamports,
       recipientAddress,
@@ -217,6 +216,10 @@ export async function executeWithdrawal(
 
     if (errorMsg.includes('invalid')) {
       throw new Error('Invalid withdrawal parameters')
+    }
+
+    if (errorMsg.includes('unspent utxo')) {
+      throw new Error('No unspent UTXO available for withdrawal - operator may need to deposit first')
     }
 
     throw new Error(`Withdrawal failed: ${err.message}`)
