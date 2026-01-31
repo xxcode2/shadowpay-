@@ -37,3 +37,4 @@ yarn-debug.log*
 data/
 *.json~
 .vercel/
+.env.production
