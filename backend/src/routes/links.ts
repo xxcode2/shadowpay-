@@ -80,6 +80,7 @@ router.post('/', async (req: Request, res: Response) => {
         amount,
         lamports,
         assetType: 'SOL',
+        tokenMint: null,  // ✅ For backward compatibility - SOL doesn't use tokenMint
         claimed: false,
         depositTx: depositTx,
         createdAt: new Date(),
