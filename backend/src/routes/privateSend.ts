@@ -93,7 +93,6 @@ router.post('/', async (req: Request, res: Response) => {
         amount: amount,
         lamports: BigInt(lamports),
         assetType: 'SOL',
-        tokenMint: null,  // ✅ For backward compatibility - SOL doesn't use tokenMint
         claimed: false,
         // Store recipient in claimedBy field (will be the owner)
         // This is a workaround - ideally we'd have a recipientAddress field

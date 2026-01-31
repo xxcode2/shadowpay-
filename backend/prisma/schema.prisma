@@ -148,9 +148,9 @@ model PaymentLink {
   lamports    BigInt              // ✅ SOURCE OF TRUTH: stored in lamports (no rounding)
   assetType   String   // "SOL", "USDC", "USDT"
   
-  // ✅ NEW: SPL Token support
-  tokenMint   String?             // Mint address for SPL tokens (nullable for backward compatibility)
-  tokenName   String?              // Token name: "USDC", "USDT", "ZEC", etc.
+  // ⚠️ TEMPORARILY DISABLED: SPL Token support (not migrated to production DB yet)
+  // tokenMint   String?             // Mint address for SPL tokens (nullable for backward compatibility)
+  // tokenName   String?              // Token name: "USDC", "USDT", "ZEC", etc.
 
   // Status
   claimed     Boolean  @default(false)
@@ -193,9 +193,9 @@ model Transaction {
   amount          Float    // Amount in SOL (for consistency with PaymentLink)
   assetType       String
   
-  // ✅ NEW: SPL Token support
-  tokenMint       String?  // Mint address for SPL tokens
-  tokenName       String?  // Token name for easy reference
+  // ⚠️ TEMPORARILY DISABLED: SPL Token support (not migrated to production DB yet)
+  // tokenMint       String?  // Mint address for SPL tokens
+  // tokenName       String?  // Token name for easy reference
 
   transactionHash String?  // ✅ Made nullable - will be populated when confirmed
   fromAddress     String?

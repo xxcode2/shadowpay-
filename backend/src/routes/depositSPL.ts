@@ -76,8 +76,7 @@ router.post('/', async (req: Request, res: Response) => {
         assetType: tokenInfo.name,
         transactionHash: `pending-${linkId}`,
         status: 'pending',
-        tokenMint: tokenMint,
-        tokenName: tokenInfo.name,
+        // ⚠️ tokenMint and tokenName temporarily disabled (not in production DB)
       },
     })
 
@@ -87,8 +86,7 @@ router.post('/', async (req: Request, res: Response) => {
       data: {
         depositTx: depositResult.tx,
         assetType: tokenInfo.name,
-        tokenMint: tokenMint,
-        tokenName: tokenInfo.name,
+        // ⚠️ tokenMint and tokenName temporarily disabled (not in production DB)
       },
     })
 

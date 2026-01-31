@@ -59,7 +59,6 @@ router.post('/', async (req: Request<{}, {}, any>, res: Response) => {
         amount,
         lamports,
         assetType,
-        tokenMint: null,  // ✅ For backward compatibility - SOL doesn't use tokenMint
         claimed: false,
         depositTx: '', // Will be updated when deposit to Privacy Cash happens
         // ⚠️ TEMPORARY: creatorAddress not in production DB yet - will enable after migration
