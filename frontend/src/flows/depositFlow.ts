@@ -39,11 +39,12 @@ export async function executeUserPaysDeposit(
   request: DepositRequest,
   wallet: any
 ): Promise<string> {
-  const { linkId, amount, publicKey, recipientAddress } = request
+  const { linkId, amount, publicKey, recipientAddress, token } = request
   const lamports = Math.round(parseFloat(amount) * 1e9)
 
   console.log('\n💰 Processing NON-CUSTODIAL deposit...')
   console.log(`   Sender: ${publicKey}`)
+  console.log(`   Token: ${token || 'SOL'}`)
   if (recipientAddress) {
     console.log(`   Recipient: ${recipientAddress}`)
   }
