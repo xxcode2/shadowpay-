@@ -110,7 +110,7 @@ npm run build
 VITE_BACKEND_URL=http://localhost:8080
 
 # Solana RPC URL (for wallet connection)
-VITE_SOLANA_RPC_URL=https://mainnet.helius-rpc.com/?api-key=YOUR_KEY
+VITE_SOLANA_RPC_URL=https://mainnet.helius-rpc.com
 ```
 
 ### Build Configuration
