@@ -13,6 +13,14 @@ public/
 .env.local
 .env.*.local
 
+# Sensitive files (CRITICAL - never commit)
+operator-key.json
+*.key
+wallet.json
+database.db
+*.sqlite
+secrets/
+
 # IDE
 .vscode/
 .idea/
