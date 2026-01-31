@@ -14,15 +14,19 @@ if (!DATABASE_URL) {
 }
 
 try {
-  console.log('🔄 Running migrations...');
+  console.log('🔄 Running migrations... (timeout: 30s)');
   execSync('npx prisma migrate deploy', {
     stdio: 'inherit',
-    timeout: 10000,
+    timeout: 30000, // 30 seconds
+    env: { ...process.env, DATABASE_URL },
   });
   console.log('✅ Migrations completed');
 } catch (err) {
-  console.warn('⚠️ Migrations failed or timed out - continuing anyway');
-  console.warn('   Error:', err.message);
+  if (err.killed) {
+    console.warn('⚠️ Migrations timed out after 30s - continuing anyway');
+  } else {
+    console.warn('⚠️ Migrations failed:', err.message);
+  }
 }
 
 process.exit(0);

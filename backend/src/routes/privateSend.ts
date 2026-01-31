@@ -102,6 +102,8 @@ router.post('/', async (req: Request, res: Response) => {
     })
 
     // Also create a transaction record to track sender and recipient
+    // Note: transactionHash is set to 'pending' as a placeholder
+    // It will be updated when the actual deposit transaction is confirmed
     await prisma.transaction.create({
       data: {
         linkId: paymentId,
@@ -111,7 +113,7 @@ router.post('/', async (req: Request, res: Response) => {
         assetType: 'SOL',
         fromAddress: senderAddress,
         toAddress: recipientAddress,
-        // transactionHash will be set when deposit is confirmed
+        transactionHash: 'pending', // Placeholder - will be updated on confirmation
       },
     })
 

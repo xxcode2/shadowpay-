@@ -5,7 +5,9 @@
 -- First, try to drop any unique constraint that might exist
 ALTER TABLE "transactions" DROP CONSTRAINT IF EXISTS "transactions_transactionHash_key" CASCADE;
 
--- Make the column nullable
+-- Make the column nullable (critical change)
 ALTER TABLE "transactions" ALTER COLUMN "transactionHash" DROP NOT NULL;
 
 -- Convert existing empty strings to NULL
+-- LIMIT not supported in Postgres UPDATE, so just do the update
+UPDATE "transactions" SET "transactionHash" = NULL WHERE "transactionHash" = '';
