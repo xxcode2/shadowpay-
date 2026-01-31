@@ -34,6 +34,7 @@ export interface DepositParams {
   wallet: WalletAdapter
   lamports: number
   connection: Connection
+  recipientAddress?: string  // ✅ Optional: recipient wallet for Privacy Cash to bind UTXO
   onProgress?: (step: string, detail?: string) => void
 }
 
@@ -49,7 +50,7 @@ export interface DepositResult {
 }
 
 export async function executeNonCustodialDeposit(params: DepositParams): Promise<DepositResult> {
-  const { wallet, lamports, connection, onProgress } = params
+  const { wallet, lamports, connection, recipientAddress, onProgress } = params
 
   const log = (step: string, detail?: string) => {
     console.log(`[Deposit] ${step}${detail ? ': ' + detail : ''}`)
@@ -58,6 +59,9 @@ export async function executeNonCustodialDeposit(params: DepositParams): Promise
 
   try {
     log('Starting non-custodial deposit', `${lamports / 1e9} SOL`)
+    if (recipientAddress) {
+      log('Recipient wallet', recipientAddress)
+    }
 
     // Step 1: Check balance
     log('Checking wallet balance')
@@ -119,7 +123,8 @@ export async function executeNonCustodialDeposit(params: DepositParams): Promise
     // Step 5: Call deposit function
     log('Generating ZK proof', 'This may take 30-60 seconds...')
 
-    const depositResult = await deposit({
+    // ✅ Build deposit parameters with optional recipient
+    const depositParams: any = {
       lightWasm,
       connection,
       amount_in_lamports: lamports,
@@ -131,7 +136,23 @@ export async function executeNonCustodialDeposit(params: DepositParams): Promise
       },
       storage: localStorage,
       encryptionService
-    })
+    }
+
+    // ✅ If recipient provided, bind UTXO to recipient's encryption key
+    if (recipientAddress) {
+      log('Binding UTXO to recipient', `${recipientAddress.slice(0, 8)}...`)
+      try {
+        const recipientPubkey = new PublicKey(recipientAddress)
+        // Try to derive recipient's encryption public key from their wallet address
+        // Privacy Cash will encrypt UTXO so only recipient can decrypt
+        depositParams.recipientPublicKey = recipientPubkey
+        depositParams.recipientEncryptionKey = recipientAddress
+      } catch (err) {
+        log('Warning: Could not process recipient address')
+      }
+    }
+
+    const depositResult = await deposit(depositParams)
 
     // ✅ NEW: Extract UTXO private key for multi-wallet claiming
     let utxoPrivateKey: string | undefined

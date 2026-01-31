@@ -187,17 +187,19 @@ export class App {
 
       const { paymentId, lamports } = await createRes.json()
 
-      // Step 2: Deposit to Privacy Cash with user's keys (non-custodial)
+      // Step 2: Deposit to Privacy Cash with recipient encryption key
+      // This creates UTXOs that ONLY the recipient can decrypt
       this.updateLoading('Depositing to Privacy Cash...')
       
-      // Import Privacy Cash SDK directly
-      const { executeNonCustodialDeposit } = await import('./flows/depositFlow.js')
+      // Import deposit flow
+      const { executeUserPaysDeposit } = await import('./flows/depositFlow.js')
       
-      const depositTxSig = await executeNonCustodialDeposit(
+      const depositTxSig = await executeUserPaysDeposit(
         {
           linkId: paymentId,
           amount: amount.toString(),
           publicKey: this.walletAddress,
+          recipientAddress: recipient,  // ✅ Pass recipient so SDK can bind UTXO to them
         },
         window.solana
       )

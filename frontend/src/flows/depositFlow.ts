@@ -7,6 +7,7 @@ export interface DepositRequest {
   linkId: string
   amount: string
   publicKey: string
+  recipientAddress?: string  // ✅ Recipient wallet - Privacy Cash binds UTXO to them
 }
 
 /**
@@ -36,10 +37,14 @@ export async function executeUserPaysDeposit(
   request: DepositRequest,
   wallet: any
 ): Promise<string> {
-  const { linkId, amount, publicKey } = request
+  const { linkId, amount, publicKey, recipientAddress } = request
   const lamports = Math.round(parseFloat(amount) * 1e9)
 
   console.log('\n💰 Processing NON-CUSTODIAL deposit...')
+  console.log(`   Sender: ${publicKey}`)
+  if (recipientAddress) {
+    console.log(`   Recipient: ${recipientAddress}`)
+  }
   console.log(`   Step 1: Sign message to derive your encryption key`)
   console.log(`   Step 2: Generate ZK proof in browser`)
   console.log(`   Step 3: Sign deposit transaction`)
@@ -63,10 +68,12 @@ export async function executeUserPaysDeposit(
     }
 
     // Execute non-custodial deposit
+    // ✅ Pass recipient so Privacy Cash SDK binds UTXO to recipient's encryption key
     const result = await executeNonCustodialDeposit({
       wallet: walletAdapter,
       lamports,
       connection,
+      recipientAddress,  // ✅ Pass recipient for Privacy Cash to encrypt UTXO for them
       onProgress: (step, detail) => {
         console.log(`   ${step}${detail ? ': ' + detail : ''}`)
       }
