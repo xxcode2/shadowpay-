@@ -189,7 +189,7 @@ model Transaction {
   amount          Float    // Amount in SOL (for consistency with PaymentLink)
   assetType       String
 
-  transactionHash String
+  transactionHash String?  // ✅ Made nullable - will be populated when confirmed
   fromAddress     String?
   toAddress       String?
 
