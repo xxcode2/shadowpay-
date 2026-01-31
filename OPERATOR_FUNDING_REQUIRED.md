@@ -1,20 +1,24 @@
 # ⚠️ OPERATOR FUNDING REQUIRED
 
+## Latest Update (Jan 31, 2026)
+
+**Operator Keypair Generated:** ✅ DONE
+- Public Key: `CgjMcmfEVzvQcvD5G8VegW3F3BsxjGLcqfVBDeY8waop`
+- Private Key: Added to `backend/.env.production`
+- Environment Configured: ✅ DONE
+
+**NEXT STEP:** Send SOL to the operator wallet above to enable withdrawals
+
+---
+
 ## Problem
 
 Withdrawals are failing with:
 ```
-❌ Withdrawal failed: Need at least 1 unspent UTXO to perform a withdrawal
+❌ Withdrawal failed: Operator wallet not configured
 ```
 
-## Root Cause
-
-The Privacy Cash SDK requires the operator wallet to have a **balance in the Privacy Cash shielded pool** before it can execute withdrawals.
-
-Current state:
-- ✅ Operator wallet has SOL on Solana mainnet wallet
-- ❌ Operator wallet has NO SOL in Privacy Cash pool  
-- ❌ Cannot execute withdrawals without pool balance
+This happens because `OPERATOR_SECRET_KEY` was missing from the environment.
 
 ## Solution
 
