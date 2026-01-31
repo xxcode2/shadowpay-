@@ -176,29 +176,36 @@ router.post('/confirm', async (req: Request, res: Response) => {
     })
 
     // Update transaction record to confirmed status
-    // Find the pending transaction and update it with the actual deposit tx hash
+    // Find and update ONLY the first pending transaction for this payment
     try {
-      const updateResult = await prisma.transaction.updateMany({
+      // First find the transaction we created
+      const pendingTx = await prisma.transaction.findFirst({
         where: {
           linkId: paymentId,
           type: 'pending',
         },
-        data: {
-          type: 'deposit',
-          status: 'confirmed',
-          transactionHash: depositTx,  // ✅ Replace pending marker with actual hash
-        },
       })
 
-      if (updateResult.count === 0) {
-        // If no pending transaction found, try to find any transaction for this link
+      if (pendingTx) {
+        // Update only this specific transaction
+        await prisma.transaction.update({
+          where: { id: pendingTx.id },
+          data: {
+            type: 'deposit',
+            status: 'confirmed',
+            transactionHash: depositTx,
+          },
+        })
+        console.log(`     ✅ Transaction confirmed with hash: ${depositTx.substring(0, 20)}...`)
+      } else {
         console.warn(`   ⚠️  No pending transaction found for payment ${paymentId}`)
+        // Try to find any existing transaction and update it
         const existingTx = await prisma.transaction.findFirst({
           where: { linkId: paymentId },
         })
 
-        if (existingTx) {
-          console.log(`   Found existing transaction, updating it...`)
+        if (existingTx && existingTx.status !== 'confirmed') {
+          console.log(`     Found existing transaction, updating it...`)
           await prisma.transaction.update({
             where: { id: existingTx.id },
             data: {
@@ -207,14 +214,14 @@ router.post('/confirm', async (req: Request, res: Response) => {
               transactionHash: depositTx,
             },
           })
-        } else {
-          console.log(`   No transaction found, creating new one...`)
-          // Create new transaction if none exists
+        } else if (!existingTx) {
+          // Create new transaction if none exists (shouldn't happen but just in case)
           const payment = await prisma.paymentLink.findUnique({
             where: { id: paymentId },
           })
 
           if (payment) {
+            console.log(`     Creating new transaction record...`)
             await prisma.transaction.create({
               data: {
                 linkId: paymentId,
@@ -230,8 +237,9 @@ router.post('/confirm', async (req: Request, res: Response) => {
       }
     } catch (txErr: any) {
       // Log but don't fail if transaction update has issues
+      // The payment is still valid on Privacy Cash
       console.warn(`   ⚠️  Transaction update warning: ${txErr.message}`)
-      // The payment is still valid on Privacy Cash even if DB update fails
+      console.warn(`   ⚠️  The payment is still valid on Privacy Cash. Backend record may be incomplete.`)
     }
 
     console.log(`✅ Payment confirmed - recipient can now withdraw from Privacy Cash pool`)
