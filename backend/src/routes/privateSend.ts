@@ -1,6 +1,6 @@
 import { Router, Request, Response } from 'express'
 import { PublicKey, Keypair, LAMPORTS_PER_SOL } from '@solana/web3.js'
-import { prisma } from '../lib/prisma.js'
+import prisma from '../lib/prisma.js'
 import crypto from 'crypto'
 
 const router = Router()
