@@ -176,9 +176,11 @@ router.post('/confirm', async (req: Request, res: Response) => {
     })
 
     // Update transaction record to confirmed status
-    // Find and update ONLY the first pending transaction for this payment
+    // ✅ KEY FIX: Only update status, NOT transactionHash
+    // transactionHash stays as pending-{id} marker (never needs to change)
+    // The actual Privacy Cash tx is stored in PaymentLink.depositTx
     try {
-      // First find the transaction we created
+      // Find and update ONLY the first pending transaction for this payment
       const pendingTx = await prisma.transaction.findFirst({
         where: {
           linkId: paymentId,
@@ -187,16 +189,17 @@ router.post('/confirm', async (req: Request, res: Response) => {
       })
 
       if (pendingTx) {
-        // Update only this specific transaction
+        // ✅ Update ONLY status and type, NOT transactionHash!
         await prisma.transaction.update({
           where: { id: pendingTx.id },
           data: {
             type: 'deposit',
             status: 'confirmed',
-            transactionHash: depositTx,
+            // ✅ DON'T update transactionHash - it's already set to pending marker
+            // The actual deposit tx is in PaymentLink.depositTx
           },
         })
-        console.log(`     ✅ Transaction confirmed with hash: ${depositTx.substring(0, 20)}...`)
+        console.log(`     ✅ Transaction confirmed (status=confirmed, type=deposit)`)
       } else {
         console.warn(`   ⚠️  No pending transaction found for payment ${paymentId}`)
         // Try to find any existing transaction and update it
@@ -205,13 +208,14 @@ router.post('/confirm', async (req: Request, res: Response) => {
         })
 
         if (existingTx && existingTx.status !== 'confirmed') {
-          console.log(`     Found existing transaction, updating it...`)
+          console.log(`     Found existing transaction, marking as confirmed...`)
+          // ✅ Same approach - only update status
           await prisma.transaction.update({
             where: { id: existingTx.id },
             data: {
               type: 'deposit',
               status: 'confirmed',
-              transactionHash: depositTx,
+              // ✅ DON'T touch transactionHash
             },
           })
         } else if (!existingTx) {
@@ -229,7 +233,7 @@ router.post('/confirm', async (req: Request, res: Response) => {
                 status: 'confirmed',
                 amount: payment.amount || 0,
                 assetType: 'SOL',
-                transactionHash: depositTx,
+                transactionHash: `pending-${paymentId}`,  // ✅ Use pending marker, not depositTx
               },
             })
           }
