@@ -15,6 +15,7 @@ export default defineConfig({
   ],
   resolve: {
     alias: {
+      '@': path.resolve(__dirname, './src'),
       'node-localstorage': path.resolve(__dirname, './src/empty-module.js'),
       path: path.resolve(__dirname, './src/empty-module.js'),
     },

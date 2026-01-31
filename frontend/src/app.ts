@@ -2,6 +2,7 @@
 
 import { Connection, PublicKey, LAMPORTS_PER_SOL, Transaction, SystemProgram } from '@solana/web3.js'
 import type { DepositRequest } from './flows/depositFlow'
+import logo from '@/assets/pay.png'
 
 const BACKEND_URL =
   import.meta.env.VITE_BACKEND_URL ||
@@ -46,6 +47,13 @@ export class App {
   init() {
     if (this.bound) return
     this.bound = true
+    
+    // Set logo dynamically (Vite will handle bundling)
+    const logoImg = document.querySelector('img[alt="ShadowPay"]') as HTMLImageElement
+    if (logoImg) {
+      logoImg.src = logo
+    }
+    
     this.bindEvents()
     console.log('ShadowPay initialized')
   }
