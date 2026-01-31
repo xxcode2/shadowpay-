@@ -128,8 +128,8 @@ router.get('/operator', async (req: Request, res: Response) => {
     const publicKey = operatorKeypair.publicKey.toString();
 
     // Try to get balance (this may fail if RPC is down)
-    let balance = null;
-    let balanceError = null;
+    let balance: { lamports: number; sol: number } | null = null;
+    let balanceError: string | null = null;
 
     try {
       const { Connection } = await import('@solana/web3.js');
