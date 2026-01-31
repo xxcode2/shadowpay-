@@ -76,9 +76,12 @@ export class App {
     document.getElementById('close-success-modal')?.addEventListener('click', () => {
       document.getElementById('success-modal')?.classList.add('hidden')
     })
+
+    // Mode tabs
+    document.getElementById('mode-about')?.addEventListener('click', () => this.switchMode('about'))
   }
 
-  private switchMode(mode: 'send' | 'receive' | 'history') {
+  private switchMode(mode: 'send' | 'receive' | 'history' | 'about') {
     // Update active button
     document.querySelectorAll('.mode-btn').forEach(btn => {
       btn.classList.remove('tab-active')
@@ -93,6 +96,7 @@ export class App {
     document.getElementById('section-send')?.classList.add('hidden')
     document.getElementById('section-receive')?.classList.add('hidden')
     document.getElementById('section-history')?.classList.add('hidden')
+    document.getElementById('section-about')?.classList.add('hidden')
 
     // Show selected section
     document.getElementById(`section-${mode}`)?.classList.remove('hidden')
