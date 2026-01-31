@@ -10,7 +10,8 @@ const DATABASE_URL = process.env.DATABASE_URL;
 
 if (!DATABASE_URL) {
   console.error('❌ DATABASE_URL not set - skipping DB fix');
-  process.exit(0);  // Don't fail startup
+  // Exit with 0 (success) so the app can still start
+  process.exit(0);
 }
 
 const pool = new Pool({ connectionString: DATABASE_URL });

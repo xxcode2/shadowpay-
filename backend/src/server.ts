@@ -68,7 +68,6 @@ import linkRouter from './routes/link.js'
 import linksRouter from './routes/links.js'
 import historyRouter from './routes/history.js'
 import configRouter from './routes/config.js'
-import healthRouter from './routes/health.js'
 import tokensRouter from './routes/tokens.js'
 import privateSendRouter from './routes/privateSend.js'
 import incomingRouter from './routes/incoming.js'
@@ -102,6 +101,22 @@ app.options('*', (req, res) => {
   return res.status(200).end()
 })
 
+// ✅ STEP 0.5: IMMEDIATE HEALTH CHECK (NO DEPENDENCIES)
+// This endpoint must work even if the server is crashing on startup
+app.get('/health', (_req: express.Request, res: express.Response) => {
+  res.status(200).json({
+    status: 'ok',
+    timestamp: new Date().toISOString(),
+  })
+})
+
+app.get('/api/health', (_req: express.Request, res: express.Response) => {
+  res.status(200).json({
+    status: 'ok',
+    timestamp: new Date().toISOString(),
+  })
+})
+
 // ✅ STEP 1: CORS HEADERS FOR ALL OTHER REQUESTS
 const corsOptions = {
   origin: [
@@ -133,16 +148,6 @@ app.use(express.json())
 // ✅ STEP 3: DATABASE AVAILABILITY CHECK
 const isDatabaseAvailable = () => !!process.env.DATABASE_URL
 
-// ✅ STEP 3.5: HEALTH CHECK
-app.get('/health', (_req: express.Request, res: express.Response) => {
-  res.status(200).json({
-    status: 'ok',
-    port: process.env.PORT || 'not set',
-    database: process.env.DATABASE_URL ? 'configured' : 'NOT CONFIGURED',
-    timestamp: new Date().toISOString(),
-  })
-})
-
 // ✅ STEP 4: API ROUTES
 app.use('/api/create-link', createLinkRouter)
 app.use('/api/deposit', depositRouter)
@@ -152,7 +157,8 @@ app.use('/api/link', linkRouter)
 app.use('/api/links', linksRouter)
 app.use('/api/history', historyRouter)
 app.use('/api/config', configRouter)
-app.use('/api/health', healthRouter)
+// Health check is now directly on app.get('/health') and app.get('/api/health')
+// app.use('/api/health', healthRouter)  // Disabled - using simpler health checks
 app.use('/api/tokens', tokensRouter)
 app.use('/api/private-send', privateSendRouter)
 app.use('/api/incoming', incomingRouter)
@@ -273,11 +279,10 @@ async function startServer() {
   }
 
   // ✅ STEP 8: LISTEN
-  const PORT = Number(process.env.PORT)
-
-  if (!PORT) {
-    console.error('❌ PORT env not set')
-    process.exit(1)
+  const PORT = Number(process.env.PORT) || 3001
+  
+  if (!process.env.PORT) {
+    console.warn(`⚠️  PORT env not set, using default: ${PORT}`)
   }
 
   const server = app.listen(PORT, '0.0.0.0', () => {
