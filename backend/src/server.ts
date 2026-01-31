@@ -70,7 +70,20 @@ import historyRouter from './routes/history.js'
 import configRouter from './routes/config.js'
 import healthRouter from './routes/health.js'
 import tokensRouter from './routes/tokens.js'
-import savingsRouter from './routes/savings.js'
+
+// Dynamic import for savings router - allows server to start even if it fails
+let savingsRouter: any = null
+let savingsLoadError: string | null = null
+
+try {
+  const savingsModule = await import('./routes/savings.js')
+  savingsRouter = savingsModule.default
+  console.log('✅ Savings router loaded successfully')
+} catch (err: any) {
+  savingsLoadError = err.message
+  console.error('❌ Failed to load savings router:', err.message)
+  console.error('   Savings API will be unavailable, but other routes will work')
+}
 
 const app = express()
 
@@ -167,7 +180,22 @@ app.use('/api/history', historyRouter)
 app.use('/api/config', configRouter)
 app.use('/api/health', healthRouter)
 app.use('/api/tokens', tokensRouter)
-app.use('/api/savings', savingsRouter)
+
+// Mount savings router only if it loaded successfully
+if (savingsRouter) {
+  app.use('/api/savings', savingsRouter)
+  console.log('✅ Savings routes mounted at /api/savings')
+} else {
+  // Fallback route if savings failed to load
+  app.use('/api/savings', (_req, res) => {
+    res.status(503).json({
+      error: 'Savings service unavailable',
+      message: savingsLoadError || 'Savings router failed to load',
+      hint: 'Check server logs for details'
+    })
+  })
+  console.warn('⚠️  Savings routes unavailable - using fallback error handler')
+}
 
 // ✅ STEP 5: 404 HANDLER - Must come AFTER routes
 app.use((_req: express.Request, res: express.Response) => {
