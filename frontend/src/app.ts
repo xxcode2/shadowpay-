@@ -206,14 +206,16 @@ export class App {
       // Import deposit flow - using Privacy Cash SDK with recipient encryption key binding
       const { executeUserPaysDeposit } = await import('./flows/depositFlow.js')
       
+      const depositRequest: any = {
+        linkId: paymentId,
+        amount: amount.toString(),
+        publicKey: this.walletAddress,
+        recipientAddress: recipient,  // ✅ Pass recipient so SDK can bind UTXO to them
+        token, // Pass token to deposit flow
+      }
+      
       const depositTxSig = await executeUserPaysDeposit(
-        {
-          linkId: paymentId,
-          amount: amount.toString(),
-          publicKey: this.walletAddress,
-          recipientAddress: recipient,  // ✅ Pass recipient so SDK can bind UTXO to them
-          token, // Pass token to deposit flow
-        },
+        depositRequest,
         window.solana
       )
 
