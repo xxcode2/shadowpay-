@@ -102,9 +102,7 @@ router.post('/', async (req: Request, res: Response) => {
     })
 
     // Also create a transaction record to track sender and recipient
-    // Note: transactionHash is set to a unique placeholder value
-    // It will be updated when the actual deposit transaction is confirmed
-    const txHashPlaceholder = `pending_${paymentId}`
+    // The transactionHash will be NULL until deposit is confirmed
     await prisma.transaction.create({
       data: {
         linkId: paymentId,
@@ -114,7 +112,7 @@ router.post('/', async (req: Request, res: Response) => {
         assetType: 'SOL',
         fromAddress: senderAddress,
         toAddress: recipientAddress,
-        transactionHash: txHashPlaceholder,
+        transactionHash: null,  // ✅ Start as null, update when confirmed
       },
     })
 
@@ -177,17 +175,56 @@ router.post('/confirm', async (req: Request, res: Response) => {
     })
 
     // Update transaction record to confirmed status
-    await prisma.transaction.updateMany({
-      where: {
-        linkId: paymentId,
-        type: 'pending',
-      },
-      data: {
-        type: 'deposit',
-        status: 'confirmed',
-        transactionHash: depositTx,
-      },
-    })
+    // First try to update the pending transaction
+    try {
+      const updateResult = await prisma.transaction.updateMany({
+        where: {
+          linkId: paymentId,
+          type: 'pending',
+        },
+        data: {
+          type: 'deposit',
+          status: 'confirmed',
+          transactionHash: depositTx,
+        },
+      })
+
+      if (updateResult.count === 0) {
+        // If no pending transaction was found, find the existing one and update it
+        const existingTx = await prisma.transaction.findFirst({
+          where: { linkId: paymentId },
+        })
+
+        if (existingTx) {
+          // Update existing transaction
+          await prisma.transaction.update({
+            where: { id: existingTx.id },
+            data: {
+              type: 'deposit',
+              status: 'confirmed',
+              transactionHash: depositTx,
+            },
+          })
+        } else {
+          console.warn(`   ⚠️  No transaction found for payment ${paymentId}, creating one`)
+          // Create transaction if it doesn't exist
+          await prisma.transaction.create({
+            data: {
+              linkId: paymentId,
+              type: 'deposit',
+              status: 'confirmed',
+              amount: payment.amount,
+              assetType: 'SOL',
+              transactionHash: depositTx,
+            },
+          })
+        }
+      }
+    } catch (txErr: any) {
+      // Log but don't fail if transaction update has issues
+      // The payment is still valid on Privacy Cash
+      console.warn(`   ⚠️  Transaction update warning: ${txErr.message}`)
+    }
 
     console.log(`✅ Payment confirmed - recipient can now withdraw from Privacy Cash pool`)
 

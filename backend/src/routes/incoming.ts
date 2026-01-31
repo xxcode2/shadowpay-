@@ -30,19 +30,26 @@ router.get('/:walletAddress', async (req: Request, res: Response) => {
     console.log(`   Wallet: ${walletAddress}`)
 
     // Find all transactions where this wallet is the recipient
-    // and the payment hasn't been claimed yet
+    // Include both pending and confirmed (in case UI needs to show "pending" status)
     const incomingTransactions = await prisma.transaction.findMany({
       where: {
         toAddress: walletAddress,
         type: 'deposit',
-        status: 'confirmed',
+        // Don't filter by status - show both pending and confirmed
       },
       orderBy: {
         createdAt: 'desc',
       },
     })
 
+    console.log(`   ✅ Query executed successfully`)
     console.log(`   Found ${incomingTransactions.length} incoming transactions`)
+    
+    if (incomingTransactions.length > 0) {
+      incomingTransactions.forEach((tx: any, idx: number) => {
+        console.log(`     [${idx + 1}] LinkID: ${tx.linkId}, Status: ${tx.status}, Amount: ${tx.amount} SOL`)
+      })
+    }
 
     // Get payment details for each transaction
     const payments = await Promise.all(
