@@ -1,12 +1,6 @@
 {
   "version": 2,
   "buildCommand": "pnpm install && pnpm build && rm -rf .vercel/output && mkdir -p .vercel/output/static && cp -r frontend/dist/* .vercel/output/static/",
-  "outputDirectory": ".vercel/output/static",
-  "env": {
-    "DATABASE_URL": "postgres://postgres.cojxffgdjlhbuyokrpib:5enFwLqFBJBUq77w@aws-1-us-east-1.pooler.supabase.com:6543/postgres?sslmode=require&pgbouncer=true",
-    "VITE_API_URL": "https://shadowpay-backend-production.up.railway.app/api",
-    "VITE_BACKEND_URL": "https://shadowpay-backend-production.up.railway.app",
-    "VITE_SOLANA_RPC": "https://mainnet.helius-rpc.com/?api-key=c455719c-354b-4a44-98d4-27f8a18aa79c"
-  }
+  "outputDirectory": ".vercel/output/static"
 }
 
