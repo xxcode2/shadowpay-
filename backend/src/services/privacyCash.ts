@@ -95,10 +95,14 @@ export function initializePrivacyCash(
   }
 
   try {
-    // ✅ CRITICAL FIX: Use correct constructor signature (keypair, rpcUrl)
-    // NOT config object like before
-    // @ts-ignore - SDK may not have complete type definitions
-    return new PrivacyCash(operatorKeypair, rpcUrl)
+    // ✅ FIXED: Config object with proper field names
+    // Privacy Cash SDK expects: { RPC_url, owner } 
+    const config: any = {
+      RPC_url: rpcUrl,
+      owner: operatorKeypair,
+    }
+    
+    return new PrivacyCash(config)
   } catch (err: any) {
     throw new Error(`Failed to initialize PrivacyCash: ${err.message}`)
   }
@@ -193,7 +197,7 @@ export async function executeWithdrawal(
   }
 
   try {
-    // ✅ CRITICAL FIX: Use correct API signature for withdraw()
+    // ✅ Use correct API signature for withdraw()
     // Privacy Cash SDK withdraw(options) takes object with lamports, recipientAddress
     const result = await pc.withdraw({
       lamports,
@@ -202,8 +206,11 @@ export async function executeWithdrawal(
 
     const sol = lamports / LAMPORTS_PER_SOL
 
+    // ✅ Handle both possible return formats
+    const txId = result.tx || result.toString()
+
     return {
-      tx: result.tx,
+      tx: txId,
       lamports,
       sol,
     }
@@ -219,7 +226,7 @@ export async function executeWithdrawal(
     }
 
     if (errorMsg.includes('unspent utxo')) {
-      throw new Error('No unspent UTXO available for withdrawal - operator may need to deposit first')
+      throw new Error('No unspent UTXO available - operator may need to deposit first')
     }
 
     throw new Error(`Withdrawal failed: ${err.message}`)
