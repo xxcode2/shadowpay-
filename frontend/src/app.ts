@@ -55,6 +55,7 @@ export class App {
     document.getElementById('mode-send')?.addEventListener('click', () => this.switchMode('send'))
     document.getElementById('mode-receive')?.addEventListener('click', () => this.switchMode('receive'))
     document.getElementById('mode-history')?.addEventListener('click', () => this.switchMode('history'))
+    document.getElementById('mode-about')?.addEventListener('click', () => this.switchMode('about'))
 
     // Wallet
     document.getElementById('connect-wallet-btn')?.addEventListener('click', () => this.connectWallet())
