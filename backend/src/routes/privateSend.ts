@@ -111,6 +111,7 @@ router.post('/', async (req: Request, res: Response) => {
         assetType: 'SOL',
         fromAddress: senderAddress,
         toAddress: recipientAddress,
+        transactionHash: '', // Will be updated when deposit is confirmed
       },
     })
 
