@@ -162,10 +162,21 @@
       <div class="gradient-border rounded-3xl p-8 glow-effect">
        <form id="send-form" class="space-y-6">
         <div>
+         <label for="send-token-select" class="block text-sm font-medium text-gray-300 mb-2">Token</label>
+         <select id="send-token-select" class="w-full px-5 py-3 bg-gray-900/50 border border-purple-500/30 rounded-xl text-white focus:outline-none focus:border-purple-500 transition-colors appearance-none cursor-pointer">
+          <option value="SOL" selected>SOL (Solana)</option>
+          <option value="USDC">USDC (USD Coin)</option>
+          <option value="USDT">USDT (Tether USD)</option>
+          <option value="ZEC">ZEC (Zcash)</option>
+          <option value="ORE">ORE</option>
+          <option value="STORE">STORE</option>
+         </select>
+        </div>
+        <div>
          <label for="send-amount-input" class="block text-sm font-medium text-gray-300 mb-2">Amount</label>
          <div class="relative">
           <input type="number" id="send-amount-input" step="0.001" min="0.001" placeholder="0.00" class="w-full px-5 py-4 bg-gray-900/50 border border-purple-500/30 rounded-xl text-white text-2xl font-bold focus:outline-none focus:border-purple-500 transition-colors" required>
-          <span class="absolute right-5 top-1/2 -translate-y-1/2 text-gray-500 font-display">SOL</span>
+          <span class="absolute right-5 top-1/2 -translate-y-1/2 text-gray-500 font-display" id="send-token-symbol">SOL</span>
          </div>
         </div>
         <div>

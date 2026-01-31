@@ -71,6 +71,8 @@ import configRouter from './routes/config.js'
 import tokensRouter from './routes/tokens.js'
 import privateSendRouter from './routes/privateSend.js'
 import incomingRouter from './routes/incoming.js'
+import depositSPLRouter from './routes/depositSPL.js'
+import withdrawSPLRouter from './routes/withdrawSPL.js'
 
 // Privacy Cash model: UTXO-based ownership, not bearer links
 
@@ -151,8 +153,10 @@ const isDatabaseAvailable = () => !!process.env.DATABASE_URL
 // ✅ STEP 4: API ROUTES
 app.use('/api/create-link', createLinkRouter)
 app.use('/api/deposit', depositRouter)
+app.use('/api/deposit-spl', depositSPLRouter)
 app.use('/api/claim-link', claimLinkRouter)
 app.use('/api/withdraw', withdrawRouter)
+app.use('/api/withdraw-spl', withdrawSPLRouter)
 app.use('/api/link', linkRouter)
 app.use('/api/links', linksRouter)
 app.use('/api/history', historyRouter)

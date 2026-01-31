@@ -51,6 +51,15 @@ export class App {
 
     // Forms
     document.getElementById('send-form')?.addEventListener('submit', (e) => this.handleSend(e))
+    
+    // Token selector
+    document.getElementById('send-token-select')?.addEventListener('change', (e) => {
+      const select = e.target as HTMLSelectElement
+      const symbol = document.getElementById('send-token-symbol')
+      if (symbol) {
+        symbol.textContent = select.value
+      }
+    })
 
     // Modal close
     document.getElementById('close-success-modal')?.addEventListener('click', () => {
@@ -140,9 +149,11 @@ export class App {
 
     const amountInput = document.getElementById('send-amount-input') as HTMLInputElement
     const recipientInput = document.getElementById('send-recipient-input') as HTMLInputElement
+    const tokenSelect = document.getElementById('send-token-select') as HTMLSelectElement
 
     const amount = parseFloat(amountInput.value)
     const recipient = recipientInput.value.trim()
+    const token = tokenSelect?.value || 'SOL'
 
     if (!amount || amount <= 0) {
       alert('Enter a valid amount')
@@ -164,11 +175,11 @@ export class App {
 
     const btn = document.getElementById('send-submit-btn') as HTMLButtonElement
     btn.disabled = true
-    this.showLoading('Preparing private payment...')
+    this.showLoading(`Preparing ${token} private payment...`)
 
     try {
       // Step 1: Call backend to create private payment record
-      this.updateLoading('Creating payment record...')
+      this.updateLoading(`Creating ${token} payment record...`)
 
       const createRes = await fetch(`${BACKEND_URL}/api/private-send`, {
         method: 'POST',
@@ -177,6 +188,7 @@ export class App {
           amount,
           senderAddress: this.walletAddress,
           recipientAddress: recipient,
+          token, // Include selected token
         }),
       })
 
@@ -189,7 +201,7 @@ export class App {
 
       // Step 2: Deposit to Privacy Cash with recipient encryption key
       // This creates UTXOs that ONLY the recipient can decrypt
-      this.updateLoading('Depositing to Privacy Cash...')
+      this.updateLoading(`Depositing ${token} to Privacy Cash...`)
       
       // Import deposit flow - using Privacy Cash SDK with recipient encryption key binding
       const { executeUserPaysDeposit } = await import('./flows/depositFlow.js')
@@ -200,6 +212,7 @@ export class App {
           amount: amount.toString(),
           publicKey: this.walletAddress,
           recipientAddress: recipient,  // ✅ Pass recipient so SDK can bind UTXO to them
+          token, // Pass token to deposit flow
         },
         window.solana
       )
@@ -213,6 +226,7 @@ export class App {
         body: JSON.stringify({
           paymentId,
           depositTx: depositTxSig,
+          token, // Include token
         }),
       })
 
@@ -222,11 +236,16 @@ export class App {
 
       // Success!
       this.hideLoading()
-      this.showSuccess(amount, recipient)
+      this.showSuccess(amount, recipient, token)
 
       // Reset form
       amountInput.value = ''
       recipientInput.value = ''
+      if (tokenSelect) {
+        tokenSelect.value = 'SOL'
+        const symbol = document.getElementById('send-token-symbol')
+        if (symbol) symbol.textContent = 'SOL'
+      }
 
     } catch (err: any) {
       this.hideLoading()
@@ -536,15 +555,15 @@ export class App {
     })
   }
 
-  private showSuccess(amount: number, recipient: string) {
+  private showSuccess(amount: number, recipient: string, token: string = 'SOL') {
     const modal = document.getElementById('success-modal')
     const amountEl = document.getElementById('success-amount')
     const recipientEl = document.getElementById('success-recipient')
     const messageEl = document.getElementById('success-message')
 
-    if (amountEl) amountEl.textContent = `${amount} SOL`
+    if (amountEl) amountEl.textContent = `${amount} ${token}`
     if (recipientEl) recipientEl.textContent = `${recipient.slice(0, 8)}...${recipient.slice(-8)}`
-    if (messageEl) messageEl.textContent = 'Your payment has been sent privately using zero-knowledge proofs.'
+    if (messageEl) messageEl.textContent = `Your ${token} payment has been sent privately using zero-knowledge proofs.`
 
     modal?.classList.remove('hidden')
   }
