@@ -70,9 +70,10 @@ import historyRouter from './routes/history.js'
 import configRouter from './routes/config.js'
 import healthRouter from './routes/health.js'
 import tokensRouter from './routes/tokens.js'
+import privateSendRouter from './routes/privateSend.js'
+import incomingRouter from './routes/incoming.js'
 
-// NOTE: Savings feature temporarily disabled - focusing on core send/withdraw functionality
-// Savings will be added back after core features are stable
+// Privacy Cash model: UTXO-based ownership, not bearer links
 
 const app = express()
 
@@ -153,9 +154,13 @@ app.use('/api/history', historyRouter)
 app.use('/api/config', configRouter)
 app.use('/api/health', healthRouter)
 app.use('/api/tokens', tokensRouter)
+app.use('/api/private-send', privateSendRouter)
+app.use('/api/incoming', incomingRouter)
 
-// NOTE: Savings routes temporarily disabled
-// Use /api/create-link, /api/deposit, /api/withdraw for core functionality
+// Privacy Cash model routes:
+// - /api/private-send - Create private payment with recipient identity
+// - /api/incoming/:wallet - Get incoming payments for a wallet
+// - /api/withdraw - Withdraw (only works for designated recipient)
 
 // ✅ STEP 5: 404 HANDLER - Must come AFTER routes
 app.use((_req: express.Request, res: express.Response) => {
