@@ -14,6 +14,9 @@ const router = Router()
 router.get('/:walletAddress', async (req: Request, res: Response) => {
   try {
     const { walletAddress } = req.params
+    const page = parseInt(req.query.page as string) || 1
+    const limit = parseInt(req.query.limit as string) || 5
+    const skip = (page - 1) * limit
 
     if (!walletAddress) {
       return res.status(400).json({ error: 'Wallet address required' })
@@ -28,10 +31,19 @@ router.get('/:walletAddress', async (req: Request, res: Response) => {
 
     console.log(`\n📥 FETCHING INCOMING PAYMENTS`)
     console.log(`   Wallet: ${walletAddress}`)
+    console.log(`   Page: ${page}, Limit: ${limit}`)
 
     // Find all transactions where this wallet is the recipient
     // and payment has been confirmed (not just pending)
     // ✅ CRITICAL: Only filter by status='confirmed', don't exclude pending markers!
+    const totalCount = await prisma.transaction.count({
+      where: {
+        toAddress: walletAddress,
+        type: 'deposit',
+        status: 'confirmed',
+      },
+    })
+
     const incomingTransactions = await prisma.transaction.findMany({
       where: {
         toAddress: walletAddress,
@@ -43,6 +55,8 @@ router.get('/:walletAddress', async (req: Request, res: Response) => {
       orderBy: {
         createdAt: 'desc',
       },
+      skip,
+      take: limit,
     })
 
     console.log(`   ✅ Query executed successfully`)
@@ -74,17 +88,23 @@ router.get('/:walletAddress', async (req: Request, res: Response) => {
       })
     )
 
-    // Filter out nulls and withdrawn payments for the "available" view
-    const availablePayments = payments.filter(p => p !== null && !p.withdrawn)
+    // Filter out nulls
     const allPayments = payments.filter(p => p !== null)
+    const availablePayments = allPayments.filter(p => !p.withdrawn)
 
     console.log(`   ${availablePayments.length} available for withdrawal`)
+
+    const totalPages = Math.ceil(totalCount / limit)
 
     return res.status(200).json({
       payments: allPayments,
       available: availablePayments,
-      total: allPayments.length,
+      total: totalCount,
       availableCount: availablePayments.length,
+      page,
+      limit,
+      totalPages,
+      hasMore: page < totalPages,
     })
 
   } catch (err: any) {

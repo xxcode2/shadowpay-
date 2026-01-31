@@ -58,26 +58,44 @@ router.get('/:walletAddress', async (req: Request, res: Response) => {
       withdrawTx: link.withdrawTx || null,
     }))
 
-    // Get all WITHDRAW transactions to this wallet (received links)
+    // ✅ FIXED: Get all CONFIRMED DEPOSIT transactions to this wallet (received links)
+    // Match the logic from /api/incoming to keep them in sync!
     const receivedTransactions = await prisma.transaction.findMany({
       where: {
         toAddress: walletAddress,
-        type: 'withdraw',
+        type: 'deposit',
+        status: 'confirmed',
       },
       orderBy: {
         createdAt: 'desc',
       },
     })
 
-    console.log(`   Found ${receivedTransactions.length} withdraw transactions`)
+    console.log(`   Found ${receivedTransactions.length} confirmed incoming deposits`)
+
+    // Get PaymentLink details for received payments
+    const receivedLinks = await Promise.all(
+      receivedTransactions.map(async (tx: any) => {
+        const link = await prisma.paymentLink.findUnique({
+          where: { id: tx.linkId },
+        })
+        return {
+          id: link?.id,
+          amount: link?.amount,
+          createdAt: tx.createdAt,
+          claimed: link?.claimed,
+          withdrawTx: link?.withdrawTx,
+        }
+      })
+    )
 
     // Format received history
-    const received = receivedTransactions.map((tx: any) => ({
-      linkId: tx.linkId,
-      amount: tx.amount,
-      claimedAt: tx.createdAt.toISOString(),
-      status: 'received',
-      withdrawTx: tx.transactionHash,
+    const received = receivedLinks.map((link: any) => ({
+      linkId: link.id,
+      amount: link.amount,
+      claimedAt: link.createdAt.toISOString(),
+      status: link.claimed ? 'claimed' : 'available',
+      withdrawTx: link.withdrawTx || null,
     }))
 
     console.log(`📤 Returning history: ${sent.length} sent, ${received.length} received`)

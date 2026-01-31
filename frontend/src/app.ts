@@ -238,12 +238,15 @@ export class App {
   }
 
   /**
-   * LOAD INCOMING PAYMENTS
+   * LOAD INCOMING PAYMENTS WITH PAGINATION
    *
-   * For the connected wallet, fetch all incoming private payments
-   * that haven't been withdrawn yet.
+   * For the connected wallet, fetch incoming private payments
+   * with 5 items per page
    */
-  private async loadIncomingPayments() {
+  private currentIncomingPage = 1
+  private incomingTotalPages = 1
+
+  private async loadIncomingPayments(page: number = 1) {
     const container = document.getElementById('receive-container')
     if (!container) return
 
@@ -264,13 +267,16 @@ export class App {
     `
 
     try {
-      const res = await fetch(`${BACKEND_URL}/api/incoming/${this.walletAddress}`)
+      const res = await fetch(`${BACKEND_URL}/api/incoming/${this.walletAddress}?page=${page}&limit=5`)
 
       if (!res.ok) {
         throw new Error('Failed to load incoming payments')
       }
 
-      const { payments } = await res.json()
+      const { payments, total, totalPages, page: currentPage } = await res.json()
+
+      this.currentIncomingPage = currentPage
+      this.incomingTotalPages = totalPages
 
       if (!payments || payments.length === 0) {
         container.innerHTML = `
@@ -283,7 +289,7 @@ export class App {
         return
       }
 
-      container.innerHTML = payments.map((payment: any) => `
+      let html = payments.map((payment: any) => `
         <div class="gradient-border rounded-3xl p-6 glow-effect">
           <div class="flex justify-between items-center mb-4">
             <div>
@@ -307,6 +313,45 @@ export class App {
         </div>
       `).join('')
 
+      // Add pagination controls if more than 1 page
+      if (totalPages > 1) {
+        html += `
+          <div class="flex justify-center gap-2 mt-6">
+            ${currentPage > 1 ? `
+              <button
+                onclick="window.shadowpay.loadIncomingPage(${currentPage - 1})"
+                class="px-4 py-2 rounded-lg bg-gray-700 hover:bg-gray-600 text-white"
+              >
+                ← Previous
+              </button>
+            ` : ''}
+            <div class="flex gap-1">
+              ${Array.from({ length: totalPages }, (_, i) => {
+                const pageNum = i + 1
+                return `
+                  <button
+                    onclick="window.shadowpay.loadIncomingPage(${pageNum})"
+                    class="px-3 py-2 rounded-lg ${pageNum === currentPage ? 'bg-purple-600 text-white' : 'bg-gray-700 hover:bg-gray-600 text-gray-300'}"
+                  >
+                    ${pageNum}
+                  </button>
+                `
+              }).join('')}
+            </div>
+            ${currentPage < totalPages ? `
+              <button
+                onclick="window.shadowpay.loadIncomingPage(${currentPage + 1})"
+                class="px-4 py-2 rounded-lg bg-gray-700 hover:bg-gray-600 text-white"
+              >
+                Next →
+              </button>
+            ` : ''}
+          </div>
+        `
+      }
+
+      container.innerHTML = html
+
     } catch (err: any) {
       container.innerHTML = `
         <div class="text-center py-12 text-red-400">
@@ -314,6 +359,10 @@ export class App {
         </div>
       `
     }
+  }
+
+  loadIncomingPage(page: number) {
+    this.loadIncomingPayments(page)
   }
 
   /**
