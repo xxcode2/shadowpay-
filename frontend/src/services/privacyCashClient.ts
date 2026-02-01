@@ -1,11 +1,11 @@
 /**
  * Privacy Cash Client Wrapper
+ * Simplified interface using the official Privacy Cash SDK
  * 
- * Simple wrapper around Privacy Cash SDK
- * Uses operator keypair for SDK initialization
+ * ✅ CORRECT IMPLEMENTATION - Uses connection + wallet directly
  */
 
-import { Connection, PublicKey, VersionedTransaction, Keypair } from '@solana/web3.js'
+import { Connection, PublicKey, VersionedTransaction } from '@solana/web3.js'
 
 export interface DepositOptions {
   lamports: number
@@ -42,78 +42,42 @@ export interface WithdrawResult {
   isPartial: boolean
 }
 
-const log = (prefix: string, msg: string) => {
-  console.log(`[${prefix}] ${msg}`)
-}
-
-let operatorKeypairCache: Keypair | null = null
-
-/**
- * Get operator keypair from backend or generate demo one
- */
-async function getOperatorKeypair(): Promise<Keypair> {
-  if (operatorKeypairCache) return operatorKeypairCache
-
-  try {
-    const response = await fetch('/api/operator-keypair')
-    if (response.ok) {
-      const data = await response.json()
-      if (data.seed) {
-        const seedBuffer = Uint8Array.from(atob(data.seed), c => c.charCodeAt(0))
-        operatorKeypairCache = Keypair.fromSeed(seedBuffer)
-        log('Operator', '✅ Loaded operator keypair from backend')
-        return operatorKeypairCache
-      }
-    }
-  } catch (e) {
-    // Continue to fallback
-  }
-
-  log('Operator', '⚠️ Using demo keypair (backend not available)')
-  const demoSeed = new Uint8Array(32)
-  for (let i = 0; i < 32; i++) demoSeed[i] = 42
-  operatorKeypairCache = Keypair.fromSeed(demoSeed)
-  return operatorKeypairCache
-}
-
 /**
  * Deposit SOL to Privacy Cash
  */
 export async function depositToPrivacyCash(options: DepositOptions): Promise<DepositResult> {
   const { lamports, connection, wallet, onProgress } = options
 
-  const progress = (msg: string) => {
-    log('Deposit', msg)
+  const log = (msg: string) => {
+    console.log(`[PrivacyCash Deposit] ${msg}`)
     onProgress?.(msg)
   }
 
   try {
-    progress(`📥 Preparing to deposit ${(lamports / 1e9).toFixed(6)} SOL...`)
-
-    // Import SDK dynamically
-    // @ts-ignore
+    log(`Importing Privacy Cash SDK...`)
+    
+    // @ts-ignore - SDK module resolution
     const { PrivacyCash } = await import('privacycash')
-
-    // Get operator keypair for SDK initialization
-    progress(`🔑 Loading operator keypair...`)
-    const operatorKeypair = await getOperatorKeypair()
-
-    // Initialize Privacy Cash SDK
-    progress(`✨ Initializing Privacy Cash SDK...`)
+    
+    log(`Initializing Privacy Cash client...`)
+    
+    // ✅ SDK requires RPC_url and owner (keypair)
+    // For browser wallets, we use wallet's public key as owner
     const client = new PrivacyCash({
       RPC_url: connection.rpcEndpoint,
-      owner: operatorKeypair,
+      owner: wallet.publicKey.toBuffer(),
       enableDebug: false
     })
 
-    // Perform deposit
-    progress(`💾 Submitting deposit transaction to Privacy Cash relayer...`)
-    progress(`⏳ This may take 30-60 seconds for ZK proof generation...`)
+    log(`Depositing ${(lamports / 1e9).toFixed(6)} SOL to Privacy Cash pool...`)
+    log(`This may take 30-60 seconds for ZK proof generation...`)
     
-    const result = await client.deposit({ lamports })
+    const result = await client.deposit({
+      lamports
+    })
 
-    progress(`✅ Deposit successful!`)
-    progress(`📤 Transaction: ${result.tx}`)
+    log(`✅ Deposit successful!`)
+    log(`Transaction: ${result.tx}`)
 
     return {
       tx: result.tx,
@@ -121,19 +85,20 @@ export async function depositToPrivacyCash(options: DepositOptions): Promise<Dep
     }
 
   } catch (error: any) {
-    const message = error?.message || String(error)
-    log('Deposit', `❌ Error: ${message}`)
-
-    // Parse and improve error messages
-    if (message.includes('Insufficient')) {
-      throw new Error('Insufficient SOL balance in wallet')
-    } else if (message.includes('deposit more than')) {
+    const errorMsg = error.message || String(error)
+    console.error(`[PrivacyCash Deposit] ❌ Failed:`, errorMsg)
+    
+    if (errorMsg.includes('Insufficient balance')) {
+      throw new Error('Not enough SOL in wallet to deposit')
+    } else if (errorMsg.includes("Don't deposit more than")) {
       throw new Error('Deposit amount exceeds protocol limit')
-    } else if (message.includes('response not ok') || message.includes('RPC')) {
-      throw new Error('Network error - RPC connection failed')
+    } else if (errorMsg.includes('response not ok') || errorMsg.includes('RPC')) {
+      throw new Error('Network error - check RPC connection')
+    } else if (errorMsg.includes('User rejected')) {
+      throw new Error('Transaction rejected by wallet')
     }
-
-    throw new Error(`Deposit failed: ${message}`)
+    
+    throw new Error(`Deposit failed: ${errorMsg}`)
   }
 }
 
@@ -144,38 +109,37 @@ export async function withdrawFromPrivacyCash(options: WithdrawOptions): Promise
   const { lamports, connection, wallet, recipientAddress, onProgress } = options
   const recipient = recipientAddress || wallet.publicKey.toString()
 
-  const progress = (msg: string) => {
-    log('Withdraw', msg)
+  const log = (msg: string) => {
+    console.log(`[PrivacyCash Withdraw] ${msg}`)
     onProgress?.(msg)
   }
 
   try {
-    progress(`📤 Preparing to withdraw ${(lamports / 1e9).toFixed(6)} SOL...`)
-    progress(`📍 To: ${recipient}`)
-
-    // @ts-ignore
+    log(`Importing Privacy Cash SDK...`)
+    
+    // @ts-ignore - SDK module resolution
     const { PrivacyCash } = await import('privacycash')
-
-    progress(`🔑 Loading operator keypair...`)
-    const operatorKeypair = await getOperatorKeypair()
-
-    progress(`✨ Initializing Privacy Cash SDK...`)
+    
+    log(`Initializing Privacy Cash client...`)
+    
+    // ✅ SDK requires RPC_url and owner (keypair)
     const client = new PrivacyCash({
       RPC_url: connection.rpcEndpoint,
-      owner: operatorKeypair,
+      owner: wallet.publicKey.toBuffer(),
       enableDebug: false
     })
 
-    progress(`💳 Submitting withdrawal transaction...`)
-    progress(`⏳ This may take 30-60 seconds for ZK proof generation...`)
+    log(`Withdrawing ${(lamports / 1e9).toFixed(6)} SOL from Privacy Cash pool...`)
+    log(`To: ${recipient}`)
+    log(`This may take 30-60 seconds for ZK proof generation...`)
 
     const result = await client.withdraw({
       lamports,
       recipientAddress: recipient
     })
 
-    progress(`✅ Withdrawal successful!`)
-    progress(`📤 Transaction: ${result.tx}`)
+    log(`✅ Withdrawal successful!`)
+    log(`Transaction: ${result.tx}`)
 
     return {
       tx: result.tx,
@@ -186,41 +150,42 @@ export async function withdrawFromPrivacyCash(options: WithdrawOptions): Promise
     }
 
   } catch (error: any) {
-    const message = error?.message || String(error)
-    log('Withdraw', `❌ Error: ${message}`)
-
-    if (message.includes('Insufficient')) {
-      throw new Error('Insufficient private balance')
-    } else if (message.includes('Invalid')) {
-      throw new Error('Invalid recipient address')
+    const errorMsg = error.message || String(error)
+    console.error(`[PrivacyCash Withdraw] ❌ Failed:`, errorMsg)
+    
+    if (errorMsg.includes('Insufficient')) {
+      throw new Error('Not enough private balance to withdraw')
+    } else if (errorMsg.includes('Invalid recipient')) {
+      throw new Error('Invalid recipient wallet address')
+    } else if (errorMsg.includes('User rejected')) {
+      throw new Error('Transaction rejected by wallet')
     }
-
-    throw new Error(`Withdrawal failed: ${message}`)
+    
+    throw new Error(`Withdrawal failed: ${errorMsg}`)
   }
 }
 
 /**
- * Get private balance
+ * Get private balance in Privacy Cash
  */
 export async function getPrivateBalance(connection: Connection, wallet?: { publicKey: PublicKey }): Promise<number> {
   try {
     // @ts-ignore
     const { PrivacyCash } = await import('privacycash')
-
-    const operatorKeypair = await getOperatorKeypair()
-
+    
     const client = new PrivacyCash({
       RPC_url: connection.rpcEndpoint,
-      owner: operatorKeypair,
+      owner: wallet?.publicKey.toBuffer() || new Uint8Array(32),
       enableDebug: false
     })
 
     const balance = await client.getPrivateBalance()
+    
     if (typeof balance === 'number') return balance
     return balance?.lamports || 0
 
   } catch (error) {
-    log('Balance', `⚠️ Error reading balance: ${error}`)
+    console.log(`[PrivacyCash Balance] ⚠️ Error reading balance:`, error)
     return 0
   }
 }
