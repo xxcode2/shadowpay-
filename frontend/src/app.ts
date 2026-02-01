@@ -160,20 +160,82 @@ export class App {
 
     try {
       const res = await fetch(`${BACKEND_URL}/api/history?address=${this.walletAddress}`)
-      if (!res.ok) return
+      if (!res.ok) {
+        console.warn('Failed to load balance, status:', res.status)
+        return
+      }
 
       const data = await res.json()
+      console.log('💰 History data:', data)
+      
       const sent = data.sent || []
       
-      // Calculate total deposited (all sent amounts)
-      const totalDeposited = sent.reduce((sum: number, tx: any) => sum + (tx.amount || 0), 0)
+      // Calculate total deposited (sum of all amounts sent)
+      const totalDeposited = sent.reduce((sum: number, tx: any) => {
+        const amount = parseFloat(tx.amount) || parseFloat(tx.totalAmount) || 0
+        console.log(`  Transaction: ${amount} SOL`)
+        return sum + amount
+      }, 0)
+      
+      console.log(`💵 Total deposited: ${totalDeposited} SOL`)
       
       const balanceEl = document.getElementById('deposit-balance')
       if (balanceEl) {
         balanceEl.textContent = totalDeposited.toFixed(2)
+        console.log('✅ Balance updated to:', totalDeposited.toFixed(2))
       }
     } catch (err) {
       console.error('Failed to load deposit balance:', err)
+    }
+  }
+
+  /**
+   * Show modal notification (success, error, info, warning)
+   */
+  private showModal(title: string, message: string, type: 'success' | 'error' | 'info' | 'warning' = 'info', details?: string) {
+    // Remove existing modal
+    const existing = document.getElementById('modal-notification')
+    if (existing) existing.remove()
+
+    const iconMap = {
+      success: '✅',
+      error: '❌',
+      info: 'ℹ️',
+      warning: '⚠️'
+    }
+
+    const bgColorMap = {
+      success: 'bg-green-900/50 border-green-500/50',
+      error: 'bg-red-900/50 border-red-500/50',
+      info: 'bg-blue-900/50 border-blue-500/50',
+      warning: 'bg-yellow-900/50 border-yellow-500/50'
+    }
+
+    const modal = document.createElement('div')
+    modal.id = 'modal-notification'
+    modal.className = `fixed inset-0 flex items-center justify-center z-50 backdrop-blur-sm`
+    modal.innerHTML = `
+      <div class="${bgColorMap[type]} border border-opacity-50 rounded-lg p-6 max-w-md mx-4 shadow-2xl animate-in fade-in zoom-in-95">
+        <div class="flex items-start gap-4">
+          <div class="text-3xl flex-shrink-0">${iconMap[type]}</div>
+          <div class="flex-1 min-w-0">
+            <h3 class="text-lg font-semibold text-white mb-2">${title}</h3>
+            <p class="text-gray-200 text-sm mb-3">${message}</p>
+            ${details ? `<div class="text-xs text-gray-300 bg-black/30 p-2 rounded break-all font-mono">\n              ${details}\n            </div>` : ''}
+          </div>
+        </div>
+        <div class="mt-4 flex justify-end">
+          <button onclick="this.closest('#modal-notification').remove()" class="px-6 py-2 bg-purple-600 hover:bg-purple-700 text-white rounded font-semibold transition-colors">
+            OK
+          </button>
+        </div>
+      </div>
+    `
+    document.body.appendChild(modal)
+
+    // Auto-close after 5 seconds if it's a success
+    if (type === 'success') {
+      setTimeout(() => modal.remove(), 5000)
     }
   }
 
@@ -232,7 +294,12 @@ export class App {
       })
 
       this.hideLoading()
-      alert(`✅ Successfully deposited ${amount} ${token} to Privacy Cash!\n\nLink ID: ${depositResult.linkId}`)
+      this.showModal(
+        '✅ Deposit Successful',
+        `You have successfully deposited ${amount} SOL to Privacy Cash. Your funds are now secure and private.`,
+        'success',
+        `Link ID: ${depositResult.linkId}`
+      )
 
       // Reset form
       amountInput.value = ''
@@ -243,7 +310,8 @@ export class App {
       }
 
       // Reload deposit balance
-      this.updateDepositBalance()
+      await new Promise(resolve => setTimeout(resolve, 1000))
+      await this.updateDepositBalance()
 
       // Reset form
       amountInput.value = ''
@@ -256,7 +324,12 @@ export class App {
     } catch (err: any) {
       this.hideLoading()
       console.error('Send failed:', err)
-      alert(`Payment failed: ${err.message}`)
+      this.showModal(
+        '❌ Deposit Failed',
+        `Your deposit could not be processed.`,
+        'error',
+        err.message
+      )
     } finally {
       btn.disabled = false
     }
@@ -277,99 +350,98 @@ export class App {
     const recipient = recipientInput.value.trim()
 
     if (!amount || amount <= 0) {
-      alert('Enter a valid amount')
-      return
-    }
-
-    if (!recipient) {
-      alert('Enter recipient wallet address')
-      return
-    }
-
-    // Validate recipient address
-    try {
-      new PublicKey(recipient)
-    } catch {
-      alert('Invalid Solana wallet address')
-      return
-    }
-
-    const btn = document.querySelector('#send-to-user-form button') as HTMLButtonElement
-    btn.disabled = true
-    this.showLoading('Preparing private transfer...')
-
-    try {
-      // Step 1: Call backend to initiate private send
-      // Backend creates UTXO that only recipient can decrypt
-      this.updateLoading('Initiating private transfer...')
-
-      const initRes = await fetch(`${BACKEND_URL}/api/private-send`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          amount,
-          senderAddress: this.walletAddress,
-          recipientAddress: recipient,
-        }),
-      })
-
-      if (!initRes.ok) {
-        const err = await initRes.json()
-        throw new Error(err.error || 'Failed to initiate transfer')
+        this.showModal(
+          '⚠️ Invalid Amount',
+          'Please enter a valid amount greater than 0.',
+          'warning'
+        )
+        return
       }
 
-      const { paymentId } = await initRes.json()
+      if (!recipient) {
+        this.showModal(
+          '⚠️ Missing Recipient',
+          'Please enter the recipient wallet address.',
+          'warning'
+        )
+        return
+      }
 
-      // Step 2: User withdraws from Privacy Cash pool and sends to recipient
-      // This uses Privacy Cash SDK withdrawal flow
-      this.updateLoading('Withdrawing from Privacy Cash and sending...')
-      
-      const { executeUserPaysDeposit } = await import('./flows/depositFlow.js')
-      const { PublicKey } = await import('@solana/web3.js')
-      
-      // Create proper wallet adapter for withdrawal
-      const walletAdapter = {
-        publicKey: new PublicKey(this.walletAddress),
-        signMessage: async (message: Uint8Array) => {
-          const sig = await window.solana.signMessage(message)
-          return sig.signature
-        },
-        signTransaction: async (transaction: any) => {
-          return await window.solana.signTransaction(transaction)
+      // Validate recipient address
+      try {
+        new PublicKey(recipient)
+      } catch {
+        this.showModal(
+          '⚠️ Invalid Address',
+          'Please enter a valid Solana wallet address.',
+          'warning'
+        )
+        return
+      }
+
+      const btn = document.querySelector('#send-to-user-form button') as HTMLButtonElement
+      btn.disabled = true
+      this.showLoading('Preparing private transfer...')
+
+      try {
+        // Step 1: Call backend to initiate private send
+        this.updateLoading('Creating payment record...')
+
+        const initRes = await fetch(`${BACKEND_URL}/api/private-send`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            amount,
+            senderAddress: this.walletAddress,
+            recipientAddress: recipient,
+          }),
+        })
+
+        if (!initRes.ok) {
+          const err = await initRes.json()
+          throw new Error(err.error || 'Failed to initiate transfer')
         }
-      }
-      
-      // For withdrawal/send: we send encrypted UTXO to recipient
-      const withdrawRequest: DepositRequest = {
-        linkId: paymentId,
-        amount: amount.toString(),
-        publicKey: this.walletAddress,
-        recipientAddress: recipient,  // Recipient will own this UTXO
-      }
-      
-      const withdrawTxSig = await executeUserPaysDeposit(
-        withdrawRequest,
-        walletAdapter
-      )
 
-      // Step 3: Notify backend that withdrawal is done
-      this.updateLoading('Finalizing transfer...')
+        const { paymentId } = await initRes.json()
 
-      const confirmRes = await fetch(`${BACKEND_URL}/api/private-send/confirm`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          paymentId,
-          depositTx: withdrawTxSig,
-        }),
-      })
+        // Step 2: Use sendFlow to withdraw from Privacy Cash pool and send to recipient
+        this.updateLoading('Sending private payment via Privacy Cash...')
+        
+        const { executeSendToUser } = await import('./flows/sendFlow.js')
+        
+        const sendResult = await executeSendToUser(
+          {
+            paymentId,
+            amount: amount.toString(),
+            senderAddress: this.walletAddress,
+            recipientAddress: recipient,
+          },
+          window.solana
+        )
 
-      if (!confirmRes.ok) {
-        console.warn('Failed to confirm with backend, but withdrawal succeeded')
-      }
+        // Step 3: Notify backend that send is complete
+        this.updateLoading('Finalizing transfer...')
+
+        const confirmRes = await fetch(`${BACKEND_URL}/api/private-send/confirm`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            paymentId,
+            depositTx: sendResult.transactionSignature,
+          }),
+        })
+
+        if (!confirmRes.ok) {
+          console.warn('Failed to confirm with backend, but send succeeded')
+        }
 
       this.hideLoading()
-      this.showSuccess(amount, recipient, 'SOL')
+      this.showModal(
+        '✅ Payment Sent',
+        `You have successfully sent ${amount} SOL to ${recipient.slice(0, 8)}... using zero-knowledge privacy.`,
+        'success',
+        `Status: Delivered`
+      )
 
       // Reset form
       amountInput.value = ''
@@ -378,7 +450,12 @@ export class App {
     } catch (err: any) {
       this.hideLoading()
       console.error('Transfer failed:', err)
-      alert(`Transfer failed: ${err.message}`)
+      this.showModal(
+        '❌ Transfer Failed',
+        `Could not send your payment.`,
+        'error',
+        err.message
+      )
     } finally {
       btn.disabled = false
     }
