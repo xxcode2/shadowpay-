@@ -642,36 +642,47 @@ export class App {
       return
     }
 
-    this.showLoading('Processing withdrawal...')
+    const btn = document.querySelector(`[onclick*="withdrawPayment"]`) as HTMLButtonElement
+    if (btn) btn.disabled = true
+
+    this.showLoading('Preparing withdrawal...')
 
     try {
-      this.updateLoading('Generating ZK proof...')
+      this.updateLoading('Deriving encryption key...')
 
-      const res = await fetch(`${BACKEND_URL}/api/withdraw`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          linkId: paymentId,  // Backend expects 'linkId', not 'paymentId'
-          recipientAddress: this.walletAddress,
-        }),
-      })
-
-      if (!res.ok) {
-        const err = await res.json()
-        throw new Error(err.error || 'Withdrawal failed')
-      }
-
-      const { amount, txSignature } = await res.json()
+      // Use the NEW withdraw flow from withdrawFlow.ts
+      const { executeWithdraw } = await import('./flows/withdrawFlow.js')
+      
+      const result = await executeWithdraw(
+        {
+          walletAddress: this.walletAddress
+        },
+        window.solana
+      )
 
       this.hideLoading()
-      this.showNotification(`Withdrawn ${amount} SOL successfully!`)
+      this.showModal(
+        '✅ Withdrawal Successful',
+        `Successfully withdrew funds to ${this.walletAddress.slice(0, 8)}...`,
+        'success',
+        `TX: ${result.transactionSignature.slice(0, 20)}...`
+      )
 
       // Reload incoming payments
-      this.loadIncomingPayments()
+      await new Promise(resolve => setTimeout(resolve, 1000))
+      await this.loadIncomingPayments()
 
     } catch (err: any) {
       this.hideLoading()
-      alert(`Withdrawal failed: ${err.message}`)
+      console.error('Withdrawal failed:', err)
+      this.showModal(
+        '❌ Withdrawal Failed',
+        `Could not process your withdrawal.`,
+        'error',
+        err.message
+      )
+    } finally {
+      if (btn) btn.disabled = false
     }
   }
 

@@ -1,144 +1,156 @@
-import { LAMPORTS_PER_SOL } from '@solana/web3.js'
-import { CONFIG } from '../config'
-
 /**
- * ✅ FRONTEND CLAIM LINK FLOW
+ * ✅ WITHDRAW FLOW (CORRECTED)
  * 
- * Frontend Role:
- * - User selects recipient address
- * - Frontend sends claim request to backend
- * - Backend (RELAYER) executes Privacy Cash withdraw
+ * Recipient withdraws from incoming private payment
  * 
- * Backend Role (RELAYER):
- * - Get link details dari database
- * - Use PrivacyCash SDK to withdraw dari pool
- * - Send funds ke recipient address
- * - Record transaction
- * 
- * Privacy:
- * - On-chain transaction shows no link ke original depositor
- * - Zero-knowledge proof ensures recipient/amount cannot be modified
+ * CORRECT MODEL:
+ * 1. User receives private payment (UTXO encrypted with their key)
+ * 2. User clicks "Withdraw"  
+ * 3. Frontend derives encryption key from user's signature
+ * 4. Privacy Cash SDK finds UTXOs encrypted with that key
+ * 5. User signs withdrawal transaction
+ * 6. Funds transferred to user's wallet
  */
 
-export interface ClaimLinkRequest {
-  linkId: string
-  recipientAddress: string
+import { PublicKey, Connection, VersionedTransaction } from '@solana/web3.js'
+import { CONFIG } from '../config'
+import { showError, showSuccess } from '../utils/notificationUtils'
+
+export interface WithdrawRequest {
+  walletAddress: string
 }
 
-export interface WithdrawalResult {
+export interface WithdrawResult {
   success: boolean
-  withdrawTx: string
-  linkId: string
+  transactionSignature: string
   amount: number
-  fee: {
-    baseFee: number
-    protocolFee: number
-    totalFee: number
-  }
+  walletAddress: string
 }
 
-export async function executeClaimLink({
-  linkId,
-  recipientAddress,
-}: ClaimLinkRequest): Promise<WithdrawalResult> {
-  // ✅ VALIDATION
-  if (!linkId || typeof linkId !== 'string') {
-    throw new Error('❌ Missing or invalid linkId')
-  }
+/**
+ * Recipient withdraws from private payment
+ */
+export async function executeWithdraw(
+  request: WithdrawRequest,
+  wallet: any
+): Promise<WithdrawResult> {
+  const { walletAddress } = request
 
-  if (!recipientAddress || typeof recipientAddress !== 'string') {
-    throw new Error('❌ Missing recipientAddress')
-  }
-
-  // Solana addresses are 32-58 characters base58
-  if (recipientAddress.length < 32 || recipientAddress.length > 58) {
-    throw new Error('❌ Invalid Solana wallet address format')
-  }
-
-  const BACKEND_URL =
-    import.meta.env.VITE_BACKEND_URL ||
-    'https://shadowpay-backend-production.up.railway.app'
-
-  console.log(`🚀 Claiming link ${linkId}...`)
-  console.log(`   📤 Recipient: ${recipientAddress}`)
-  console.log(`   ⏳ Backend will execute withdrawal via Privacy Cash SDK...`)
+  console.log('\n💸 WITHDRAWING FROM PRIVATE PAYMENT')
+  console.log(`   Wallet: ${walletAddress}`)
 
   try {
-    const res = await fetch(`${BACKEND_URL}/api/claim-link`, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        Accept: 'application/json',
+    // ✅ IMPORT PRIVACY CASH SDK
+    console.log(`\nStep 1: Loading Privacy Cash SDK...`)
+    const privacycashUtils = await import('privacycash/utils') as any
+    const { withdraw, EncryptionService } = privacycashUtils
+    console.log(`✅ Privacy Cash SDK loaded`)
+
+    // ✅ CREATE ENCRYPTION SERVICE WITH USER'S KEY
+    console.log(`\nStep 2: Deriving encryption key from your wallet...`)
+    const SIGN_MESSAGE = 'Privacy Money account sign in'
+    const messageToSign = new TextEncoder().encode(SIGN_MESSAGE)
+    let signatureForEncryption: Uint8Array
+    
+    try {
+      const signResult = await wallet.signMessage(messageToSign)
+      if (signResult instanceof Uint8Array) {
+        signatureForEncryption = signResult
+      } else if (signResult && 'signature' in signResult) {
+        signatureForEncryption = signResult.signature
+      } else {
+        throw new Error('Invalid signature format from wallet')
+      }
+    } catch (signErr: any) {
+      throw new Error(`Failed to sign message: ${signErr.message}`)
+    }
+
+    const encryptionService = new EncryptionService()
+    console.log(`[DEBUG] Deriving key from signature...`)
+    encryptionService.deriveEncryptionKeyFromSignature(signatureForEncryption)
+    console.log(`✅ Encryption key derived`)
+
+    // ✅ INITIALIZE WASM
+    console.log(`\nStep 3: Initializing WASM...`)
+    const { WasmFactory } = await import('@lightprotocol/hasher.rs')
+    const lightWasm = await WasmFactory.getInstance()
+    console.log(`✅ WASM initialized`)
+
+    // ✅ SETUP CONNECTION
+    console.log(`\nStep 4: Connecting to Solana...`)
+    const SOLANA_RPC_URL = 'https://mainnet.helius-rpc.com'
+    const connection = new Connection(SOLANA_RPC_URL, 'confirmed')
+    console.log(`✅ Connected`)
+
+    // ✅ CALL WITHDRAW
+    console.log(`\nStep 5: Creating withdrawal transaction...`)
+    console.log(`   🔍 Searching for UTXOs encrypted with your key...`)
+    
+    const txResult = await withdraw({
+      publicKey: new PublicKey(walletAddress),
+      recipient: new PublicKey(walletAddress),
+      encryptionService,
+      lightWasm,
+      connection,
+      keyBasePath: '/circuits/transaction2',
+      transactionSigner: async (tx: VersionedTransaction) => {
+        console.log(`\n🔐 Signing with your wallet...`)
+        const signed = await wallet.signTransaction(tx)
+        console.log(`✅ Signed`)
+        return signed
       },
-      body: JSON.stringify({
-        linkId,
-        recipientAddress,
-      }),
+      storage: localStorage
     })
 
-    // ✅ HANDLE ERRORS WITH FRIENDLY MESSAGES
-    if (!res.ok) {
-      let errorMsg = `Claim failed with status ${res.status}`
-
-      try {
-        const contentType = res.headers.get('content-type')
-        if (contentType?.includes('application/json')) {
-          const errorData = await res.json()
-          console.error('❌ Backend error:', errorData)
-          errorMsg = errorData.error || errorMsg
-
-          // Friendly error messages
-          if (errorMsg.toLowerCase().includes('no valid deposit')) {
-            errorMsg = '⏳ Deposit still processing. Please wait a minute and try again.'
-          } else if (errorMsg.toLowerCase().includes('already claimed')) {
-            errorMsg = '❌ This link has already been claimed!'
-          } else if (errorMsg.toLowerCase().includes('not found')) {
-            errorMsg = '❌ This link does not exist. Check the link ID.'
-          } else if (errorMsg.toLowerCase().includes('invalid solana')) {
-            errorMsg = '❌ Invalid wallet address. Check your Solana address.'
-          } else if (errorMsg.toLowerCase().includes('no balance')) {
-            errorMsg = '❌ No balance available in Privacy Cash pool for withdrawal.'
-          } else if (errorMsg.toLowerCase().includes('utxo')) {
-            errorMsg = '⏳ No UTXOs available. Wait a bit for transactions to confirm.'
-          }
-        } else {
-          const errorText = await res.text()
-          console.error('❌ Raw response:', errorText)
-          errorMsg = errorText || errorMsg
-        }
-      } catch (parseErr: any) {
-        console.error('⚠️ Could not parse error:', parseErr.message)
-      }
-
-      throw new Error(errorMsg)
+    if (!txResult || !txResult.tx) {
+      throw new Error('No transaction returned')
     }
 
-    const data = await res.json()
-    console.log(`✅ Withdrawal successful!`)
-    console.log(`   📤 Transaction: ${data.withdrawTx}`)
-    console.log(`   💰 Amount: ${(data.amount || 0).toFixed(6)} SOL`)
+    const txHash = txResult.tx
 
-    if (data.fee) {
-      const totalFee = (data.fee.baseFee || 0) + (data.fee.protocolFee || 0)
-      console.log(`   💸 Fees:`)
-      console.log(`      - Base: ${(data.fee.baseFee || 0).toFixed(6)} SOL`)
-      console.log(`      - Protocol: ${(data.fee.protocolFee || 0).toFixed(6)} SOL`)
-      console.log(`      - Total: ${totalFee.toFixed(6)} SOL`)
-    }
+    console.log(`\n✅ WITHDRAWAL SUCCESSFUL`)
+    console.log(`   Transaction: ${txHash}`)
+    console.log(`   Status: Funds in your wallet ✨`)
+
+    showSuccess(`Withdrawn to ${walletAddress.slice(0, 8)}...`)
 
     return {
       success: true,
-      withdrawTx: data.withdrawTx,
-      linkId: data.linkId,
-      amount: data.amount || 0,
-      fee: {
-        baseFee: data.fee?.baseFee || 0,
-        protocolFee: data.fee?.protocolFee || 0,
-        totalFee: (data.fee?.baseFee || 0) + (data.fee?.protocolFee || 0),
-      },
+      transactionSignature: txHash,
+      amount: 0,
+      walletAddress
     }
-  } catch (err: any) {
-    console.error('❌ Claim link error:', err.message || err.toString())
-    throw new Error(`❌ Claim failed: ${err.message || 'Unknown error'}`)
+
+  } catch (error: any) {
+    const errorMsg = error.message || 'Withdrawal failed'
+    console.error(`\n❌ ERROR: ${errorMsg}`)
+    
+    if (errorMsg.includes('0 total UTXOs') || errorMsg.includes('no unspent UTXO')) {
+      console.error(`\n💡 No UTXOs found:`)
+      console.error(`   - No incoming payments`)
+      console.error(`   - Already withdrawn`)
+      console.error(`   - Different wallet`)
+    }
+    
+    showError(`Withdrawal failed: ${errorMsg}`)
+    throw error
+  }
+}
+
+/**
+ * Get incoming payments for wallet
+ */
+export async function getIncomingPayments(walletAddress: string): Promise<any[]> {
+  try {
+    const BACKEND_URL = CONFIG.BACKEND_URL || 'https://shadowpay-backend-production.up.railway.app'
+    const res = await fetch(`${BACKEND_URL}/api/incoming/${walletAddress}`)
+    
+    if (!res.ok) return []
+    
+    const data = await res.json()
+    return data.incoming || data || []
+  } catch (err) {
+    console.error('Error fetching incoming:', err)
+    return []
   }
 }
