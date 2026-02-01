@@ -70,8 +70,32 @@ export async function executeSendToUser(
     // ✅ IMPORT PRIVACY CASH SDK
     console.log(`\nStep 1: Loading Privacy Cash SDK...`)
     const privacycashUtils = await import('privacycash/utils') as any
-    const { withdraw } = privacycashUtils
+    const { withdraw, EncryptionService } = privacycashUtils
     console.log(`✅ Privacy Cash SDK loaded`)
+
+    // ✅ CREATE ENCRYPTION SERVICE
+    console.log(`\nStep 1.5: Creating encryption service...`)
+    // Get signature from wallet for encryption key derivation
+    const messageToSign = new TextEncoder().encode(`Authorize withdrawal: ${amountNum} SOL to ${recipientAddress}`)
+    let signatureForEncryption: Uint8Array
+    
+    try {
+      const signResult = await wallet.signMessage(messageToSign)
+      if (signResult instanceof Uint8Array) {
+        signatureForEncryption = signResult
+      } else if (signResult && 'signature' in signResult) {
+        signatureForEncryption = signResult.signature
+      } else {
+        throw new Error('Invalid signature format from wallet')
+      }
+    } catch (signErr: any) {
+      throw new Error(`Failed to sign message: ${signErr.message}`)
+    }
+
+    // Create encryption service and derive key from signature
+    const encryptionService = new EncryptionService()
+    encryptionService.deriveEncryptionKeyFromSignature(signatureForEncryption)
+    console.log(`✅ Encryption service created`)
 
     // ✅ CREATE WALLET ADAPTER FOR SDK
     console.log(`\nStep 2: Creating wallet adapter...`)
@@ -107,7 +131,8 @@ export async function executeSendToUser(
       const txResult = await withdraw(
         walletAdapter,
         lamports,
-        new PublicKey(recipientAddress)
+        new PublicKey(recipientAddress),
+        encryptionService  // Pass the encryption service
       )
       
       console.log(`✅ Withdrawal transaction created`)
