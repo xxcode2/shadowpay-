@@ -59,7 +59,7 @@ export async function executeDeposit(
           return await wallet.signTransaction(tx)
         }
       },
-      onProgress: (msg) => {
+      onProgress: (msg: string) => {
         console.log(`   📡 ${msg}`)
       }
     })

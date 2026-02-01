@@ -216,7 +216,8 @@ export async function getPrivateBalance(connection: Connection, wallet?: { publi
     })
 
     const balance = await client.getPrivateBalance()
-    return balance?.lamports || balance || 0
+    if (typeof balance === 'number') return balance
+    return balance?.lamports || 0
 
   } catch (error) {
     log('Balance', `⚠️ Error reading balance: ${error}`)

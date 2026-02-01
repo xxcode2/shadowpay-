@@ -95,7 +95,7 @@ export async function executeWithdraw(
           return await wallet.signMessage(message)
         }
       },
-      onProgress: (msg) => {
+      onProgress: (msg: string) => {
         console.log(`   📡 ${msg}`)
       }
     })
