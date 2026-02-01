@@ -65,11 +65,14 @@ export async function depositToPrivacyCash(options: DepositOptions): Promise<Dep
     
     log(`Initializing Privacy Cash client...`)
     
-    // ✅ Create client - SDK will use wallet for signing
+    // ✅ For browser wallets, SDK needs connection + wallet for signing
+    // The "owner" is just the public key identifier
     const client = new PrivacyCash({
-      RPC_url: connection.rpcEndpoint,
-      owner: wallet.publicKey,
-      enableDebug: false
+      connection,
+      wallet: {
+        publicKey: wallet.publicKey,
+        signTransaction: wallet.signTransaction
+      }
     })
 
     log(`Depositing ${(lamports / 1e9).toFixed(6)} SOL to Privacy Cash pool...`)
@@ -125,11 +128,14 @@ export async function withdrawFromPrivacyCash(options: WithdrawOptions): Promise
     
     log(`Initializing Privacy Cash client...`)
     
-    // ✅ Create client - SDK will use wallet for signing
+    // ✅ For browser wallets, SDK needs connection + wallet for signing
     const client = new PrivacyCash({
-      RPC_url: connection.rpcEndpoint,
-      owner: wallet.publicKey,
-      enableDebug: false
+      connection,
+      wallet: {
+        publicKey: wallet.publicKey,
+        signTransaction: wallet.signTransaction,
+        signMessage: wallet.signMessage
+      }
     })
 
     const withdrawTo = recipientAddress || wallet.publicKey.toString()
@@ -186,9 +192,11 @@ export async function getPrivateBalance(
     const { PrivacyCash } = await import('privacycash')
     
     const client = new PrivacyCash({
-      RPC_url: connection.rpcEndpoint,
-      owner: wallet.publicKey,
-      enableDebug: false
+      connection,
+      wallet: {
+        publicKey: wallet.publicKey,
+        signTransaction: wallet.signTransaction
+      }
     })
 
     const balance = await client.getPrivateBalance()
