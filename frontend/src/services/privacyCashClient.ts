@@ -258,12 +258,14 @@ export async function getPrivateBalance(
   wallet: { publicKey: PublicKey; signMessage(message: Uint8Array): Promise<Uint8Array> }
 ): Promise<number> {
   try {
+    const log = (msg: string) => console.log(`[PrivacyCash] ${msg}`)
+    
     log('Importing Privacy Cash SDK...')
 
-    // Import EncryptionService from privacycash/utils
+    // Import EncryptionService and getUtxos from privacycash/utils
     // @ts-ignore
     const privacycashUtils = await import('privacycash/utils') as any
-    const { EncryptionService } = privacycashUtils
+    const { EncryptionService, getUtxos } = privacycashUtils
 
     // Step 1: Get user signature for encryption key derivation
     log('Requesting signature for balance check...')
@@ -289,36 +291,33 @@ export async function getPrivateBalance(
     // Step 2: Create encryption service from signature
     const encryptionService = new EncryptionService()
     encryptionService.deriveEncryptionKeyFromSignature(signature)
+    log('Encryption key derived')
 
-    // Step 3: Initialize WASM
-    log('Initializing WASM...')
-    const { WasmFactory } = await import('@lightprotocol/hasher.rs')
-    const lightWasm = await WasmFactory.getInstance()
-
-    // Step 4: Get balance using the SDK
-    log('Fetching private balance...')
-    
-    const balanceParams: any = {
-      lightWasm,
+    // Step 3: Fetch unspent UTXOs for this wallet
+    log('Fetching unspent UTXOs...')
+    const unspentUtxos = await getUtxos({
       connection,
-      keyBasePath: '/circuits/transaction2',
       publicKey: wallet.publicKey,
-      storage: localStorage,
-      encryptionService
-    }
+      encryptionService,
+      storage: localStorage
+    })
 
-    // Try to fetch balance
-    // The SDK may have a getBalance or getPrivateBalance method
-    // For now return 0 as placeholder - actual balance fetching depends on SDK version
-    log('Balance check complete')
-    return 0
+    log(`Found ${unspentUtxos.length} unspent UTXOs`)
+
+    // Step 4: Calculate total balance from UTXOs
+    // Import BN for big number operations
+    const BN = (await import('bn.js')).default
+    const totalBalance = unspentUtxos.reduce((sum: any, utxo: any) => {
+      return sum.add(utxo.amount || new BN(0))
+    }, new BN(0))
+
+    const balanceLamports = totalBalance.toNumber()
+    log(`Total balance: ${balanceLamports} lamports (${(balanceLamports / 1e9).toFixed(6)} SOL)`)
+
+    return balanceLamports
 
   } catch (error) {
     console.log(`[PrivacyCash] ⚠️ Could not fetch balance:`, error)
     return 0
   }
-}
-
-const log = (msg: string) => {
-  console.log(`[PrivacyCash] ${msg}`)
 }
