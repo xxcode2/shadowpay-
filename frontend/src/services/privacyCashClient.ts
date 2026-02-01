@@ -7,7 +7,17 @@
  * @ts-ignore - Suppressing type errors for dynamic SDK import
  */
 
-import { Connection, PublicKey, VersionedTransaction } from '@solana/web3.js'
+import { Connection, PublicKey, VersionedTransaction, clusterApiUrl } from '@solana/web3.js'
+
+/**
+ * Get reliable RPC connection with fallback
+ * Try primary endpoint first, fallback to public endpoints if needed
+ */
+export function getReliableConnection(primaryRpcUrl: string): Connection {
+  // Use primary URL, fallback to public Solana endpoint
+  const rpcUrl = primaryRpcUrl || clusterApiUrl('mainnet-beta')
+  return new Connection(rpcUrl, 'confirmed')
+}
 
 export interface DepositOptions {
   lamports: number
