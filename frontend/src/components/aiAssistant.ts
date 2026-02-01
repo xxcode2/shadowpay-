@@ -144,7 +144,7 @@ export async function executeIntent(
       // Validate recipient address is valid Solana address
       if (!isValidSolanaAddress(intent.recipient)) {
         throw new Error(
-          `Invalid recipient address: "${intent.recipient}". Must be a valid Solana address (44 characters, base58 format)`
+          `Invalid recipient address: "${intent.recipient}". Must be a valid Solana address (32-44 characters, base58 format)`
         )
       }
 
@@ -206,20 +206,29 @@ export async function executeIntent(
   } catch (error: any) {
     const errorMsg = error.message || String(error)
     
-    // More helpful error messages
+    // Extract clean error message without duplication
+    let displayMsg = errorMsg
+    
+    // Handle specific error types
     if (errorMsg.includes('disconnected port')) {
-      onProgress(`❌ Wallet connection issue. Please reconnect your wallet and try again.`)
+      displayMsg = 'Wallet connection issue. Please reconnect your wallet.'
     } else if (errorMsg.includes('User rejected')) {
-      onProgress(`❌ You rejected the signature request. Please try again and approve.`)
+      displayMsg = 'You rejected the request. Please try again and approve.'
     } else if (errorMsg.includes('No private balance')) {
-      onProgress(`❌ No private balance. Deposit funds first using "deposit X SOL"`)
-    } else if (errorMsg.includes('Non-base58 character') || errorMsg.includes('Invalid recipient address')) {
-      onProgress(`❌ Invalid recipient address format. Solana addresses must be 44 characters, base58 encoded.`)
+      displayMsg = 'No private balance. Deposit funds first using "deposit X SOL"'
+    } else if (errorMsg.includes('Invalid recipient address')) {
+      // Extract just the core message
+      const match = errorMsg.match(/Must be a valid Solana address/)
+      if (match) {
+        displayMsg = `Invalid address format. ${match[0]} (32-44 chars, base58).`
+      }
+    } else if (errorMsg.includes('Non-base58 character')) {
+      displayMsg = 'Invalid address format. Solana addresses must be base58 encoded.'
     } else if (errorMsg.includes('Balance check failed')) {
-      onProgress(`❌ Could not fetch balance: ${errorMsg}`)
-    } else {
-      onProgress(`❌ Error: ${errorMsg}`)
+      displayMsg = `Could not fetch balance. ${errorMsg}`
     }
+    
+    onProgress(`❌ ${displayMsg}`)
     throw error
   }
 }

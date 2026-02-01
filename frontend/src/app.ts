@@ -757,15 +757,30 @@ export class App {
     const msgId = `msg-${Date.now()}`
     const messageEl = document.createElement('div')
     messageEl.id = msgId
-    messageEl.className = `flex gap-3 ${sender === 'user' ? 'justify-end' : 'justify-start'}`
+    messageEl.className = `flex gap-2 ${sender === 'user' ? 'justify-end' : 'justify-start'} animate-fadeIn`
 
     const content = document.createElement('div')
-    content.className = `max-w-xs px-4 py-2 rounded-lg ${
+    const isError = message.includes('❌')
+    const isSuccess = message.includes('✅')
+    
+    content.className = `max-w-md px-4 py-3 rounded-lg text-sm leading-relaxed ${
       sender === 'user'
-        ? 'bg-purple-600 text-white'
-        : 'bg-gray-800 text-gray-100'
+        ? 'bg-gradient-to-r from-purple-600 to-purple-500 text-white shadow-lg shadow-purple-500/20'
+        : isError
+        ? 'bg-red-900/30 text-red-100 border border-red-500/30'
+        : isSuccess
+        ? 'bg-emerald-900/30 text-emerald-100 border border-emerald-500/30'
+        : 'bg-gray-800/50 text-gray-100 border border-gray-700/30'
     }`
-    content.innerHTML = message.replace(/\n/g, '<br/>')
+    
+    // Format message with better line breaks and structure
+    const formatted = message
+      .replace(/\n/g, '<br/>')
+      .replace(/<br\/>TX:/g, '<br/><span class="text-xs text-gray-400">TX:</span>')
+      .replace(/Amount:/g, '<br/><span class="text-xs text-gray-400">Amount:</span>')
+      .replace(/To:/g, '<br/><span class="text-xs text-gray-400">To:</span>')
+    
+    content.innerHTML = formatted
 
     messageEl.appendChild(content)
     container.appendChild(messageEl)
@@ -781,7 +796,23 @@ export class App {
     if (messageEl) {
       const content = messageEl.querySelector('div')
       if (content) {
-        content.innerHTML = message.replace(/\n/g, '<br/>')
+        const isError = message.includes('❌')
+        const isSuccess = message.includes('✅')
+        
+        // Update styling based on message content
+        if (isError) {
+          content.className = 'max-w-md px-4 py-3 rounded-lg text-sm leading-relaxed bg-red-900/30 text-red-100 border border-red-500/30'
+        } else if (isSuccess) {
+          content.className = 'max-w-md px-4 py-3 rounded-lg text-sm leading-relaxed bg-emerald-900/30 text-emerald-100 border border-emerald-500/30'
+        }
+        
+        const formatted = message
+          .replace(/\n/g, '<br/>')
+          .replace(/<br\/>TX:/g, '<br/><span class="text-xs text-gray-400">TX:</span>')
+          .replace(/Amount:/g, '<br/><span class="text-xs text-gray-400">Amount:</span>')
+          .replace(/To:/g, '<br/><span class="text-xs text-gray-400">To:</span>')
+        
+        content.innerHTML = formatted
       }
       // Scroll to bottom
       const container = document.getElementById('ai-chat-container')
