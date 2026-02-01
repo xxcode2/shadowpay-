@@ -253,7 +253,7 @@ export async function withdrawFromPrivacyCash(options: WithdrawOptions): Promise
 }
 
 /**
- * Get private balance
+ * Get private balance with retry logic
  */
 export async function getPrivateBalance(
   connection: Connection,
@@ -269,19 +269,49 @@ export async function getPrivateBalance(
     const privacycashUtils = await import('privacycash/utils') as any
     const { EncryptionService, getUtxos, getBalanceFromUtxos } = privacycashUtils
 
-    // Step 1: Get user signature for encryption key derivation
+    // Step 1: Get user signature for encryption key derivation with retry
     log('Requesting signature for balance check...')
     const SIGN_MESSAGE = 'Privacy Money account sign in'
     const encodedMessage = new TextEncoder().encode(SIGN_MESSAGE)
     
     let signature: Uint8Array
-    try {
-      signature = await wallet.signMessage(encodedMessage)
-      if ((signature as any).signature) {
-        signature = (signature as any).signature
+    let lastError: any = null
+    
+    // Retry up to 2 times with delay (total 3 attempts)
+    for (let attempt = 0; attempt < 3; attempt++) {
+      try {
+        signature = await wallet.signMessage(encodedMessage)
+        if ((signature as any).signature) {
+          signature = (signature as any).signature
+        }
+        lastError = null
+        break // Success, exit retry loop
+      } catch (err: any) {
+        lastError = err
+        const errorMsg = err.message || String(err)
+        
+        // Don't retry if user explicitly rejected
+        if (errorMsg.includes('rejected') || errorMsg.includes('User denied')) {
+          log('User rejected signature request')
+          return 0
+        }
+        
+        // Retry on connection issues
+        if (errorMsg.includes('disconnected') || errorMsg.includes('port')) {
+          if (attempt < 2) {
+            log(`Connection issue (attempt ${attempt + 1}/3), retrying in ${1000 * (attempt + 1)}ms...`)
+            await new Promise(resolve => setTimeout(resolve, 1000 * (attempt + 1)))
+            continue
+          }
+        }
+        
+        log(`Signature error: ${errorMsg}`)
+        return 0
       }
-    } catch (err: any) {
-      log('User rejected signature request')
+    }
+
+    if (lastError && !(signature instanceof Uint8Array)) {
+      log('Failed to get valid signature after retries')
       return 0
     }
 

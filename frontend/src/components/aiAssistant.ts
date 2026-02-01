@@ -151,7 +151,17 @@ export async function executeIntent(
     )
   } catch (error: any) {
     const errorMsg = error.message || String(error)
-    onProgress(`❌ Error: ${errorMsg}`)
+    
+    // More helpful error messages
+    if (errorMsg.includes('disconnected port')) {
+      onProgress(`❌ Wallet connection issue. Please reconnect your wallet and try again.`)
+    } else if (errorMsg.includes('User rejected')) {
+      onProgress(`❌ You rejected the signature request. Please try again and approve.`)
+    } else if (errorMsg.includes('No private balance')) {
+      onProgress(`❌ No private balance. Deposit funds first using "deposit X SOL"`)
+    } else {
+      onProgress(`❌ Error: ${errorMsg}`)
+    }
     throw error
   }
 }
