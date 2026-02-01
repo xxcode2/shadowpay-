@@ -141,7 +141,7 @@ export async function executeSendToUser(
       
       // Call withdraw with all required parameters (same as deposit)
       const txResult = await withdraw({
-        owner: walletAdapter,
+        publicKey: new PublicKey(senderAddress),
         amount_in_lamports: lamports,
         recipient: new PublicKey(recipientAddress),
         encryptionService,
