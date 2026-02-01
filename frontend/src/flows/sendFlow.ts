@@ -15,7 +15,7 @@
  * 4. Backend confirms receipt
  */
 
-import { PublicKey } from '@solana/web3.js'
+import { PublicKey, Connection, VersionedTransaction } from '@solana/web3.js'
 import { CONFIG } from '../config'
 import { showError, showSuccess } from '../utils/notificationUtils'
 
@@ -128,12 +128,32 @@ export async function executeSendToUser(
     const lamports = Math.floor(amountNum * 1e9)
     
     try {
-      const txResult = await withdraw(
-        walletAdapter,
-        lamports,
-        new PublicKey(recipientAddress),
-        encryptionService  // Pass the encryption service
-      )
+      // Initialize WASM for ZK proof generation
+      console.log(`   Initializing WASM...`)
+      const { WasmFactory } = await import('@lightprotocol/hasher.rs')
+      const lightWasm = await WasmFactory.getInstance()
+      
+      // Initialize connection to Solana RPC
+      const SOLANA_RPC_URL = 'https://mainnet.helius-rpc.com'
+      const connection = new Connection(SOLANA_RPC_URL, 'confirmed')
+      
+      console.log(`   Creating withdrawal transaction...`)
+      
+      // Call withdraw with all required parameters (same as deposit)
+      const txResult = await withdraw({
+        owner: walletAdapter,
+        amount_in_lamports: lamports,
+        recipient: new PublicKey(recipientAddress),
+        encryptionService,
+        lightWasm,
+        connection,
+        keyBasePath: '/circuits/transaction2',
+        transactionSigner: async (tx: VersionedTransaction) => {
+          console.log(`   Wallet signing withdrawal transaction...`)
+          return await wallet.signTransaction(tx)
+        },
+        storage: localStorage
+      })
       
       console.log(`✅ Withdrawal transaction created`)
       console.log(`   TX Hash: ${txResult.tx}`)
