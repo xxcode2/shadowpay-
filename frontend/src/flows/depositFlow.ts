@@ -60,8 +60,13 @@ export async function executeUserPaysDeposit(
     const connection = new Connection(rpcUrl)
 
     // Create wallet adapter interface
+    // ✅ Ensure publicKey is a PublicKey object (Phantom may return string or object)
+    const publicKeyObj = wallet.publicKey instanceof PublicKey 
+      ? wallet.publicKey 
+      : new PublicKey(wallet.publicKey)
+    
     const walletAdapter: WalletAdapter = {
-      publicKey: wallet.publicKey,
+      publicKey: publicKeyObj,
       signMessage: async (message: Uint8Array) => {
         return await wallet.signMessage(message)
       },

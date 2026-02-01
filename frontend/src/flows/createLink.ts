@@ -10,12 +10,13 @@
  * Non-custodial: Operator never holds user funds
  */
 
-import { LAMPORTS_PER_SOL } from '@solana/web3.js'
+import { LAMPORTS_PER_SOL, PublicKey } from '@solana/web3.js'
 import { executeUserPaysDeposit } from './depositFlow'
 
 export interface SigningWallet {
   publicKey: { toString(): string }
   signMessage(message: Uint8Array): Promise<Uint8Array>
+  signTransaction?: (transaction: any) => Promise<any>
 }
 
 export async function createLink({
@@ -60,14 +61,21 @@ export async function createLink({
 
     const amountStr = amountSOL.toString()
 
+    // ✅ Create proper wallet adapter with PublicKey
+    const walletAdapter = {
+      publicKey: new PublicKey(walletAddress),
+      signMessage: wallet.signMessage,
+      signTransaction: wallet.signTransaction || (async (tx: any) => tx)
+    }
+
     // ✅ USER SIGNS & DEPOSITS - FUNDS GO DIRECTLY TO PRIVACY CASH POOL
     const depositTx = await executeUserPaysDeposit(
       {
         linkId,
         amount: amountStr,
-        publicKey: (wallet?.publicKey?.toString() || '') as string,
+        publicKey: walletAddress,
       },
-      wallet as any
+      walletAdapter
     )
 
     console.log(`✅ User deposited ${amountSOL} SOL directly to Privacy Cash pool`)

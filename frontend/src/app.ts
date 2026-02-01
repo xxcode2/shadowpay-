@@ -213,18 +213,20 @@ export class App {
     try {
       // Use createLink flow for deposit (no recipient needed)
       const { createLink } = await import('./flows/createLink.js')
+      const { PublicKey } = await import('@solana/web3.js')
       
       this.updateLoading(`Depositing ${amount} ${token} to Privacy Cash...`)
       
       const depositResult = await createLink({
         amountSOL: amount,
         wallet: {
-          publicKey: {
-            toString: () => this.walletAddress!
-          },
+          publicKey: new PublicKey(this.walletAddress!),
           signMessage: async (message: Uint8Array) => {
             const sig = await window.solana.signMessage(message)
             return sig.signature
+          },
+          signTransaction: async (transaction: any) => {
+            return await window.solana.signTransaction(transaction)
           }
         }
       })
@@ -297,10 +299,11 @@ export class App {
     this.showLoading('Preparing private transfer...')
 
     try {
-      // Step 1: Create transfer record on backend
-      this.updateLoading('Creating transfer record...')
+      // Step 1: Call backend to initiate private send
+      // Backend creates UTXO that only recipient can decrypt
+      this.updateLoading('Initiating private transfer...')
 
-      const createRes = await fetch(`${BACKEND_URL}/api/private-send`, {
+      const initRes = await fetch(`${BACKEND_URL}/api/private-send`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -310,31 +313,46 @@ export class App {
         }),
       })
 
-      if (!createRes.ok) {
-        const err = await createRes.json()
-        throw new Error(err.error || 'Failed to create transfer')
+      if (!initRes.ok) {
+        const err = await initRes.json()
+        throw new Error(err.error || 'Failed to initiate transfer')
       }
 
-      const { paymentId } = await createRes.json()
+      const { paymentId } = await initRes.json()
 
-      // Step 2: Deposit to Privacy Cash using SDK
-      this.updateLoading('Depositing to Privacy Cash pool...')
+      // Step 2: User withdraws from Privacy Cash pool and sends to recipient
+      // This uses Privacy Cash SDK withdrawal flow
+      this.updateLoading('Withdrawing from Privacy Cash and sending...')
       
       const { executeUserPaysDeposit } = await import('./flows/depositFlow.js')
+      const { PublicKey } = await import('@solana/web3.js')
       
-      const depositRequest: DepositRequest = {
+      // Create proper wallet adapter for withdrawal
+      const walletAdapter = {
+        publicKey: new PublicKey(this.walletAddress),
+        signMessage: async (message: Uint8Array) => {
+          const sig = await window.solana.signMessage(message)
+          return sig.signature
+        },
+        signTransaction: async (transaction: any) => {
+          return await window.solana.signTransaction(transaction)
+        }
+      }
+      
+      // For withdrawal/send: we send encrypted UTXO to recipient
+      const withdrawRequest: DepositRequest = {
         linkId: paymentId,
         amount: amount.toString(),
         publicKey: this.walletAddress,
-        recipientAddress: recipient,  // ✅ SDK binds UTXO to recipient
+        recipientAddress: recipient,  // Recipient will own this UTXO
       }
       
-      const depositTxSig = await executeUserPaysDeposit(
-        depositRequest,
-        window.solana
+      const withdrawTxSig = await executeUserPaysDeposit(
+        withdrawRequest,
+        walletAdapter
       )
 
-      // Step 3: Notify backend of deposit
+      // Step 3: Notify backend that withdrawal is done
       this.updateLoading('Finalizing transfer...')
 
       const confirmRes = await fetch(`${BACKEND_URL}/api/private-send/confirm`, {
@@ -342,12 +360,12 @@ export class App {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           paymentId,
-          depositTx: depositTxSig,
+          depositTx: withdrawTxSig,
         }),
       })
 
       if (!confirmRes.ok) {
-        console.warn('Failed to confirm with backend, but deposit succeeded')
+        console.warn('Failed to confirm with backend, but withdrawal succeeded')
       }
 
       this.hideLoading()
