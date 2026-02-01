@@ -80,9 +80,28 @@ export async function executeSendToUser(
     }
 
     console.log(`\nStep 2: Creating PrivacyCash instance`)
+    
+    // ✅ PrivacyCash expects owner to be a wallet adapter with:
+    // - publicKey (PublicKey object)
+    // - signTransaction (function)
+    // - signAllTransactions (function)
+    // Phantom wallet object has all of these!
+    const walletAdapter = {
+      publicKey: publicKeyObj,
+      signTransaction: async (tx: VersionedTransaction) => {
+        return await wallet.signTransaction(tx)
+      },
+      signAllTransactions: async (txs: VersionedTransaction[]) => {
+        return await wallet.signAllTransactions(txs)
+      },
+      signMessage: async (message: Uint8Array) => {
+        return await wallet.signMessage(message)
+      }
+    }
+    
     const pc = new PrivacyCash({
       RPC_url: rpcUrl,
-      owner: wallet,  // Pass the wallet object directly
+      owner: walletAdapter as any,  // Pass the properly formatted wallet adapter
       enableDebug: true
     })
     console.log(`   ✅ PrivacyCash instance created`)
