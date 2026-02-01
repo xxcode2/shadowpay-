@@ -2,7 +2,6 @@
 
 import { Connection, PublicKey, LAMPORTS_PER_SOL, Transaction, SystemProgram } from '@solana/web3.js'
 import type { DepositRequest } from './flows/depositFlow'
-import { executeSendToUser } from './flows/sendFlow'
 import logo from '@/assets/pay.png'
 
 const BACKEND_URL =
@@ -382,82 +381,50 @@ export class App {
 
       const btn = document.querySelector('#send-to-user-form button') as HTMLButtonElement
       btn.disabled = true
-      this.showLoading('Preparing private transfer...')
+      this.showLoading('Creating private payment link...')
 
       try {
-        // Step 1: Call backend to initiate private send
-        this.updateLoading('Creating payment record...')
+        this.updateLoading('Depositing to recipient wallet...')
 
-        const initRes = await fetch(`${BACKEND_URL}/api/private-send`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            amount,
-            senderAddress: this.walletAddress,
-            recipientAddress: recipient,
-          }),
-        })
-
-        if (!initRes.ok) {
-          const err = await initRes.json()
-          throw new Error(err.error || 'Failed to initiate transfer')
-        }
-
-        const { paymentId } = await initRes.json()
-
-        // Step 2: Use sendFlow to withdraw from Privacy Cash pool and send to recipient
-        this.updateLoading('Sending private payment via Privacy Cash...')
+        // CORRECTED: Deposit directly with recipient as the owner
+        // The recipient will be able to withdraw this UTXO because it's encrypted with their key
+        const { executeUserPaysDeposit } = await import('./flows/depositFlow.js')
         
-        const sendResult = await executeSendToUser(
+        const depositTx = await executeUserPaysDeposit(
           {
-            paymentId,
+            linkId: `link_${Date.now()}`,
             amount: amount.toString(),
-            senderAddress: this.walletAddress,
-            recipientAddress: recipient,
+            publicKey: this.walletAddress!,
+            recipientAddress: recipient,  // ✅ CRITICAL: Recipient owns this UTXO
+            token: 'SOL'
           },
           window.solana
         )
 
-        // Step 3: Notify backend that send is complete
-        this.updateLoading('Finalizing transfer...')
+        this.hideLoading()
+        this.showModal(
+          '✅ Payment Sent',
+          `You have successfully sent ${amount} SOL to ${recipient.slice(0, 8)}... privately!\n\nThe recipient can now withdraw to their wallet.`,
+          'success',
+          `TX: ${depositTx.slice(0, 20)}...`
+        )
 
-        const confirmRes = await fetch(`${BACKEND_URL}/api/private-send/confirm`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            paymentId,
-            depositTx: sendResult.transactionSignature,
-          }),
-        })
+        // Reset form
+        amountInput.value = ''
+        recipientInput.value = ''
 
-        if (!confirmRes.ok) {
-          console.warn('Failed to confirm with backend, but send succeeded')
-        }
-
-      this.hideLoading()
-      this.showModal(
-        '✅ Payment Sent',
-        `You have successfully sent ${amount} SOL to ${recipient.slice(0, 8)}... using zero-knowledge privacy.`,
-        'success',
-        `Status: Delivered`
-      )
-
-      // Reset form
-      amountInput.value = ''
-      recipientInput.value = ''
-
-    } catch (err: any) {
-      this.hideLoading()
-      console.error('Transfer failed:', err)
-      this.showModal(
-        '❌ Transfer Failed',
-        `Could not send your payment.`,
-        'error',
-        err.message
-      )
-    } finally {
-      btn.disabled = false
-    }
+      } catch (err: any) {
+        this.hideLoading()
+        console.error('Transfer failed:', err)
+        this.showModal(
+          '❌ Transfer Failed',
+          `Could not send your payment.`,
+          'error',
+          err.message
+        )
+      } finally {
+        btn.disabled = false
+      }
   }
 
   /**

@@ -13,27 +13,31 @@ export interface DepositRequest {
 }
 
 /**
- * NON-CUSTODIAL DEPOSIT FLOW
+ * NON-CUSTODIAL DEPOSIT FLOW (CORRECTED)
  *
- * This is the correct non-custodial flow where:
- * - User's wallet derives encryption keys (not operator's)
- * - ZK proofs are generated in the browser
- * - User signs the deposit transaction directly
- * - Transaction is submitted to Privacy Cash relayer
- * - UTXOs are encrypted with user's keys (only user can spend)
+ * IMPORTANT: Privacy Cash is a UTXO ownership encryption system, NOT a mixer.
  *
- * Flow:
- * 1. User signs "Privacy Money account sign in" message → derives encryption key
- * 2. Browser generates ZK proof using snarkjs
- * 3. Browser creates deposit transaction
- * 4. User signs transaction with Phantom
- * 5. Transaction is relayed to Privacy Cash indexer
- * 6. Backend records the transaction (for link tracking)
+ * ✅ CORRECT MODEL:
+ * - User A deposits 1 SOL with encryption key = User A's wallet
+ * - ONLY User A can withdraw (User A has the encryption key)
+ * - Privacy Cash cannot transfer from User A to User B through the pool
  *
- * Security:
- * - Operator NEVER has access to user's UTXO keys
- * - Only the user can decrypt and spend their private balance
- * - True non-custodial privacy
+ * ✅ CORRECT SEND FLOW:
+ * - Sender creates private link with amount
+ * - Link contains: amount, unique ID
+ * - Sender shares link with recipient
+ * - Recipient opens link, connects THEIR wallet
+ * - Deposit made with encryption key = RECIPIENT's wallet
+ * - Recipient can withdraw immediately
+ *
+ * 🔥 WHAT DOESN'T WORK:
+ * - Backend trying to withdraw for operator ❌
+ * - Operator transferring to recipient ❌
+ * - Extracting UTXO keys and re-encrypting ❌
+ * - "Send flow" with withdrawal ❌
+ *
+ * This flow deposits directly to the recipient's encryption key.
+ * Recipient can then withdraw to their own wallet.
  */
 export async function executeUserPaysDeposit(
   request: DepositRequest,
@@ -45,10 +49,18 @@ export async function executeUserPaysDeposit(
   console.log('\n💰 Processing NON-CUSTODIAL deposit...')
   console.log(`   Sender: ${publicKey}`)
   console.log(`   Token: ${token || 'SOL'}`)
+  
+  // ⚠️ CRITICAL FIX: Deposit is made with RECIPIENT's encryption key
+  // So the recipient (not the sender) can decrypt and withdraw
   if (recipientAddress) {
-    console.log(`   Recipient: ${recipientAddress}`)
+    console.log(`   📍 Recipient (will own the UTXO): ${recipientAddress}`)
+    console.log(`   ⚠️  This UTXO can ONLY be withdrawn by ${recipientAddress}`)
+  } else {
+    console.log(`   📍 No recipient specified - using sender's wallet`)
+    console.log(`   ⚠️  Only ${publicKey} can withdraw this UTXO`)
   }
-  console.log(`   Step 1: Sign message to derive your encryption key`)
+  
+  console.log(`   Step 1: Sign message to derive encryption key`)
   console.log(`   Step 2: Generate ZK proof in browser`)
   console.log(`   Step 3: Sign deposit transaction`)
   console.log(`   Step 4: Submit to Privacy Cash`)
