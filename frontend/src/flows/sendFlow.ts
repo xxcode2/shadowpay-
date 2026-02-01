@@ -59,118 +59,69 @@ export async function executeSendToUser(
     const rpcUrl = import.meta.env.VITE_SOLANA_RPC_URL || CONFIG.SOLANA_RPC_URL ||
       'https://mainnet.helius-rpc.com'
 
-    const connection = new Connection(rpcUrl)
-
-    console.log(`Step 1: Sign message to authorize withdrawal`)
-    const encodedMessage = new TextEncoder().encode(SIGN_MESSAGE)
-    let signature: Uint8Array
-
-    try {
-      signature = await wallet.signMessage(encodedMessage)
-      // Handle wallets that return { signature } object
-      if ((signature as any).signature) {
-        signature = (signature as any).signature
-      }
-    } catch (err: any) {
-      if (err.message?.toLowerCase().includes('rejected')) {
-        throw new Error('You rejected the signature request. This is required for authorization.')
-      }
-      throw err
-    }
-
-    if (!(signature instanceof Uint8Array)) {
-      throw new Error('Invalid signature format')
-    }
-
-    console.log(`Step 2: Initializing Privacy Cash withdrawal`)
-    
-    // Import Privacy Cash SDK
-    const privacycashUtils = await import('privacycash/utils') as any
-    const { EncryptionService, withdraw } = privacycashUtils
-
-    // Create encryption service from signature
-    const encryptionService = new EncryptionService()
-    
-    // ✅ Ensure signature is proper Uint8Array
-    if (!(signature instanceof Uint8Array)) {
-      throw new Error('Signature must be Uint8Array')
-    }
-    
-    console.log(`   Deriving encryption key from signature (${signature.length} bytes)`)
-    encryptionService.deriveEncryptionKeyFromSignature(signature)
-    console.log(`   ✅ Encryption key derived`)
-
-    // Initialize WASM
-    console.log(`Step 3: Initializing WASM for ZK proof`)
-    const { WasmFactory } = await import('@lightprotocol/hasher.rs')
-    const lightWasm = await WasmFactory.getInstance()
-    console.log(`   ✅ WASM initialized`)
-
     // Parse amount
     const amountNum = parseFloat(amount)
     if (!amountNum || amountNum <= 0) {
       throw new Error('Invalid amount: must be greater than 0')
     }
     const lamports = Math.round(amountNum * 1e9)
+
+    console.log(`\nStep 1: Initializing Privacy Cash SDK`)
+    console.log(`   RPC URL: ${rpcUrl}`)
+    console.log(`   Wallet: ${publicKeyObj.toBase58()}`)
     console.log(`   Amount: ${amountNum} SOL (${lamports} lamports)`)
 
-    console.log(`Step 4: Generating ZK proof for withdrawal`)
-    console.log(`   This may take 30-60 seconds...`)
+    // ✅ Import PrivacyCash class (not the low-level utils functions)
+    // The PrivacyCash class has proper withdraw() method
+    const { PrivacyCash } = await import('privacycash') as any
+    
+    if (!PrivacyCash) {
+      throw new Error('Failed to import PrivacyCash class from privacycash package')
+    }
 
-    // Call Privacy Cash withdraw function with correct parameters
-    console.log(`Step 5: Executing withdrawal from Privacy Cash pool`)
+    console.log(`\nStep 2: Creating PrivacyCash instance`)
+    const pc = new PrivacyCash({
+      RPC_url: rpcUrl,
+      owner: wallet,  // Pass the wallet object directly
+      enableDebug: true
+    })
+    console.log(`   ✅ PrivacyCash instance created`)
+
+    console.log(`\nStep 3: Executing withdrawal from Privacy Cash pool`)
     console.log(`   Recipient: ${recipientAddress}`)
-    
-    // ✅ Validate all parameters before calling withdraw
-    console.log(`\n   📋 Validating withdrawal parameters:`)
-    console.log(`      - lightWasm: ${lightWasm ? 'OK' : 'MISSING'}`)
-    console.log(`      - connection: ${connection ? 'OK' : 'MISSING'}`)
-    console.log(`      - lamports: ${lamports}`)
-    console.log(`      - keyBasePath: /circuits/transaction2`)
-    console.log(`      - publicKey: ${publicKeyObj.toBase58()}`)
-    console.log(`      - toAddress: ${recipientAddress}`)
-    console.log(`      - encryptionService: ${encryptionService ? 'OK' : 'MISSING'}`)
-    console.log(`      - signer: function`)
-    console.log(`      - storage: localStorage`)
-    
+    console.log(`   ⏳ This may take 30-60 seconds for ZK proof generation...`)
+
     let result
     try {
-      // ✅ Use correct parameter names matching Privacy Cash SDK
-      // Note: withdraw function expects 'transactionSigner', not 'signer'
-      result = await withdraw({
-        lightWasm,
-        connection,
-        amount_in_lamports: lamports,
-        keyBasePath: '/circuits/transaction2',
-        publicKey: publicKeyObj,
-        toAddress: new PublicKey(recipientAddress),
-        transactionSigner: async (tx: VersionedTransaction) => {
-          console.log(`   📝 Please sign the withdrawal transaction in your wallet`)
-          return await wallet.signTransaction(tx)
-        },
-        storage: localStorage,
-        encryptionService
+      // ✅ Use the PrivacyCash instance's withdraw method
+      // This is a high-level method that handles everything
+      result = await pc.withdraw({
+        lamports,
+        recipientAddress: recipientAddress,
       })
-    } catch (withdrawErr: any) {
-      console.error(`\n❌ Withdrawal execution failed:`)
-      console.error(`   Error: ${withdrawErr.message}`)
-      console.error(`   Stack: ${withdrawErr.stack}`)
-      console.error(`   Full error:`, withdrawErr)
-      throw new Error(`Withdrawal failed during transaction building: ${withdrawErr.message}`)
+      
+      console.log(`\n   ✅ Withdrawal successful!`)
+      console.log(`   TX: ${result.tx}`)
+      
+    } catch (pcErr: any) {
+      console.error(`\n   ❌ PrivacyCash withdrawal failed:`)
+      console.error(`   Error: ${pcErr.message}`)
+      console.error(`   Stack: ${pcErr.stack}`)
+      throw new Error(`PrivacyCash withdrawal error: ${pcErr.message}`)
     }
 
     console.log(`\n✅ SEND SUCCESSFUL`)
     console.log(`   Payment ID: ${paymentId}`)
     console.log(`   Amount: ${amount} SOL`)
     console.log(`   To: ${recipientAddress}`)
-    console.log(`   Transaction: ${result.transactionSignature}`)
+    console.log(`   Transaction: ${result.tx}`)
     console.log(`   Status: Payment delivered privately ✨`)
 
-    showSuccess(`${amount} SOL sent privately to ${recipientAddress.slice(0, 8)}... View on Solscan: ${result.explorerUrl}`)
+    showSuccess(`${amount} SOL sent privately to ${recipientAddress.slice(0, 8)}...`)
 
     return {
       success: true,
-      transactionSignature: result.transactionSignature,
+      transactionSignature: result.tx,
       paymentId,
       amount: amountNum,
       recipientAddress
