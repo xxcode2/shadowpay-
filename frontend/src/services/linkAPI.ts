@@ -13,7 +13,6 @@
  */
 
 import { PublicKey, LAMPORTS_PER_SOL } from '@solana/web3.js'
-import { PrivacyCash } from 'privacycash'
 
 /**
  * Load circuits for ZK proofs
@@ -88,22 +87,26 @@ export async function createPaymentLink(input: {
     const circuits = await loadCircuits()
     console.log(`✅ Circuits loaded\n`)
 
-    // ✅ STEP 2: Initialize Privacy Cash with USER's wallet
-    console.log(`🔄 Initializing Privacy Cash SDK...`)
+    // ✅ STEP 2: Setup Connection
+    console.log(`🔄 Setting up Solana connection...`)
+    const { Connection } = await import('@solana/web3.js')
     const rpcUrl = process.env.VITE_SOLANA_RPC_URL || 'https://api.mainnet-beta.solana.com'
-    const pc = new PrivacyCash({
-      RPC_url: rpcUrl,
-      owner: input.wallet as any,
-    })
-    console.log(`✅ SDK initialized with your wallet\n`)
+    const connection = new Connection(rpcUrl, 'confirmed')
+    console.log(`✅ Connected to Solana\n`)
 
     // ✅ STEP 3: User A deposits to Privacy Cash
     console.log(`💸 Depositing ${input.amount} SOL to Privacy Cash pool...`)
     console.log(`⏳ This may take 60+ seconds...\n`)
 
     const lamports = Math.round(input.amount * LAMPORTS_PER_SOL)
-    const depositResult = await pc.deposit({
+    
+    // Import the correct deposit function
+    const { depositToPrivacyCash } = await import('./privacyCashClient.js')
+    const depositResult = await depositToPrivacyCash({
       lamports,
+      connection,
+      wallet: input.wallet,
+      onProgress: (msg) => console.log(`  ${msg}`)
     })
 
     const depositTx = depositResult.tx
@@ -244,23 +247,27 @@ export async function claimPaymentLink(input: {
     const circuits = await loadCircuits()
     console.log(`✅ Circuits loaded\n`)
 
-    // ✅ STEP 3: Initialize Privacy Cash with RECIPIENT's wallet
-    console.log(`🔄 Initializing Privacy Cash SDK...`)
-    const rpcUrl = process.env.VITE_SOLANA_RPC_URL || 'https://api.mainnet-beta.solana.com'
-    const pc = new PrivacyCash({
-      RPC_url: rpcUrl,
-      owner: input.recipientWallet as any,
-    })
-    console.log(`✅ SDK initialized with your wallet\n`)
+    // ✅ STEP 3: Setup Connection
+    console.log(`🔄 Setting up Solana connection...`)
+    const { Connection } = await import('@solana/web3.js')
+    const rpcUrl2 = process.env.VITE_SOLANA_RPC_URL || 'https://api.mainnet-beta.solana.com'
+    const connection = new Connection(rpcUrl2, 'confirmed')
+    console.log(`✅ Connected to Solana\n`)
 
     // ✅ STEP 4: User B withdraws from Privacy Cash
     console.log(`📤 Withdrawing ${amount} SOL from Privacy Cash pool...`)
     console.log(`⏳ This may take 60+ seconds...\n`)
 
     const lamports = Math.round(amount * LAMPORTS_PER_SOL)
-    const withdrawResult = await pc.withdraw({
+    
+    // Import the correct withdraw function
+    const { withdrawFromPrivacyCash } = await import('./privacyCashClient.js')
+    const withdrawResult = await withdrawFromPrivacyCash({
       lamports,
       recipientAddress: input.recipientWallet.publicKey.toString(),
+      connection,
+      wallet: input.recipientWallet,
+      onProgress: (msg) => console.log(`  ${msg}`)
     })
 
     const withdrawTx = withdrawResult.tx

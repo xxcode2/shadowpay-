@@ -57,6 +57,9 @@ export async function executeDeposit(
         publicKey: publicKeyObj,
         signTransaction: async (tx: any) => {
           return await wallet.signTransaction(tx)
+        },
+        signMessage: async (msg: Uint8Array) => {
+          return await wallet.signMessage(msg)
         }
       },
       onProgress: (msg: string) => {

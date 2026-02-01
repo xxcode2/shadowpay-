@@ -53,8 +53,8 @@ export async function executeWithdraw(
     console.log(`\nStep 1: Checking private balance...`)
     const balance = await getPrivateBalance(connection, {
       publicKey: publicKeyObj,
-      signTransaction: async (tx: VersionedTransaction) => {
-        return await wallet.signTransaction(tx)
+      signMessage: async (msg: Uint8Array) => {
+        return await wallet.signMessage(msg)
       }
     })
 
@@ -148,8 +148,8 @@ export async function getBalance(walletAddress: string, wallet: any): Promise<nu
 
     const balance = await getPrivateBalance(connection, {
       publicKey: publicKeyObj,
-      signTransaction: async (tx: VersionedTransaction) => {
-        return await wallet.signTransaction(tx)
+      signMessage: async (msg: Uint8Array) => {
+        return await wallet.signMessage(msg)
       }
     })
 
