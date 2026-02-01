@@ -27,11 +27,11 @@ export interface ParsedIntent {
  */
 function isValidSolanaAddress(address: string): boolean {
   try {
-    // Solana addresses are 44 chars (32 bytes) encoded in base58
+    // Solana addresses are 32-44 chars (32 bytes) encoded in base58
     if (address.length < 32 || address.length > 44) {
       return false
     }
-    // Try to create PublicKey - will throw if invalid
+    // Try to create PublicKey - will throw if invalid base58
     new PublicKey(address)
     return true
   } catch {
@@ -110,11 +110,10 @@ export async function executeIntent(
 
       onProgress(`💰 Depositing ${intent.amount} SOL to your private wallet...`)
 
-      const lamports = Math.round(intent.amount * 1e9)
       const result = await executeDeposit(
         {
           linkId: `ai-${Date.now()}`,
-          amount: lamports.toString(),
+          amount: intent.amount.toString(),  // Pass as SOL string, depositFlowV2 will convert to lamports
           publicKey: wallet.publicKey?.toString?.() || 'unknown'
         } as any,
         wallet
