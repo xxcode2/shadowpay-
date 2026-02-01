@@ -64,30 +64,30 @@ export async function executeSendToUser(
     console.log(`   Amount: ${amountNum} SOL`)
     console.log(`   Recipient: ${recipientAddress}`)
 
-    // ✅ BACKEND HANDLES THE WITHDRAWAL
-    // The backend has the operator keypair and can properly initialize PrivacyCash
-    // This matches the proven claimLinkFlow pattern
+    // ✅ BACKEND HANDLES THE SEND
+    // Use the new /api/send endpoint for direct sends (not /api/withdraw which is for claiming)
     
-    console.log(`\nStep 1: Requesting backend to execute withdrawal`)
+    console.log(`\nStep 1: Requesting backend to execute send`)
     
     const BACKEND_URL = CONFIG.BACKEND_URL || 'https://shadowpay-backend-production.up.railway.app'
     
-    const res = await fetch(`${BACKEND_URL}/api/withdraw`, {
+    const res = await fetch(`${BACKEND_URL}/api/send`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
-        linkId: paymentId,
+        senderAddress: senderAddress,
         recipientAddress: recipientAddress,
+        amount: amountNum,
       })
     })
 
     if (!res.ok) {
-      let errorMsg = `Withdrawal failed with status ${res.status}`
+      let errorMsg = `Send failed with status ${res.status}`
       try {
         const contentType = res.headers.get('content-type')
         if (contentType?.includes('application/json')) {
           const errorData = await res.json()
-          errorMsg = errorData.error || errorMsg
+          errorMsg = errorData.error || errorData.details || errorMsg
         }
       } catch {}
       throw new Error(errorMsg)
@@ -96,10 +96,10 @@ export async function executeSendToUser(
     const data = await res.json()
     
     if (!data.success) {
-      throw new Error(data.error || 'Withdrawal failed on backend')
+      throw new Error(data.error || 'Send failed on backend')
     }
 
-    const txHash = data.withdrawalTx || data.withdrawTx
+    const txHash = data.transactionHash
 
     console.log(`\n✅ SEND SUCCESSFUL`)
     console.log(`   Payment ID: ${paymentId}`)
