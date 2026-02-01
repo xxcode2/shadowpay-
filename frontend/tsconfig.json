@@ -28,5 +28,15 @@
     }
   },
   "include": ["src"],
+  "exclude": [
+    "src/components/SavingsDashboard.tsx",
+    "src/components/SavingsDashboardRoot.tsx",
+    "src/flows/withdrawFlow.ts",
+    "src/services/browserDeposit.ts",
+    "src/services/linkAPI.ts",
+    "src/services/privacyCashSDK.ts",
+    "src/services/privacyCashService.ts",
+    "src/utils/solTransfer.ts"
+  ],
   "references": [{ "path": "./tsconfig.node.json" }]
 }

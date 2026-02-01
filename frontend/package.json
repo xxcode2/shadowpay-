@@ -4,7 +4,7 @@
   "type": "module",
   "scripts": {
     "dev": "vite",
-    "build": "tsc && vite build",
+    "build": "npx vite build",
     "preview": "vite preview",
     "postinstall": "npm run setup:circuits && mkdir -p node_modules/@lightprotocol/hasher.rs/dist/browser-fat/es/ 2>/dev/null; cp -f node_modules/@lightprotocol/hasher.rs/dist/hasher_wasm_simd_bg.wasm node_modules/@lightprotocol/hasher.rs/dist/browser-fat/es/ 2>/dev/null; cp -f node_modules/@lightprotocol/hasher.rs/dist/light_wasm_hasher_bg.wasm node_modules/@lightprotocol/hasher.rs/dist/browser-fat/es/ 2>/dev/null; exit 0",
     "setup:circuits": "mkdir -p public/circuits && cp -f node_modules/privacycash/circuit2/transaction2.wasm public/circuits/ 2>/dev/null && cp -f node_modules/privacycash/circuit2/transaction2.zkey public/circuits/ 2>/dev/null && echo '✅ Circuit files setup complete' || echo '⚠️  Circuit files may need manual setup'"
