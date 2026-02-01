@@ -733,20 +733,8 @@ export class App {
         }
       )
 
-      // Show success
-      if (intent.type === 'deposit') {
-        this.updateAIChatMessage(
-          progressMessageId,
-          `✅ Deposit successful!\nAmount: ${intent.amount} SOL\nTX: ${result.tx}`
-        )
-      } else if (intent.type === 'send') {
-        this.updateAIChatMessage(
-          progressMessageId,
-          `✅ Send successful!\nAmount: ${intent.amount} SOL\nRecipient: ${intent.recipient?.slice(0, 8)}...\nTX: ${result.tx}`
-        )
-      } else if (intent.type === 'balance') {
-        this.updateAIChatMessage(progressMessageId, '📊 Balance check completed')
-      }
+      // Message already updated by executeIntent via onProgress callback
+      // Don't overwrite - keep the actual result message
     } catch (error: any) {
       const errorMsg = error.message || String(error)
       this.addAIChatMessage(`❌ Error: ${errorMsg}`, 'bot')

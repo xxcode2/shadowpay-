@@ -67,7 +67,15 @@ export async function executeWithdraw(
     // ✅ STEP 2: Determine withdrawal amount
     let lamports: number
     if (amountStr) {
-      lamports = Math.round(parseFloat(amountStr) * 1e9)
+      // amountStr might be in lamports or SOL - try to detect
+      const parsed = parseFloat(amountStr)
+      // If it's a large number (>= 1e9), assume it's already in lamports
+      // Otherwise assume it's in SOL and convert
+      if (parsed >= 1e9) {
+        lamports = Math.round(parsed)
+      } else {
+        lamports = Math.round(parsed * 1e9)
+      }
       if (lamports > balance) {
         console.warn(`   ⚠️  Requested amount exceeds balance, withdrawing entire balance`)
         lamports = balance

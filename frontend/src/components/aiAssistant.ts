@@ -158,7 +158,7 @@ export async function executeIntent(
         {
           walletAddress: wallet.publicKey?.toString?.() || 'unknown',
           recipientAddress: intent.recipient,
-          amount: (lamports / 1e9).toString()
+          amount: lamports.toString()  // Pass as lamports string
         } as any,
         wallet
       )
