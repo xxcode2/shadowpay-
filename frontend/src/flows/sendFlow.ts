@@ -121,20 +121,43 @@ export async function executeSendToUser(
     console.log(`Step 5: Executing withdrawal from Privacy Cash pool`)
     console.log(`   Recipient: ${recipientAddress}`)
     
-    const result = await withdraw({
-      lightWasm,
-      connection,
-      amount_in_lamports: lamports,
-      keyBasePath: '/circuits/transaction2',
-      publicKey: publicKeyObj,
-      toAddress: new PublicKey(recipientAddress),
-      signer: async (tx: VersionedTransaction) => {
-        console.log(`   📝 Please sign the withdrawal transaction in your wallet`)
-        return await wallet.signTransaction(tx)
-      },
-      storage: localStorage,
-      encryptionService
-    })
+    // ✅ Validate all parameters before calling withdraw
+    console.log(`\n   📋 Validating withdrawal parameters:`)
+    console.log(`      - lightWasm: ${lightWasm ? 'OK' : 'MISSING'}`)
+    console.log(`      - connection: ${connection ? 'OK' : 'MISSING'}`)
+    console.log(`      - lamports: ${lamports}`)
+    console.log(`      - keyBasePath: /circuits/transaction2`)
+    console.log(`      - publicKey: ${publicKeyObj.toBase58()}`)
+    console.log(`      - toAddress: ${recipientAddress}`)
+    console.log(`      - encryptionService: ${encryptionService ? 'OK' : 'MISSING'}`)
+    console.log(`      - signer: function`)
+    console.log(`      - storage: localStorage`)
+    
+    let result
+    try {
+      // ✅ Use correct parameter names matching Privacy Cash SDK
+      // Note: withdraw function expects 'transactionSigner', not 'signer'
+      result = await withdraw({
+        lightWasm,
+        connection,
+        amount_in_lamports: lamports,
+        keyBasePath: '/circuits/transaction2',
+        publicKey: publicKeyObj,
+        toAddress: new PublicKey(recipientAddress),
+        transactionSigner: async (tx: VersionedTransaction) => {
+          console.log(`   📝 Please sign the withdrawal transaction in your wallet`)
+          return await wallet.signTransaction(tx)
+        },
+        storage: localStorage,
+        encryptionService
+      })
+    } catch (withdrawErr: any) {
+      console.error(`\n❌ Withdrawal execution failed:`)
+      console.error(`   Error: ${withdrawErr.message}`)
+      console.error(`   Stack: ${withdrawErr.stack}`)
+      console.error(`   Full error:`, withdrawErr)
+      throw new Error(`Withdrawal failed during transaction building: ${withdrawErr.message}`)
+    }
 
     console.log(`\n✅ SEND SUCCESSFUL`)
     console.log(`   Payment ID: ${paymentId}`)
