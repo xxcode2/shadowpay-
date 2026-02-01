@@ -28,13 +28,20 @@ export interface ParsedIntent {
 function isValidSolanaAddress(address: string): boolean {
   try {
     // Solana addresses are 32-44 chars (32 bytes) encoded in base58
-    if (address.length < 32 || address.length > 44) {
+    const len = address.length
+    console.log(`[Validate Address] Length: ${len}, Address: ${address.slice(0, 20)}...`)
+    
+    if (len < 32 || len > 44) {
+      console.log(`[Validate Address] ❌ Invalid length ${len} (must be 32-44)`)
       return false
     }
+    
     // Try to create PublicKey - will throw if invalid base58
     new PublicKey(address)
+    console.log(`[Validate Address] ✅ Valid Solana address`)
     return true
-  } catch {
+  } catch (err: any) {
+    console.log(`[Validate Address] ❌ PublicKey error: ${err.message}`)
     return false
   }
 }
@@ -60,8 +67,9 @@ export function parseIntent(input: string): ParsedIntent {
   }
 
   // Match send patterns: "send X SOL to address" or "send X to address"
-  const sendMatch = normalized.match(
-    /send\s+([\d.]+)\s*sol?\s+to\s+([a-zA-Z0-9]{40,})/i
+  // Solana addresses are 32-44 characters when base58 encoded
+  const sendMatch = input.match(
+    /send\s+([\d.]+)\s*sol?\s+to\s+([a-zA-Z0-9]{32,44})/i
   )
   if (sendMatch) {
     return {
@@ -144,7 +152,7 @@ export async function executeIntent(
       // Validate recipient address is valid Solana address
       if (!isValidSolanaAddress(intent.recipient)) {
         throw new Error(
-          `Invalid recipient address: "${intent.recipient}". Must be a valid Solana address (32-44 characters, base58 format)`
+          `Invalid Solana address. Make sure you copied it completely. Received: ${intent.recipient}`
         )
       }
 
