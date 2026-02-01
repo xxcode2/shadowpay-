@@ -2,6 +2,7 @@
 
 import { Connection, PublicKey, LAMPORTS_PER_SOL, Transaction, SystemProgram } from '@solana/web3.js'
 import type { DepositRequest } from './flows/depositFlow'
+import { executeDeposit } from './flows/depositFlowV2'
 import logo from '@/assets/pay.png'
 
 const BACKEND_URL =
@@ -29,16 +30,11 @@ export class App {
   private walletAddress: string | null = null
   private bound: boolean = false
   private connection: Connection
+  private backendUrl: string = BACKEND_URL
   private historyData: { sent: any[], received: any[] } = { sent: [], received: [] }
   private currentHistoryPage: number = 1
   private historyTab: 'sent' | 'received' = 'sent'
   private readonly ITEMS_PER_PAGE = 10
-  
-  // Receive section state
-  private incomingData: any[] = []
-  private currentIncomingPage: number = 1
-  private incomingTab: 'available' | 'withdrawn' = 'available'
-  private readonly ITEMS_PER_PAGE_RECEIVE = 5
 
   constructor() {
     this.connection = new Connection(SOLANA_RPC_URL, 'confirmed')
@@ -62,7 +58,6 @@ export class App {
     // Tab switching
     document.getElementById('mode-deposit')?.addEventListener('click', () => this.switchMode('deposit'))
     document.getElementById('mode-send')?.addEventListener('click', () => this.switchMode('send'))
-    document.getElementById('mode-receive')?.addEventListener('click', () => this.switchMode('receive'))
     document.getElementById('mode-history')?.addEventListener('click', () => this.switchMode('history'))
     document.getElementById('mode-about')?.addEventListener('click', () => this.switchMode('about'))
 
@@ -89,7 +84,7 @@ export class App {
     })
   }
 
-  private switchMode(mode: 'deposit' | 'send' | 'receive' | 'history' | 'about') {
+  private switchMode(mode: 'deposit' | 'send' | 'history' | 'about') {
     // Update active button
     document.querySelectorAll('.mode-btn').forEach(btn => {
       btn.classList.remove('tab-active')
@@ -103,7 +98,6 @@ export class App {
     // Hide all sections
     document.getElementById('section-deposit')?.classList.add('hidden')
     document.getElementById('section-send')?.classList.add('hidden')
-    document.getElementById('section-receive')?.classList.add('hidden')
     document.getElementById('section-history')?.classList.add('hidden')
     document.getElementById('section-about')?.classList.add('hidden')
 
@@ -113,8 +107,6 @@ export class App {
     // Load data for specific modes
     if (mode === 'deposit') {
       this.updateDepositBalance()
-    } else if (mode === 'receive') {
-      this.loadIncomingPayments()
     } else if (mode === 'history') {
       this.loadHistory()
     }
@@ -273,32 +265,47 @@ export class App {
     this.showLoading(`Preparing ${token} deposit...`)
 
     try {
-      // Use createLink flow for deposit (no recipient needed)
-      const { createLink } = await import('./flows/createLink.js')
-      const { PublicKey } = await import('@solana/web3.js')
+      // ✅ NEW: Create link on backend FIRST
+      console.log('📝 Creating payment link on backend...')
+      this.updateLoading('Creating payment link...')
       
+      const linkRes = await fetch(`${this.backendUrl}/api/create-link`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          amount: amount,
+          assetType: token,
+          creatorAddress: this.walletAddress
+        })
+      })
+
+      if (!linkRes.ok) {
+        const error = await linkRes.json().catch(() => ({ error: 'Failed to create link' }))
+        throw new Error(error.error || 'Failed to create link')
+      }
+
+      const { linkId } = await linkRes.json()
+      console.log(`✅ Link created: ${linkId}`)
+
       this.updateLoading(`Depositing ${amount} ${token} to Privacy Cash...`)
       
-      const depositResult = await createLink({
-        amountSOL: amount,
-        wallet: {
-          publicKey: new PublicKey(this.walletAddress!),
-          signMessage: async (message: Uint8Array) => {
-            const sig = await window.solana.signMessage(message)
-            return sig.signature
-          },
-          signTransaction: async (transaction: any) => {
-            return await window.solana.signTransaction(transaction)
-          }
-        }
-      })
+      // ✅ Use new V2 deposit flow with official SDK
+      const depositTx = await executeDeposit(
+        {
+          linkId,
+          amount: amount.toString(),
+          publicKey: this.walletAddress!,
+          token
+        },
+        window.solana
+      )
 
       this.hideLoading()
       this.showModal(
         '✅ Deposit Successful',
-        `You have successfully deposited ${amount} SOL to Privacy Cash. Your funds are now secure and private.`,
+        `You have successfully deposited ${amount} ${token} to Privacy Cash!\n\nYour funds are now secure and private.`,
         'success',
-        `Link ID: ${depositResult.linkId}`
+        `TX: ${depositTx.slice(0, 20)}...`
       )
 
       // Reset form
@@ -309,21 +316,13 @@ export class App {
         if (symbol) symbol.textContent = 'SOL'
       }
 
-      // Reload deposit balance
-      await new Promise(resolve => setTimeout(resolve, 1000))
+      // Reload balance after delay
+      await new Promise(resolve => setTimeout(resolve, 2000))
       await this.updateDepositBalance()
-
-      // Reset form
-      amountInput.value = ''
-      if (tokenSelect) {
-        tokenSelect.value = 'SOL'
-        const symbol = document.getElementById('send-token-symbol')
-        if (symbol) symbol.textContent = 'SOL'
-      }
 
     } catch (err: any) {
       this.hideLoading()
-      console.error('Send failed:', err)
+      console.error('Deposit failed:', err)
       this.showModal(
         '❌ Deposit Failed',
         `Your deposit could not be processed.`,
@@ -384,15 +383,35 @@ export class App {
       this.showLoading('Creating private payment link...')
 
       try {
+        // ✅ CRITICAL FIX: Create link on backend FIRST
+        console.log('📝 Creating payment link on backend...')
+        this.updateLoading('Creating payment link...')
+        
+        const linkRes = await fetch(`${this.backendUrl}/api/create-link`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            amount: amount,
+            assetType: 'SOL',
+            creatorAddress: this.walletAddress
+          })
+        })
+
+        if (!linkRes.ok) {
+          const error = await linkRes.json().catch(() => ({ error: 'Failed to create link' }))
+          throw new Error(error.error || 'Failed to create link')
+        }
+
+        const { linkId } = await linkRes.json()
+        console.log(`✅ Link created on backend: ${linkId}`)
+
         this.updateLoading('Depositing to recipient wallet...')
 
-        // CORRECTED: Deposit directly with recipient as the owner
-        // The recipient will be able to withdraw this UTXO because it's encrypted with their key
-        const { executeUserPaysDeposit } = await import('./flows/depositFlow.js')
-        
-        const depositTx = await executeUserPaysDeposit(
+        // ✅ Use new V2 deposit flow with official SDK
+        // Recipient will own this UTXO because it's encrypted with their wallet key
+        const depositTx = await executeDeposit(
           {
-            linkId: `link_${Date.now()}`,
+            linkId,
             amount: amount.toString(),
             publicKey: this.walletAddress!,
             recipientAddress: recipient,  // ✅ CRITICAL: Recipient owns this UTXO
@@ -425,265 +444,6 @@ export class App {
       } finally {
         btn.disabled = false
       }
-  }
-
-  /**
-   * LOAD INCOMING PAYMENTS WITH PAGINATION
-   *
-   * For the connected wallet, fetch incoming private payments
-   * Separated into Available and Withdrawn tabs with 5 items per page
-   */
-  private async loadIncomingPayments() {
-    const container = document.getElementById('receive-container')
-    if (!container) return
-
-    if (!this.walletAddress) {
-      container.innerHTML = `
-        <div class="text-center py-12 text-gray-400">
-          Connect your wallet to view incoming payments
-        </div>
-      `
-      return
-    }
-
-    container.innerHTML = `
-      <div class="text-center py-12">
-        <div class="loading-spinner mx-auto mb-4"></div>
-        <p class="text-gray-400">Scanning for incoming payments...</p>
-      </div>
-    `
-
-    try {
-      const res = await fetch(`${BACKEND_URL}/api/incoming/${this.walletAddress}`)
-
-      if (!res.ok) {
-        throw new Error('Failed to load incoming payments')
-      }
-
-      const { payments } = await res.json()
-
-      if (!payments || payments.length === 0) {
-        container.innerHTML = `
-          <div class="text-center py-12">
-            <div class="text-6xl mb-4">📭</div>
-            <h3 class="text-xl text-gray-400">No Incoming Payments</h3>
-            <p class="text-gray-500 mt-2">When someone sends you a private payment, it will appear here.</p>
-          </div>
-        `
-        return
-      }
-
-      // Separate into available and withdrawn
-      this.incomingData = payments
-      this.currentIncomingPage = 1
-      this.incomingTab = 'available'
-      
-      this.renderIncomingTab()
-
-    } catch (err: any) {
-      container.innerHTML = `
-        <div class="text-center py-12 text-red-400">
-          Failed to load incoming payments: ${err.message}
-        </div>
-      `
-    }
-  }
-
-  private renderIncomingTab() {
-    const container = document.getElementById('receive-container')
-    if (!container) return
-
-    const isAvailable = this.incomingTab === 'available'
-    const filteredData = this.incomingData.filter((p: any) => 
-      isAvailable ? !p.withdrawn : p.withdrawn
-    )
-
-    const totalPages = Math.ceil(filteredData.length / this.ITEMS_PER_PAGE_RECEIVE)
-    const startIdx = (this.currentIncomingPage - 1) * this.ITEMS_PER_PAGE_RECEIVE
-    const endIdx = startIdx + this.ITEMS_PER_PAGE_RECEIVE
-    const pageData = filteredData.slice(startIdx, endIdx)
-
-    const availableCount = this.incomingData.filter((p: any) => !p.withdrawn).length
-    const withdrawnCount = this.incomingData.filter((p: any) => p.withdrawn).length
-
-    let html = `
-      <!-- Tab Navigation -->
-      <div class="flex gap-4 mb-8">
-        <button id="receive-tab-available" class="px-6 py-2 rounded-lg font-medium transition ${
-          this.incomingTab === 'available' 
-            ? 'bg-green-600 text-white' 
-            : 'bg-gray-800 text-gray-400 hover:bg-gray-700'
-        }">
-          Available ${availableCount > 0 ? `(${availableCount})` : ''}
-        </button>
-        <button id="receive-tab-withdrawn" class="px-6 py-2 rounded-lg font-medium transition ${
-          this.incomingTab === 'withdrawn' 
-            ? 'bg-gray-600 text-white' 
-            : 'bg-gray-800 text-gray-400 hover:bg-gray-700'
-        }">
-          Withdrawn ${withdrawnCount > 0 ? `(${withdrawnCount})` : ''}
-        </button>
-      </div>
-    `
-
-    if (pageData.length === 0) {
-      html += `
-        <div class="text-center py-8">
-          <div class="text-gray-400">${isAvailable ? 'No available payments' : 'No withdrawn payments'}</div>
-        </div>
-      `
-    } else {
-      html += `
-        <div class="space-y-4 mb-6">
-          ${pageData.map((payment: any) => `
-            <div class="p-4 rounded-lg bg-gray-850 border border-gray-700 hover:border-green-500/50 transition">
-              <div class="flex justify-between items-start">
-                <div class="flex-1">
-                  <div class="text-2xl font-semibold text-green-400">+${payment.amount} SOL</div>
-                  <div class="text-xs text-gray-500 mt-1">Received ${this.formatDate(payment.createdAt)}</div>
-                </div>
-                <div class="text-right">
-                  <div class="text-xs font-medium ${isAvailable ? 'text-green-500' : 'text-gray-400'}">
-                    ${isAvailable ? '✓ Available' : '✓ Withdrawn'}
-                  </div>
-                </div>
-              </div>
-              ${isAvailable ? `
-                <button
-                  onclick="window.shadowpay.withdrawPayment('${payment.id}')"
-                  class="w-full mt-4 py-2.5 rounded-lg bg-green-600 hover:bg-green-700 text-white font-medium transition-colors"
-                >
-                  Withdraw to Wallet
-                </button>
-              ` : ''}
-            </div>
-          `).join('')}
-        </div>
-      `
-    }
-
-    // Add pagination if more than 1 page
-    if (totalPages > 1) {
-      html += `
-        <div class="flex justify-center items-center gap-2 mt-6">
-          <button id="incoming-prev-page" class="px-3 py-1 rounded border border-gray-700 text-sm text-gray-400 hover:text-gray-200 hover:border-gray-600 transition ${this.currentIncomingPage === 1 ? 'opacity-50 cursor-not-allowed' : ''}">
-            ← Prev
-          </button>
-          <div class="flex gap-1">
-            ${Array.from({ length: totalPages }, (_, i) => i + 1).map(page => `
-              <button class="incoming-page-btn px-3 py-1 rounded text-sm transition ${
-                page === this.currentIncomingPage 
-                  ? 'bg-green-600 text-white' 
-                  : 'border border-gray-700 text-gray-400 hover:text-gray-200 hover:border-gray-600'
-              }" data-page="${page}">
-                ${page}
-              </button>
-            `).join('')}
-          </div>
-          <button id="incoming-next-page" class="px-3 py-1 rounded border border-gray-700 text-sm text-gray-400 hover:text-gray-200 hover:border-gray-600 transition ${this.currentIncomingPage === totalPages ? 'opacity-50 cursor-not-allowed' : ''}">
-            Next →
-          </button>
-        </div>
-      `
-    }
-
-    container.innerHTML = html
-
-    // Attach event listeners
-    document.getElementById('receive-tab-available')?.addEventListener('click', () => {
-      this.incomingTab = 'available'
-      this.currentIncomingPage = 1
-      this.renderIncomingTab()
-    })
-
-    document.getElementById('receive-tab-withdrawn')?.addEventListener('click', () => {
-      this.incomingTab = 'withdrawn'
-      this.currentIncomingPage = 1
-      this.renderIncomingTab()
-    })
-
-    document.getElementById('incoming-prev-page')?.addEventListener('click', () => {
-      if (this.currentIncomingPage > 1) {
-        this.currentIncomingPage--
-        this.renderIncomingTab()
-      }
-    })
-
-    document.getElementById('incoming-next-page')?.addEventListener('click', () => {
-      if (this.currentIncomingPage < totalPages) {
-        this.currentIncomingPage++
-        this.renderIncomingTab()
-      }
-    })
-
-    document.querySelectorAll('.incoming-page-btn').forEach(btn => {
-      btn.addEventListener('click', (e) => {
-        const page = parseInt((e.target as HTMLElement).getAttribute('data-page') || '1')
-        this.currentIncomingPage = page
-        this.renderIncomingTab()
-      })
-    })
-  }
-
-  private loadIncomingPage(page: number) {
-    this.currentIncomingPage = page
-    this.renderIncomingTab()
-  }
-
-  /**
-   * WITHDRAW PAYMENT
-   *
-   * Withdraw an incoming payment to connected wallet.
-   * Only the designated recipient can withdraw (UTXO ownership).
-   */
-  async withdrawPayment(paymentId: string) {
-    if (!this.walletAddress) {
-      alert('Please connect your wallet first')
-      return
-    }
-
-    const btn = document.querySelector(`[onclick*="withdrawPayment"]`) as HTMLButtonElement
-    if (btn) btn.disabled = true
-
-    this.showLoading('Preparing withdrawal...')
-
-    try {
-      this.updateLoading('Deriving encryption key...')
-
-      // Use the NEW withdraw flow from withdrawFlow.ts
-      const { executeWithdraw } = await import('./flows/withdrawFlow.js')
-      
-      const result = await executeWithdraw(
-        {
-          walletAddress: this.walletAddress
-        },
-        window.solana
-      )
-
-      this.hideLoading()
-      this.showModal(
-        '✅ Withdrawal Successful',
-        `Successfully withdrew funds to ${this.walletAddress.slice(0, 8)}...`,
-        'success',
-        `TX: ${result.transactionSignature.slice(0, 20)}...`
-      )
-
-      // Reload incoming payments
-      await new Promise(resolve => setTimeout(resolve, 1000))
-      await this.loadIncomingPayments()
-
-    } catch (err: any) {
-      this.hideLoading()
-      console.error('Withdrawal failed:', err)
-      this.showModal(
-        '❌ Withdrawal Failed',
-        `Could not process your withdrawal.`,
-        'error',
-        err.message
-      )
-    } finally {
-      if (btn) btn.disabled = false
-    }
   }
 
   /**

@@ -106,6 +106,7 @@ export async function executeUserPaysDeposit(
         amount,
         lamports,
         publicKey,
+        recipientAddress,  // ✅ Pass recipient so backend tracks incoming payment
         transactionSignature: result.transactionSignature
       })
 
@@ -166,6 +167,7 @@ async function recordDepositInBackend(params: {
   amount: string
   lamports: number
   publicKey: string
+  recipientAddress?: string  // ✅ Optional: recipient wallet for incoming payment tracking
   transactionSignature: string
 }): Promise<void> {
   const url = `${CONFIG.BACKEND_URL}/api/deposit/record`
@@ -183,6 +185,7 @@ async function recordDepositInBackend(params: {
         amount: params.amount,
         lamports: params.lamports,
         publicKey: params.publicKey,
+        recipientAddress: params.recipientAddress,  // ✅ Send recipient for incoming tracking
         transactionHash: params.transactionSignature
       })
     })
@@ -219,6 +222,7 @@ async function recordDepositWithFallback(params: {
   amount: string
   lamports: number
   publicKey: string
+  recipientAddress?: string  // ✅ Optional: recipient wallet
   transactionSignature: string
 }): Promise<void> {
   const url = `${CONFIG.BACKEND_URL}/api/deposit/verify-and-record`
@@ -231,7 +235,8 @@ async function recordDepositWithFallback(params: {
     body: JSON.stringify({
       linkId: params.linkId,
       transactionHash: params.transactionSignature,
-      publicKey: params.publicKey
+      publicKey: params.publicKey,
+      recipientAddress: params.recipientAddress  // ✅ Send recipient if available
     })
   })
 

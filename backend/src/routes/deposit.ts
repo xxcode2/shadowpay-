@@ -26,6 +26,7 @@ interface RecordDepositRequest {
   amount: string
   lamports: number
   publicKey: string
+  recipientAddress?: string  // ✅ Optional: recipient wallet for incoming payment tracking
   transactionHash: string
 }
 
@@ -106,12 +107,15 @@ router.post('/record', async (req: Request<{}, {}, any>, res: Response) => {
       amount,
       lamports,
       publicKey,
+      recipientAddress,  // ✅ Optional: recipient wallet
       transactionHash
     } = req.body as RecordDepositRequest
 
     console.log(`\n📝 RECORDING DEPOSIT`)
     console.log(`   Link: ${linkId}`)
     console.log(`   Amount: ${amount} SOL`)
+    console.log(`   Sender: ${publicKey}`)
+    if (recipientAddress) console.log(`   Recipient: ${recipientAddress}`)
     console.log(`   Tx: ${transactionHash?.slice(0, 20)}...`)
 
     // Validate input
@@ -198,6 +202,7 @@ router.post('/record', async (req: Request<{}, {}, any>, res: Response) => {
             assetType: link.assetType,
             status: txVerified ? 'confirmed' : 'pending',
             fromAddress: publicKey,
+            toAddress: recipientAddress || publicKey,  // ✅ Recipient for incoming payment tracking
           },
         }),
       ])
