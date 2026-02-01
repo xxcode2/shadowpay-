@@ -75,9 +75,10 @@ export async function executeSendToUser(
 
     // ✅ CREATE ENCRYPTION SERVICE
     console.log(`\nStep 1.5: Creating encryption service...`)
-    // Get signature from wallet for encryption key derivation
-    // ⚠️ IMPORTANT: Must use the SAME message as deposit flow to derive the SAME encryption key!
-    // If we use a different message, the encryption key will be different and we won't find the UTXOs
+    // CRITICAL: The encryption key MUST match the key used during deposit
+    // If the deposit was made with senderAddress = recipientAddress (self-deposit),
+    // then use the sender's signature to derive the key
+    // Otherwise, we might need the owner's signature
     const SIGN_MESSAGE = 'Privacy Money account sign in'
     const messageToSign = new TextEncoder().encode(SIGN_MESSAGE)
     let signatureForEncryption: Uint8Array
@@ -97,10 +98,15 @@ export async function executeSendToUser(
 
     // Create encryption service and derive key from signature
     const encryptionService = new EncryptionService()
+    console.log(`[DEBUG] Using sender's encryption key to find UTXOs`)
     console.log(`[DEBUG] Signature bytes: ${Array.from(signatureForEncryption).slice(0, 10).map(b => b.toString(16).padStart(2, '0')).join(' ')}...`)
     console.log(`[DEBUG] Signature length: ${signatureForEncryption.length}`)
+    console.log(`[DEBUG] Sender address: ${senderAddress}`)
+    console.log(`[DEBUG] ⚠️ IMPORTANT: If UTXOs were deposited with a DIFFERENT recipient address,`)
+    console.log(`[DEBUG]    they are encrypted with that recipient's key, not the sender's key!`)
+    console.log(`[DEBUG]    Check the history to see if the recipient matches the sender.`)
     encryptionService.deriveEncryptionKeyFromSignature(signatureForEncryption)
-    console.log(`✅ Encryption service created`)
+    console.log(`✅ Encryption service created with sender's key`)
 
     // ✅ CREATE WALLET ADAPTER FOR SDK
     console.log(`\nStep 2: Creating wallet adapter...`)
