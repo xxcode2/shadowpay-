@@ -17,7 +17,6 @@
 - [ ] Implement session timeout (logout after inactivity)
 - [ ] Add confirmation dialog for large transfers (>1 SOL)
 - [ ] Store transaction history in IndexedDB for offline access
-- [ ] Add fingerprint/biometric support for wallet signing
 
 ### 2.2 UI/UX Improvements
 - [ ] Add loading skeletons for better perceived performance
@@ -46,40 +45,30 @@
 ### 3.2 Advanced AI Assistant
 - [ ] Transaction history queries: "show my last 5 transactions"
 - [ ] Smart suggestions: "did you mean to send to this address?"
-- [ ] Scheduled sends: "send 0.01 SOL tomorrow at 3pm"
-- [ ] Recurring payments: "send 0.01 SOL weekly to X address"
 - [ ] Multi-language support (Indonesian, English, Spanish)
-- [ ] Voice input support for accessibility
+- [ ] Scheduled sends: "send 0.01 SOL tomorrow at 3pm"
 
-### 3.3 Payment Links & QR Codes
-- [ ] Generate shareable payment links ("Pay me 0.01 SOL")
-- [ ] QR code generation for easy mobile sharing
-- [ ] Link expiration & single-use option
-- [ ] Analytics: track link performance (scans, conversions)
+### 3.3 Transaction Notifications & Webhooks
+- [ ] Email notifications for incoming payments
+- [ ] In-app toast notifications for confirmations
+- [ ] Webhook support for developers (optional)
+- [ ] Transaction status tracking (pending, confirmed, failed)
 
 ---
 
 ## Phase 4: Advanced Features (1-2 months)
 
-### 4.1 NFT Minting & Metadata 🎨
-- [ ] Mint NFT receipts for each private transaction
-- [ ] On-chain provenance without revealing amounts
-- [ ] Collectible badges for milestones (1 SOL sent, 10 transactions, etc.)
-- [ ] NFT gallery showing transaction history as art
-- [ ] OpenSea integration for trading transaction NFTs
+### 4.1 SPL Token Support Expansion 🎨
+- [ ] Full USDC/USDT/USDE workflow (deposit → send → withdraw)
+- [ ] Token balance display with conversion rates
+- [ ] Support more popular SPL tokens (RAY, COPE, etc.)
+- [ ] Unified token swap (SOL ↔ USDC) via Orca
 
-### 4.2 Atomic Swaps (Privacy-Preserving Exchanges)
-- [ ] Swap SOL ↔ USDC privately in single transaction
-- [ ] Support for Orca/Raydium pool integration
-- [ ] Rate aggregation across multiple DEXs
-- [ ] Slippage protection & limit orders
-- [ ] AI command: "swap 1 SOL for USDC at best rate"
-
-### 4.3 Privacy-Preserving Governance
-- [ ] DAO for community-driven development
-- [ ] Vote on new features with private voting (using ZK)
-- [ ] Treasury management with private budgets
-- [ ] Community token ($SHADOW) distribution
+### 4.2 Simple Atomic Swaps
+- [ ] SOL ↔ USDC swaps in single transaction
+- [ ] Integration with Orca DEX for best rates
+- [ ] Slippage protection & rate preview
+- [ ] AI command: "swap 1 SOL for USDC"
 
 ---
 
@@ -108,17 +97,10 @@
 - [ ] Cosmos privacy extensions
 - [ ] Multi-chain privacy routing
 
-### 6.2 DeFi Integration
-- [ ] Lend private USDC for yield
-- [ ] Stake SOL privately with auto-compounding
-- [ ] Options trading with privacy
-- [ ] Futures with hidden leverage
-
-### 6.3 Mobile Experience
-- [ ] React Native mobile app (iOS & Android)
-- [ ] Biometric authentication
-- [ ] NFC payment support
-- [ ] Mobile wallet integration (Phantom, Backpack, etc.)
+### 6.2 Advanced Privacy Features (Far Future)
+- [ ] Multi-chain private routing (Solana → Ethereum → Cosmos)
+- [ ] Privacy pool federation with other chains
+- [ ] Liquidity aggregation across privacy protocols
 
 ---
 
@@ -155,60 +137,59 @@
 - Transaction filtering & search
 - Local storage for preferences
 - Improved error messages
+- Email notifications
 
 ### Medium 🎯 (1-2 weeks)
-- Multi-token support (USDC, USDT)
-- Payment links
-- QR code generation
-- Advanced AI Assistant commands
-- Voice input
+- Multi-token support (USDC, USDT) - backend + UI
+- Transaction webhooks for developers
+- Session timeout & security improvements
+- Rate limiting
+- In-app toast notifications
 
 ### Hard 🔥 (2-4 weeks)
-- NFT minting with metadata
-- Atomic swaps
-- Mobile app
-- DAO governance
-- Cross-chain bridges
+- Advanced AI Assistant (history queries, scheduled sends)
+- Atomic swaps (SOL ↔ USDC via Orca)
+- Multi-language support
+- Security audit & documentation
 
 ### Very Hard 🚀 (1-2+ months)
-- Privacy-preserving compliance
-- Institutional features
-- Comprehensive DeFi integration
-- Security audit & bug bounty program
+- Cross-chain bridges
+- Privacy pool federation
+- Comprehensive compliance features
 
 ---
 
 ## Priority Recommendations
 
 ### 🥇 Top Priority (Do These First)
-1. **Multi-token support** - Users want USDC/USDT options
-2. **Enhanced error handling** - Better UX for failures
-3. **Payment links** - Shareable, easier for recipients
-4. **AI improvements** - Voice + scheduling commands
-5. **Mobile web** - Responsive for phone users
+1. **Multi-token support (USDC/USDT)** - Users ask for this
+2. **Enhanced error handling & logging** - Better debugging
+3. **Advanced AI queries** - "Show my transactions", scheduled sends
+4. **Atomic swaps** - Simple SOL ↔ USDC
+5. **Dark theme** - Common request
 
 ### 🥈 High Priority (Do Next)
-1. **NFT receipts** - Cool feature, good marketing
-2. **Swap functionality** - Atomic SOL ↔ USDC
-3. **Security audit** - Build trust before scaling
-4. **API & SDKs** - Enable developer ecosystem
-5. **Documentation** - Help others build on top
+1. **Webhooks for developers** - Enable ecosystem
+2. **Multi-language support** - Expand reach
+3. **Rate limiting & security** - Production hardening
+4. **Transaction notifications** - Better UX
+5. **API documentation** - Help developers integrate
 
 ### 🥉 Medium Priority (Later)
-1. **DAO governance** - Community-driven decisions
-2. **Mobile app** - When web is stable
-3. **Enterprise features** - When B2B demand exists
-4. **Cross-chain** - After proving on Solana
+1. **Cross-chain bridges** - When proven on Solana
+2. **Privacy pool federation** - Advanced use case
+3. **Security audit** - When complexity warrants
 
 ---
 
 ## Success Metrics
 
-- **Users**: 1K daily active users by month 3
-- **Volume**: $100K+ in private transactions by month 6
-- **Security**: 0 critical vulnerabilities
-- **Performance**: <100ms average transaction confirmation
-- **Adoption**: 10%+ of Solana users familiar with ShadowPay
+- **Users**: 100+ monthly active users by month 1, 1K+ by month 6
+- **Volume**: $10K+ in private transactions by month 3, $100K+ by month 6
+- **Security**: 0 critical vulnerabilities, regular audits
+- **Reliability**: 99%+ uptime, <500ms average transaction time
+- **Code Quality**: >80% test coverage, TypeScript strict mode
+- **Community**: Active GitHub discussions, helpful documentation
 
 ---
 
