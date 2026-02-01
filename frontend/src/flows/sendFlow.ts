@@ -77,19 +77,39 @@ export async function executeSendToUser(
     try {
       if (wallet && wallet.signMessage) {
         const messageBytes = new TextEncoder().encode(messageToSign)
-        const signatureBytes = await wallet.signMessage(messageBytes)
+        const signatureResult = await wallet.signMessage(messageBytes)
+        
+        // Handle both direct Uint8Array and {signature: Uint8Array} format
+        let signatureBytes: Uint8Array
+        if (signatureResult instanceof Uint8Array) {
+          signatureBytes = signatureResult
+        } else if (signatureResult && 'signature' in signatureResult) {
+          signatureBytes = signatureResult.signature
+        } else {
+          throw new Error('Unexpected signature format')
+        }
+        
         // Convert Uint8Array to hex string
-        signature = Array.from(signatureBytes as Uint8Array)
+        signature = Array.from(signatureBytes)
           .map(b => b.toString(16).padStart(2, '0'))
           .join('')
-        console.log(`✅ Message signed`)
+        console.log(`✅ Message signed (${signature.length} chars)`)
+      } else {
+        console.warn(`⚠️ Wallet does not support signMessage`)
       }
     } catch (signErr: any) {
-      console.warn(`⚠️ Failed to sign message:`, signErr.message)
+      console.error(`❌ Failed to sign message:`, signErr.message)
       // Continue without signature - backend will try with just the amount
     }
     
     const BACKEND_URL = CONFIG.BACKEND_URL || 'https://shadowpay-backend-production.up.railway.app'
+    
+    console.log(`📤 Sending to backend:`, {
+      senderAddress,
+      recipientAddress,
+      amount: amountNum,
+      signatureLength: signature?.length || 0
+    })
     
     const res = await fetch(`${BACKEND_URL}/api/send`, {
       method: 'POST',
