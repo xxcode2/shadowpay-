@@ -349,101 +349,81 @@ export class App {
     const recipient = recipientInput.value.trim()
 
     if (!amount || amount <= 0) {
-        this.showModal(
-          '⚠️ Invalid Amount',
-          'Please enter a valid amount greater than 0.',
-          'warning'
-        )
-        return
-      }
+      this.showModal(
+        '⚠️ Invalid Amount',
+        'Please enter a valid amount greater than 0.',
+        'warning'
+      )
+      return
+    }
 
-      if (!recipient) {
-        this.showModal(
-          '⚠️ Missing Recipient',
-          'Please enter the recipient wallet address.',
-          'warning'
-        )
-        return
-      }
+    if (!recipient) {
+      this.showModal(
+        '⚠️ Missing Recipient',
+        'Please enter the recipient wallet address.',
+        'warning'
+      )
+      return
+    }
 
-      // Validate recipient address
-      try {
-        new PublicKey(recipient)
-      } catch {
-        this.showModal(
-          '⚠️ Invalid Address',
-          'Please enter a valid Solana wallet address.',
-          'warning'
-        )
-        return
-      }
+    // Validate recipient address
+    try {
+      new PublicKey(recipient)
+    } catch {
+      this.showModal(
+        '⚠️ Invalid Address',
+        'Please enter a valid Solana wallet address.',
+        'warning'
+      )
+      return
+    }
 
-      const btn = document.querySelector('#send-to-user-form button') as HTMLButtonElement
-      btn.disabled = true
-      this.showLoading('Creating private payment link...')
+    const btn = document.querySelector('#send-to-user-form button') as HTMLButtonElement
+    btn.disabled = true
+    this.showLoading('Sending from your private balance...')
 
-      try {
-        // ✅ CRITICAL FIX: Create link on backend FIRST
-        console.log('📝 Creating payment link on backend...')
-        this.updateLoading('Creating payment link...')
-        
-        const linkRes = await fetch(`${this.backendUrl}/api/create-link`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            amount: amount,
-            assetType: 'SOL',
-            creatorAddress: this.walletAddress
-          })
-        })
+    try {
+      // ✅ DIRECT WITHDRAW & SEND (NO LINK CREATION)
+      // User withdraws from their private balance and sends to recipient address
+      console.log('💸 Withdrawing from private balance...')
+      this.updateLoading('Signing transaction...')
+      
+      // Import withdraw flow
+      const { executeWithdraw } = await import('./flows/withdrawFlowV2')
+      
+      const withdrawResult = await executeWithdraw(
+        {
+          walletAddress: this.walletAddress!,
+          recipientAddress: recipient,  // Withdraw directly to recipient
+          amount: amount.toString()
+        },
+        window.solana
+      )
 
-        if (!linkRes.ok) {
-          const error = await linkRes.json().catch(() => ({ error: 'Failed to create link' }))
-          throw new Error(error.error || 'Failed to create link')
-        }
+      this.hideLoading()
+      this.showModal(
+        '✅ Sent Successfully',
+        `You have successfully sent ${amount} SOL to ${recipient.slice(0, 8)}...${recipient.slice(-4)}!`,
+        'success',
+        `TX: ${withdrawResult.transactionSignature.slice(0, 20)}...`
+      )
 
-        const { linkId } = await linkRes.json()
-        console.log(`✅ Link created on backend: ${linkId}`)
+      // Reset form
+      amountInput.value = ''
+      recipientInput.value = ''
 
-        this.updateLoading('Depositing to recipient wallet...')
-
-        // ✅ Use new V2 deposit flow with official SDK
-        // Recipient will own this UTXO because it's encrypted with their wallet key
-        const depositTx = await executeDeposit(
-          {
-            linkId,
-            amount: amount.toString(),
-            publicKey: this.walletAddress!,
-            recipientAddress: recipient,  // ✅ CRITICAL: Recipient owns this UTXO
-            token: 'SOL'
-          },
-          window.solana
-        )
-
-        this.hideLoading()
-        this.showModal(
-          '✅ Payment Sent',
-          `You have successfully sent ${amount} SOL to ${recipient.slice(0, 8)}... privately!\n\nThe recipient can now withdraw to their wallet.`,
-          'success',
-          `TX: ${depositTx.slice(0, 20)}...`
-        )
-
-        // Reset form
-        amountInput.value = ''
-        recipientInput.value = ''
-
-      } catch (err: any) {
-        this.hideLoading()
-        console.error('Transfer failed:', err)
-        this.showModal(
-          '❌ Transfer Failed',
-          `Could not send your payment.`,
-          'error',
-          err.message
-        )
-      } finally {
-        btn.disabled = false
-      }
+    } catch (err: any) {
+      this.hideLoading()
+      console.error('Send failed:', err)
+      this.showModal(
+        '❌ Send Failed',
+        `Could not send your payment.`,
+        'error',
+        err.message
+      )
+    } finally {
+      btn.disabled = false
+    }
   }
 
   /**
