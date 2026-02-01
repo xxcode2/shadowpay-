@@ -80,17 +80,26 @@ router.post('/', async (req: Request<{}, {}, any>, res: Response) => {
       console.log(`   TX: ${txId}`)
       console.log(`   Recipient: ${recipientAddress}`)
 
-      // ✅ Record transaction
+      // ✅ Record transaction in SavingTransaction (not Transaction which requires linkId)
       try {
-        await prisma.transaction.create({
+        // Ensure Saving record exists
+        const saving = await prisma.saving.upsert({
+          where: { walletAddress: senderAddress },
+          update: {},
+          create: { walletAddress: senderAddress }
+        })
+
+        // Record the transaction
+        await prisma.savingTransaction.create({
           data: {
             type: 'send',
             transactionHash: txId,
-            amount: amount,
+            amount: BigInt(lamports),
             assetType: 'SOL',
             status: 'confirmed',
             fromAddress: senderAddress,
             toAddress: recipientAddress,
+            savingId: saving.id
           }
         })
       } catch (recordErr) {
