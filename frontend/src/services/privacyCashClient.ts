@@ -112,7 +112,8 @@ export async function depositToPrivacyCash(options: DepositOptions): Promise<Dep
     log(`✨ Initializing Privacy Cash client...`)
     const privacyCash = new PrivacyCash({
       RPC_url: connection.rpcEndpoint,
-      owner: operatorKeypair
+      owner: operatorKeypair,
+      enableDebug: false  // Disable debug output which tries to write to stdout (not available in browser)
     })
     
     log(`💾 Depositing ${(lamports / 1e9).toFixed(6)} SOL to Privacy Cash pool...`)
@@ -172,7 +173,8 @@ export async function withdrawFromPrivacyCash(options: WithdrawOptions): Promise
     log(`✨ Initializing Privacy Cash client...`)
     const privacyCash = new PrivacyCash({
       RPC_url: connection.rpcEndpoint,
-      owner: operatorKeypair
+      owner: operatorKeypair,
+      enableDebug: false  // Disable debug output which tries to write to stdout (not available in browser)
     })
     
     log(`💸 Withdrawing ${(lamports / 1e9).toFixed(6)} SOL from Privacy Cash pool...`)
@@ -221,7 +223,8 @@ export async function getPrivateBalance(connection: Connection): Promise<number>
     
     const privacyCash = new PrivacyCash({
       RPC_url: connection.rpcEndpoint,
-      owner: operatorKeypair
+      owner: operatorKeypair,
+      enableDebug: false  // Disable debug output which tries to write to stdout (not available in browser)
     })
 
     const balance = await privacyCash.getPrivateBalance()
