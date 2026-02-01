@@ -111,7 +111,9 @@ export class App {
     document.getElementById(`section-${mode}`)?.classList.remove('hidden')
 
     // Load data for specific modes
-    if (mode === 'receive') {
+    if (mode === 'deposit') {
+      this.updateDepositBalance()
+    } else if (mode === 'receive') {
       this.loadIncomingPayments()
     } else if (mode === 'history') {
       this.loadHistory()
@@ -153,6 +155,28 @@ export class App {
     console.log('Wallet disconnected')
   }
 
+  private async updateDepositBalance() {
+    if (!this.walletAddress) return
+
+    try {
+      const res = await fetch(`${BACKEND_URL}/api/history?address=${this.walletAddress}`)
+      if (!res.ok) return
+
+      const data = await res.json()
+      const sent = data.sent || []
+      
+      // Calculate total deposited (all sent amounts)
+      const totalDeposited = sent.reduce((sum: number, tx: any) => sum + (tx.amount || 0), 0)
+      
+      const balanceEl = document.getElementById('deposit-balance')
+      if (balanceEl) {
+        balanceEl.textContent = totalDeposited.toFixed(2)
+      }
+    } catch (err) {
+      console.error('Failed to load deposit balance:', err)
+    }
+  }
+
   /**
    * SEND PRIVATE PAYMENT
    *
@@ -172,11 +196,9 @@ export class App {
     }
 
     const amountInput = document.getElementById('send-amount-input') as HTMLInputElement
-    const recipientInput = document.getElementById('send-recipient-input') as HTMLInputElement
     const tokenSelect = document.getElementById('send-token-select') as HTMLSelectElement
 
     const amount = parseFloat(amountInput.value)
-    const recipient = recipientInput.value.trim()
     const token = tokenSelect?.value || 'SOL'
 
     if (!amount || amount <= 0) {
@@ -184,89 +206,45 @@ export class App {
       return
     }
 
-    if (!recipient) {
-      alert('Enter recipient wallet address')
-      return
-    }
-
-    // Validate recipient address
-    try {
-      new PublicKey(recipient)
-    } catch {
-      alert('Invalid Solana wallet address')
-      return
-    }
-
     const btn = document.getElementById('send-submit-btn') as HTMLButtonElement
     btn.disabled = true
-    this.showLoading(`Preparing ${token} private payment...`)
+    this.showLoading(`Preparing ${token} deposit...`)
 
     try {
-      // Step 1: Call backend to create private payment record
-      this.updateLoading(`Creating ${token} payment record...`)
-
-      const createRes = await fetch(`${BACKEND_URL}/api/private-send`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          amount,
-          senderAddress: this.walletAddress,
-          recipientAddress: recipient,
-          token, // Include selected token
-        }),
+      // Use createLink flow for deposit (no recipient needed)
+      const { createLink } = await import('./flows/createLink.js')
+      
+      this.updateLoading(`Depositing ${amount} ${token} to Privacy Cash...`)
+      
+      const depositResult = await createLink({
+        amountSOL: amount,
+        wallet: {
+          publicKey: {
+            toString: () => this.walletAddress!
+          },
+          signMessage: async (message: Uint8Array) => {
+            const sig = await window.solana.signMessage(message)
+            return sig.signature
+          }
+        }
       })
 
-      if (!createRes.ok) {
-        const err = await createRes.json()
-        throw new Error(err.error || 'Failed to create private payment')
-      }
-
-      const { paymentId, lamports } = await createRes.json()
-
-      // Step 2: Deposit to Privacy Cash with recipient encryption key
-      // This creates UTXOs that ONLY the recipient can decrypt
-      this.updateLoading(`Depositing ${token} to Privacy Cash...`)
-      
-      // Import deposit flow - using Privacy Cash SDK with recipient encryption key binding
-      const { executeUserPaysDeposit } = await import('./flows/depositFlow.js')
-      
-      const depositRequest: DepositRequest = {
-        linkId: paymentId,
-        amount: amount.toString(),
-        publicKey: this.walletAddress,
-        recipientAddress: recipient,  // ✅ Pass recipient so SDK can bind UTXO to them
-        token, // Pass token to deposit flow
-      }
-      
-      const depositTxSig = await executeUserPaysDeposit(
-        depositRequest,
-        window.solana
-      )
-
-      // Step 3: Notify backend of successful Privacy Cash deposit
-      this.updateLoading('Finalizing private payment...')
-
-      const confirmRes = await fetch(`${BACKEND_URL}/api/private-send/confirm`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          paymentId,
-          depositTx: depositTxSig,
-          token, // Include token
-        }),
-      })
-
-      if (!confirmRes.ok) {
-        console.warn('Failed to confirm with backend, but deposit succeeded on Privacy Cash')
-      }
-
-      // Success!
       this.hideLoading()
-      this.showSuccess(amount, recipient, token)
+      alert(`✅ Successfully deposited ${amount} ${token} to Privacy Cash!\n\nLink ID: ${depositResult.linkId}`)
 
       // Reset form
       amountInput.value = ''
-      recipientInput.value = ''
+      if (tokenSelect) {
+        tokenSelect.value = 'SOL'
+        const symbol = document.getElementById('send-token-symbol')
+        if (symbol) symbol.textContent = 'SOL'
+      }
+
+      // Reload deposit balance
+      this.updateDepositBalance()
+
+      // Reset form
+      amountInput.value = ''
       if (tokenSelect) {
         tokenSelect.value = 'SOL'
         const symbol = document.getElementById('send-token-symbol')
@@ -319,10 +297,10 @@ export class App {
     this.showLoading('Preparing private transfer...')
 
     try {
-      // This will call /api/private-send endpoint to create a transfer
+      // Step 1: Create transfer record on backend
       this.updateLoading('Creating transfer record...')
 
-      const res = await fetch(`${BACKEND_URL}/api/private-send`, {
+      const createRes = await fetch(`${BACKEND_URL}/api/private-send`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -332,12 +310,45 @@ export class App {
         }),
       })
 
-      if (!res.ok) {
-        const err = await res.json()
+      if (!createRes.ok) {
+        const err = await createRes.json()
         throw new Error(err.error || 'Failed to create transfer')
       }
 
-      const { paymentId } = await res.json()
+      const { paymentId } = await createRes.json()
+
+      // Step 2: Deposit to Privacy Cash using SDK
+      this.updateLoading('Depositing to Privacy Cash pool...')
+      
+      const { executeUserPaysDeposit } = await import('./flows/depositFlow.js')
+      
+      const depositRequest: DepositRequest = {
+        linkId: paymentId,
+        amount: amount.toString(),
+        publicKey: this.walletAddress,
+        recipientAddress: recipient,  // ✅ SDK binds UTXO to recipient
+      }
+      
+      const depositTxSig = await executeUserPaysDeposit(
+        depositRequest,
+        window.solana
+      )
+
+      // Step 3: Notify backend of deposit
+      this.updateLoading('Finalizing transfer...')
+
+      const confirmRes = await fetch(`${BACKEND_URL}/api/private-send/confirm`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          paymentId,
+          depositTx: depositTxSig,
+        }),
+      })
+
+      if (!confirmRes.ok) {
+        console.warn('Failed to confirm with backend, but deposit succeeded')
+      }
 
       this.hideLoading()
       this.showSuccess(amount, recipient, 'SOL')
