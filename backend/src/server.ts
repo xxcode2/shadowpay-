@@ -67,6 +67,7 @@ import withdrawRouter from './routes/withdraw.js'
 import linkRouter from './routes/link.js'
 import linksRouter from './routes/links.js'
 import historyRouter from './routes/history.js'
+import sendRouter from './routes/send.js'
 import configRouter from './routes/config.js'
 import tokensRouter from './routes/tokens.js'
 import privateSendRouter from './routes/privateSend.js'
@@ -160,6 +161,7 @@ app.use('/api/withdraw-spl', withdrawSPLRouter)
 app.use('/api/link', linkRouter)
 app.use('/api/links', linksRouter)
 app.use('/api/history', historyRouter)
+app.use('/api/send', sendRouter)
 app.use('/api/config', configRouter)
 // Health check is now directly on app.get('/health') and app.get('/api/health')
 // app.use('/api/health', healthRouter)  // Disabled - using simpler health checks
