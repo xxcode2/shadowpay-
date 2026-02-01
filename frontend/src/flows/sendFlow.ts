@@ -97,6 +97,8 @@ export async function executeSendToUser(
 
     // Create encryption service and derive key from signature
     const encryptionService = new EncryptionService()
+    console.log(`[DEBUG] Signature bytes: ${Array.from(signatureForEncryption).slice(0, 10).map(b => b.toString(16).padStart(2, '0')).join(' ')}...`)
+    console.log(`[DEBUG] Signature length: ${signatureForEncryption.length}`)
     encryptionService.deriveEncryptionKeyFromSignature(signatureForEncryption)
     console.log(`✅ Encryption service created`)
 
@@ -129,6 +131,12 @@ export async function executeSendToUser(
     // ✅ EXECUTE WITHDRAWAL DIRECTLY FROM FRONTEND
     console.log(`\nStep 3: Executing withdrawal from Privacy Cash pool...`)
     const lamports = Math.floor(amountNum * 1e9)
+    console.log(`[DEBUG] Withdrawal parameters:`)
+    console.log(`[DEBUG]   Sender: ${senderAddress}`)
+    console.log(`[DEBUG]   Recipient: ${recipientAddress}`)
+    console.log(`[DEBUG]   Amount: ${amountNum} SOL (${lamports} lamports)`)
+    console.log(`[DEBUG]   Sign message: 'Privacy Money account sign in'`)
+    console.log(`[DEBUG]   Signature (first 20 bytes): ${Array.from(signatureForEncryption).slice(0, 20).map(b => b.toString(16).padStart(2, '0')).join(' ')}...`)
     
     try {
       // Initialize WASM for ZK proof generation
@@ -141,6 +149,11 @@ export async function executeSendToUser(
       const connection = new Connection(SOLANA_RPC_URL, 'confirmed')
       
       console.log(`   Creating withdrawal transaction...`)
+      console.log(`[DEBUG] Calling SDK withdraw function with:`)
+      console.log(`[DEBUG]   publicKey type: ${typeof new PublicKey(senderAddress)}`)
+      console.log(`[DEBUG]   amount_in_lamports: ${lamports}`)
+      console.log(`[DEBUG]   recipient: ${recipientAddress}`)
+      console.log(`[DEBUG]   encryptionService: ${typeof encryptionService}`)
       
       // Call withdraw with all required parameters (same as deposit)
       const txResult = await withdraw({
