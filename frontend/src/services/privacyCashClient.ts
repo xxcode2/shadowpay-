@@ -65,10 +65,10 @@ export async function depositToPrivacyCash(options: DepositOptions): Promise<Dep
     
     log(`Initializing Privacy Cash client...`)
     
-    // ✅ Create client with correct parameters per official docs
+    // ✅ Create client - SDK will use wallet for signing
     const client = new PrivacyCash({
       RPC_url: connection.rpcEndpoint,
-      owner: wallet.publicKey.toBuffer(),
+      owner: wallet.publicKey,
       enableDebug: false
     })
 
@@ -125,10 +125,10 @@ export async function withdrawFromPrivacyCash(options: WithdrawOptions): Promise
     
     log(`Initializing Privacy Cash client...`)
     
-    // ✅ Create client with correct parameters
+    // ✅ Create client - SDK will use wallet for signing
     const client = new PrivacyCash({
       RPC_url: connection.rpcEndpoint,
-      owner: wallet.publicKey.toBuffer(),
+      owner: wallet.publicKey,
       enableDebug: false
     })
 
@@ -187,7 +187,7 @@ export async function getPrivateBalance(
     
     const client = new PrivacyCash({
       RPC_url: connection.rpcEndpoint,
-      owner: wallet.publicKey.toBuffer(),
+      owner: wallet.publicKey,
       enableDebug: false
     })
 
