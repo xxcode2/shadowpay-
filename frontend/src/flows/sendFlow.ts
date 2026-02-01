@@ -76,7 +76,10 @@ export async function executeSendToUser(
     // ✅ CREATE ENCRYPTION SERVICE
     console.log(`\nStep 1.5: Creating encryption service...`)
     // Get signature from wallet for encryption key derivation
-    const messageToSign = new TextEncoder().encode(`Authorize withdrawal: ${amountNum} SOL to ${recipientAddress}`)
+    // ⚠️ IMPORTANT: Must use the SAME message as deposit flow to derive the SAME encryption key!
+    // If we use a different message, the encryption key will be different and we won't find the UTXOs
+    const SIGN_MESSAGE = 'Privacy Money account sign in'
+    const messageToSign = new TextEncoder().encode(SIGN_MESSAGE)
     let signatureForEncryption: Uint8Array
     
     try {
