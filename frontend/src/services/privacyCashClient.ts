@@ -262,10 +262,10 @@ export async function getPrivateBalance(
     
     log('Importing Privacy Cash SDK...')
 
-    // Import EncryptionService and getUtxos from privacycash/utils
+    // Import from privacycash/utils - exact same exports SDK uses
     // @ts-ignore
     const privacycashUtils = await import('privacycash/utils') as any
-    const { EncryptionService, getUtxos } = privacycashUtils
+    const { EncryptionService, getUtxos, getBalanceFromUtxos } = privacycashUtils
 
     // Step 1: Get user signature for encryption key derivation
     log('Requesting signature for balance check...')
@@ -304,14 +304,11 @@ export async function getPrivateBalance(
 
     log(`Found ${unspentUtxos.length} unspent UTXOs`)
 
-    // Step 4: Calculate total balance from UTXOs
-    // Import BN for big number operations
-    const BN = (await import('bn.js')).default
-    const totalBalance = unspentUtxos.reduce((sum: any, utxo: any) => {
-      return sum.add(utxo.amount || new BN(0))
-    }, new BN(0))
+    // Step 4: Use SDK's getBalanceFromUtxos function to calculate total balance
+    // This handles BN math correctly
+    const balanceResult = getBalanceFromUtxos(unspentUtxos)
+    const balanceLamports = balanceResult.lamports
 
-    const balanceLamports = totalBalance.toNumber()
     log(`Total balance: ${balanceLamports} lamports (${(balanceLamports / 1e9).toFixed(6)} SOL)`)
 
     return balanceLamports
