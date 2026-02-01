@@ -9,7 +9,6 @@ import withdrawRoute from './routes/withdraw.js'
 import linkRoute from './routes/link.js'
 import savingsRoute from './routes/savings.js'
 import historyRoute from './routes/history.js'
-import sendRoute from './routes/send.js'
 
 const app = express()
 
@@ -36,7 +35,6 @@ app.use('/api/deposit', depositRoute)
 app.use('/api/withdraw', withdrawRoute)
 app.use('/api/link', linkRoute)
 app.use('/api/history', historyRoute)
-app.use('/api/send', sendRoute)
 app.use('/api/savings', savingsRoute)
 
 const PORT = Number(process.env.PORT) || 3001

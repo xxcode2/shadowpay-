@@ -67,11 +67,8 @@ import withdrawRouter from './routes/withdraw.js'
 import linkRouter from './routes/link.js'
 import linksRouter from './routes/links.js'
 import historyRouter from './routes/history.js'
-import sendRouter from './routes/send.js'
-import sendRecordRouter from './routes/sendRecord.js'
 import configRouter from './routes/config.js'
 import tokensRouter from './routes/tokens.js'
-import privateSendRouter from './routes/privateSend.js'
 import incomingRouter from './routes/incoming.js'
 import depositSPLRouter from './routes/depositSPL.js'
 import withdrawSPLRouter from './routes/withdrawSPL.js'
@@ -162,19 +159,16 @@ app.use('/api/withdraw-spl', withdrawSPLRouter)
 app.use('/api/link', linkRouter)
 app.use('/api/links', linksRouter)
 app.use('/api/history', historyRouter)
-app.use('/api/send', sendRouter)
-app.use('/api/send/record', sendRecordRouter)
 app.use('/api/config', configRouter)
 // Health check is now directly on app.get('/health') and app.get('/api/health')
 // app.use('/api/health', healthRouter)  // Disabled - using simpler health checks
 app.use('/api/tokens', tokensRouter)
-app.use('/api/private-send', privateSendRouter)
 app.use('/api/incoming', incomingRouter)
 
-// Privacy Cash model routes:
-// - /api/private-send - Create private payment with recipient identity
-// - /api/incoming/:wallet - Get incoming payments for a wallet
-// - /api/withdraw - Withdraw (only works for designated recipient)
+// Privacy Cash model (CORRECTED):
+// - Sender deposits with recipient as owner
+// - Recipient decrypts and withdraws
+// - No operator withdrawal, no escrow
 
 // ✅ STEP 5: 404 HANDLER - Must come AFTER routes
 app.use((_req: express.Request, res: express.Response) => {
