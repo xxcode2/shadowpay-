@@ -78,9 +78,9 @@ export async function executeWithdraw(
 
     // ✅ SETUP CONNECTION
     console.log(`\nStep 4: Connecting to Solana...`)
-    const SOLANA_RPC_URL = 'https://mainnet.helius-rpc.com'
+    const SOLANA_RPC_URL = CONFIG.SOLANA_RPC_URL || 'https://api.mainnet-beta.solana.com'
     const connection = new Connection(SOLANA_RPC_URL, 'confirmed')
-    console.log(`✅ Connected`)
+    console.log(`✅ Connected to ${SOLANA_RPC_URL.slice(0, 30)}...`)
 
     // ✅ CALL WITHDRAW
     console.log(`\nStep 5: Creating withdrawal transaction...`)

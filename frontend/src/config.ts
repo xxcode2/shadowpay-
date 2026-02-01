@@ -6,7 +6,7 @@
 export const CONFIG = {
   // APIs
   BACKEND_URL: import.meta.env.VITE_BACKEND_URL || 'https://shadowpay-backend-production.up.railway.app',
-  SOLANA_RPC_URL: import.meta.env.VITE_SOLANA_RPC_URL || 'https://mainnet.helius-rpc.com',
+  SOLANA_RPC_URL: import.meta.env.VITE_SOLANA_RPC_URL || 'https://api.mainnet-beta.solana.com',
 
   // UI
   SHARE_BASE_URL: import.meta.env.VITE_SHARE_BASE_URL || 'https://shadowpayy.vercel.app',
