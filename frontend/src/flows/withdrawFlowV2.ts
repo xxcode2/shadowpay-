@@ -41,8 +41,7 @@ export async function executeWithdraw(
 
   try {
     // Setup connection
-    const rpcUrl = CONFIG.SOLANA_RPC_URL || 'https://api.mainnet-beta.solana.com'
-    const connection = new Connection(rpcUrl, 'confirmed')
+    const connection = new Connection(CONFIG.SOLANA_RPC_URL, 'confirmed')
 
     // Ensure publicKey is PublicKey object
     const publicKeyObj = wallet.publicKey instanceof PublicKey
@@ -143,7 +142,7 @@ export async function executeWithdraw(
  */
 export async function getBalance(walletAddress: string, wallet: any): Promise<number> {
   try {
-    const connection = new Connection(CONFIG.SOLANA_RPC_URL || 'https://api.mainnet-beta.solana.com')
+    const connection = new Connection(CONFIG.SOLANA_RPC_URL)
     const publicKeyObj = new PublicKey(walletAddress)
 
     const balance = await getPrivateBalance(connection, {

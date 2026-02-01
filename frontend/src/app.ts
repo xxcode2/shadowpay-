@@ -3,13 +3,14 @@
 import { Connection, PublicKey, LAMPORTS_PER_SOL, Transaction, SystemProgram } from '@solana/web3.js'
 import type { DepositRequest } from './flows/depositFlow'
 import { executeDeposit } from './flows/depositFlowV2'
+import { CONFIG } from './config'
 import logo from '@/assets/pay.png'
 
 const BACKEND_URL =
   import.meta.env.VITE_BACKEND_URL ||
   'https://shadowpay-backend-production.up.railway.app'
 
-const SOLANA_RPC_URL = 'https://mainnet.helius-rpc.com'
+const SOLANA_RPC_URL = CONFIG.SOLANA_RPC_URL
 
 declare global {
   interface Window {

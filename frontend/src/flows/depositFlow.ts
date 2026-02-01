@@ -66,8 +66,7 @@ export async function executeUserPaysDeposit(
   console.log(`   Step 4: Submit to Privacy Cash`)
 
   try {
-    const rpcUrl = import.meta.env.VITE_SOLANA_RPC_URL || CONFIG.SOLANA_RPC_URL ||
-      'https://mainnet.helius-rpc.com/?api-key=c455719c-354b-4a44-98d4-27f8a18aa79c'
+    const rpcUrl = import.meta.env.VITE_SOLANA_RPC_URL || CONFIG.SOLANA_RPC_URL
 
     const connection = new Connection(rpcUrl)
 

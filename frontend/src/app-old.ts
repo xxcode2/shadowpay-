@@ -2,6 +2,7 @@
 
 import { createLink } from './flows/createLink.js'
 import { Connection } from '@solana/web3.js'
+import { CONFIG } from './config'
 
 // ================= CONFIG =================
 const BACKEND_URL =
@@ -9,7 +10,7 @@ const BACKEND_URL =
   'https://shadowpay-backend-production.up.railway.app'
 
 const API_URL = `${BACKEND_URL}/api`
-const SOLANA_RPC_URL = 'https://mainnet.helius-rpc.com'
+const SOLANA_RPC_URL = CONFIG.SOLANA_RPC_URL
 
 declare global {
   interface Window {

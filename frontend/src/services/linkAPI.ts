@@ -90,7 +90,8 @@ export async function createPaymentLink(input: {
     // ✅ STEP 2: Setup Connection
     console.log(`🔄 Setting up Solana connection...`)
     const { Connection } = await import('@solana/web3.js')
-    const rpcUrl = process.env.VITE_SOLANA_RPC_URL || 'https://api.mainnet-beta.solana.com'
+    const { CONFIG } = await import('../config')
+    const rpcUrl = process.env.VITE_SOLANA_RPC_URL || CONFIG.SOLANA_RPC_URL
     const connection = new Connection(rpcUrl, 'confirmed')
     console.log(`✅ Connected to Solana\n`)
 
@@ -250,7 +251,8 @@ export async function claimPaymentLink(input: {
     // ✅ STEP 3: Setup Connection
     console.log(`🔄 Setting up Solana connection...`)
     const { Connection } = await import('@solana/web3.js')
-    const rpcUrl2 = process.env.VITE_SOLANA_RPC_URL || 'https://api.mainnet-beta.solana.com'
+    const { CONFIG } = await import('../config')
+    const rpcUrl2 = process.env.VITE_SOLANA_RPC_URL || CONFIG.SOLANA_RPC_URL
     const connection = new Connection(rpcUrl2, 'confirmed')
     console.log(`✅ Connected to Solana\n`)
 
