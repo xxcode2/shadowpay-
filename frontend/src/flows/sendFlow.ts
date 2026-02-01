@@ -15,6 +15,7 @@
  * 4. Backend confirms receipt
  */
 
+import { PublicKey } from '@solana/web3.js'
 import { CONFIG } from '../config'
 import { showError, showSuccess } from '../utils/notificationUtils'
 
@@ -37,9 +38,11 @@ export interface SendResult {
  * Send deposited funds to another user
  * This withdraws from Privacy Cash pool and transfers to recipient
  * 
- * ✅ BACKEND DELEGATION PATTERN:
- * Frontend creates payment record, then backend executes withdrawal
- * (same as claimLinkFlow)
+ * ✅ NON-CUSTODIAL PATTERN:
+ * Frontend has access to encrypted UTXOs in local cache
+ * Frontend creates withdrawal transaction with user's signature
+ * Frontend submits directly to relayer
+ * Backend just records the transaction
  */
 export async function executeSendToUser(
   request: SendToUserRequest,
@@ -64,111 +67,102 @@ export async function executeSendToUser(
     console.log(`   Amount: ${amountNum} SOL`)
     console.log(`   Recipient: ${recipientAddress}`)
 
-    // ✅ BACKEND HANDLES THE SEND
-    // Use the new /api/send endpoint for direct sends (not /api/withdraw which is for claiming)
-    
-    console.log(`\nStep 1: Requesting backend to execute send`)
-    
-    // ✅ Frontend signs a message to authorize this send
-    console.log(`Step 1.5: Signing authorization message...`)
-    const messageToSign = `Send ${amountNum} SOL to ${recipientAddress}`
-    let signature: string | null = null
-    
-    if (!wallet) {
-      console.error(`❌ Wallet not available`)
-      throw new Error('Wallet not connected')
+    // ✅ IMPORT PRIVACY CASH SDK
+    console.log(`\nStep 1: Loading Privacy Cash SDK...`)
+    const privacycashUtils = await import('privacycash/utils') as any
+    const { withdraw } = privacycashUtils
+    console.log(`✅ Privacy Cash SDK loaded`)
+
+    // ✅ CREATE WALLET ADAPTER FOR SDK
+    console.log(`\nStep 2: Creating wallet adapter...`)
+    const walletAdapter = {
+      publicKey: new PublicKey(senderAddress),
+      signTransaction: async (tx: any) => {
+        console.log(`   Signing transaction...`)
+        return await wallet.signTransaction(tx)
+      },
+      signAllTransactions: async (txs: any[]) => {
+        console.log(`   Signing ${txs.length} transactions...`)
+        return await wallet.signAllTransactions(txs)
+      },
+      signMessage: async (message: Uint8Array) => {
+        console.log(`   Signing message (${message.length} bytes)...`)
+        const result = await wallet.signMessage(message)
+        // Handle both direct Uint8Array and {signature: Uint8Array} format
+        if (result instanceof Uint8Array) {
+          return result
+        } else if (result && 'signature' in result) {
+          return result.signature
+        }
+        return result
+      }
     }
-    
-    if (!wallet.signMessage) {
-      console.error(`❌ Wallet does not support signMessage. Available methods:`, Object.keys(wallet))
-      throw new Error('Wallet does not support message signing')
-    }
+    console.log(`✅ Wallet adapter created`)
+
+    // ✅ EXECUTE WITHDRAWAL DIRECTLY FROM FRONTEND
+    console.log(`\nStep 3: Executing withdrawal from Privacy Cash pool...`)
+    const lamports = Math.floor(amountNum * 1e9)
     
     try {
-      const messageBytes = new TextEncoder().encode(messageToSign)
-      console.log(`   Signing message (${messageBytes.length} bytes)...`)
+      const txResult = await withdraw(
+        walletAdapter,
+        lamports,
+        new PublicKey(recipientAddress)
+      )
       
-      const signatureResult = await wallet.signMessage(messageBytes)
-      console.log(`   Signature result type: ${signatureResult?.constructor?.name || typeof signatureResult}`)
+      console.log(`✅ Withdrawal transaction created`)
+      console.log(`   TX Hash: ${txResult.tx}`)
       
-      // Handle both direct Uint8Array and {signature: Uint8Array} format
-      let signatureBytes: Uint8Array
-      if (signatureResult instanceof Uint8Array) {
-        signatureBytes = signatureResult
-        console.log(`   Format: Direct Uint8Array`)
-      } else if (signatureResult && 'signature' in signatureResult) {
-        signatureBytes = signatureResult.signature
-        console.log(`   Format: {signature: Uint8Array}`)
-      } else {
-        throw new Error(`Unexpected signature format: ${JSON.stringify(signatureResult)}`)
-      }
-      
-      // Convert Uint8Array to hex string
-      signature = Array.from(signatureBytes)
-        .map(b => b.toString(16).padStart(2, '0'))
-        .join('')
-      console.log(`✅ Message signed successfully (${signature.length} chars)`)
-    } catch (signErr: any) {
-      console.error(`❌ Failed to sign message:`, signErr.message)
-      console.error(`   Full error:`, signErr)
-      throw signErr
-    }
-    
-    const BACKEND_URL = CONFIG.BACKEND_URL || 'https://shadowpay-backend-production.up.railway.app'
-    
-    console.log(`📤 Sending to backend:`, {
-      senderAddress,
-      recipientAddress,
-      amount: amountNum,
-      signatureLength: signature?.length || 0
-    })
-    
-    const res = await fetch(`${BACKEND_URL}/api/send`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        senderAddress: senderAddress,
-        recipientAddress: recipientAddress,
-        amount: amountNum,
-        signature: signature,
-      })
-    })
+      const txHash = txResult.tx
 
-    if (!res.ok) {
-      let errorMsg = `Send failed with status ${res.status}`
+      // ✅ NOTIFY BACKEND OF SUCCESSFUL SEND
+      console.log(`\nStep 4: Recording transaction on backend...`)
+      const BACKEND_URL = CONFIG.BACKEND_URL || 'https://shadowpay-backend-production.up.railway.app'
+      
       try {
-        const contentType = res.headers.get('content-type')
-        if (contentType?.includes('application/json')) {
-          const errorData = await res.json()
-          errorMsg = errorData.error || errorData.details || errorMsg
+        const recordRes = await fetch(`${BACKEND_URL}/api/send/record`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            senderAddress,
+            recipientAddress,
+            amount: amountNum,
+            transactionHash: txHash,
+            paymentId
+          })
+        })
+        
+        if (!recordRes.ok) {
+          console.warn(`⚠️ Failed to record transaction on backend`)
+          // Continue anyway - transaction was successful
+        } else {
+          console.log(`✅ Transaction recorded`)
         }
-      } catch {}
-      throw new Error(errorMsg)
-    }
+      } catch (recordErr) {
+        console.warn(`⚠️ Backend record failed:`, recordErr)
+        // Continue - transaction was already submitted to relayer
+      }
 
-    const data = await res.json()
-    
-    if (!data.success) {
-      throw new Error(data.error || 'Send failed on backend')
-    }
+      console.log(`\n✅ SEND SUCCESSFUL`)
+      console.log(`   Payment ID: ${paymentId}`)
+      console.log(`   Amount: ${amount} SOL`)
+      console.log(`   To: ${recipientAddress}`)
+      console.log(`   Transaction: ${txHash}`)
+      console.log(`   Status: Payment delivered privately ✨`)
 
-    const txHash = data.transactionHash
+      showSuccess(`${amount} SOL sent privately to ${recipientAddress.slice(0, 8)}...`)
 
-    console.log(`\n✅ SEND SUCCESSFUL`)
-    console.log(`   Payment ID: ${paymentId}`)
-    console.log(`   Amount: ${amount} SOL`)
-    console.log(`   To: ${recipientAddress}`)
-    console.log(`   Transaction: ${txHash}`)
-    console.log(`   Status: Payment delivered privately ✨`)
+      return {
+        success: true,
+        transactionSignature: txHash,
+        paymentId,
+        amount: amountNum,
+        recipientAddress
+      }
 
-    showSuccess(`${amount} SOL sent privately to ${recipientAddress.slice(0, 8)}...`)
-
-    return {
-      success: true,
-      transactionSignature: txHash,
-      paymentId,
-      amount: amountNum,
-      recipientAddress
+    } catch (withdrawErr: any) {
+      console.error(`❌ Withdrawal failed:`, withdrawErr.message)
+      throw new Error(`Withdrawal failed: ${withdrawErr.message}`)
     }
 
   } catch (error: any) {
