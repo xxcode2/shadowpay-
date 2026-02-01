@@ -8,19 +8,26 @@ Modern privacy payment UI built with TypeScript, Vite, and Tailwind CSS.
 frontend/
 ├── src/
 │   ├── assets/
-│   │   └── pay.png              # ShadowPay logo
+│   │   └── pay.png                 # ShadowPay logo
+│   ├── components/
+│   │   └── aiAssistant.ts          # AI natural language interface
 │   ├── flows/
-│   │   └── depositFlow.ts        # Privacy Cash deposit logic
+│   │   ├── depositFlow.ts          # Privacy Cash deposit logic
+│   │   ├── depositFlowV2.ts        # Simplified deposit (official SDK)
+│   │   ├── withdrawFlow.ts         # Privacy Cash withdraw logic
+│   │   └── withdrawFlowV2.ts       # Simplified withdraw (official SDK)
 │   ├── services/
-│   │   └── browserDeposit.ts     # Non-custodial deposit execution
+│   │   ├── privacyCashClient.ts    # Official Privacy Cash SDK wrapper
+│   │   ├── linkAPI.ts              # Payment link management
+│   │   └── keypairManager.ts       # Keypair management
 │   ├── utils/
-│   │   ├── encryptionHelper.ts   # Message encryption
-│   │   └── notificationUtils.ts  # Toast notifications
-│   ├── app.ts                    # Main application class
-│   └── main.ts                   # Entry point
-├── index.html                   # HTML template
-├── vite.config.ts              # Vite configuration with @ alias
-├── tsconfig.json               # TypeScript config with path mappings
+│   │   └── notificationUtils.ts    # Toast notifications
+│   ├── app.ts                      # Main application controller
+│   ├── config.ts                   # Configuration (RPC endpoints, URLs)
+│   └── main.ts                     # Entry point
+├── index.html                      # HTML template with all tabs
+├── vite.config.ts                  # Vite configuration with @ alias
+├── tsconfig.json                   # TypeScript config with path mappings
 ├── package.json
 └── .env.example
 ```
@@ -54,9 +61,9 @@ npm run build
 
 | Tab | Purpose |
 |-----|---------|
-| **Send** | Create private payment with ZK proofs |
-| **Receive** | View incoming payments (Available/Withdrawn) |
-| **History** | Track sent & received transactions (paginated) |
+| **Deposit** | Deposit SOL to your private balance using ZK proofs |
+| **Send** | Send SOL from your private balance to any address |
+| **AI** | Natural language interface for deposits and sends |
 | **About** | Learn how privacy works |
 
 ### Core Features
@@ -64,31 +71,32 @@ npm run build
 #### 1. Wallet Connection
 - Uses Phantom wallet browser extension
 - Non-custodial (keys never leave device)
-- Message signing for authorization
+- Message signing for authorization & encryption
 
-#### 2. Send Private Payment
-- Select token (currently SOL only)
-- Enter recipient address
-- Generate ZK proof in browser
-- Non-custodial deposit to Privacy Cash
-- Backend records transaction
+#### 2. Deposit (Privacy Cash)
+- Non-custodial deposit to Privacy Cash pool using ZK proofs
+- Generates zero-knowledge proof in browser
+- Amount is encrypted and hidden on-chain
+- Funds stored in shielded UTXO with your encryption key
 
-#### 3. Receive Payments
-- Incoming payments auto-decrypted
-- Shows Available & Withdrawn tabs
-- 5 items per page (paginated)
-- Claim button to withdraw
+#### 3. Send Privately
+- Withdraw from your private balance
+- Send to any Solana wallet address
+- Recipient receives directly to their wallet
+- Transaction details remain private
 
-#### 4. Transaction History
-- Sent payments tab
-- Received payments tab
-- 10 items per page (paginated)
-- Full transaction details
+#### 4. AI Assistant (New!)
+- Natural language interface using `parseIntent()`
+- Commands: "deposit 0.01 SOL", "send 0.01 SOL to <address>", "check balance"
+- Real-time progress updates with emojis
+- Built-in address validation (32-44 chars, base58 format)
+- Better UX with color-coded messages (green success, red errors)
 
 #### 5. About Section
-- What is ShadowPay (4 features)
-- Why Trust ShadowPay (5 reasons)
-- How Privacy Works (5-step process)
+- What is ShadowPay (features)
+- Why Trust ShadowPay (security benefits)
+- How Privacy Works (ZK proofs explanation)
+- AI Assistant capabilities
 
 ## 💻 Key Technologies
 

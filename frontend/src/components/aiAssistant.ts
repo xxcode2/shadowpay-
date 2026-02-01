@@ -116,7 +116,7 @@ export async function executeIntent(
         throw new Error('Please specify a valid amount (e.g., "deposit 0.01 SOL")')
       }
 
-      onProgress(`💰 Depositing ${intent.amount} SOL to your private wallet...`)
+      onProgress(`💰 Depositing ${intent.amount} SOL to your private balance...`)
 
       const result = await executeDeposit(
         {

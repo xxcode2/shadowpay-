@@ -203,22 +203,22 @@
     <div id="section-send" class="section-content hidden">
      <div class="max-w-2xl mx-auto">
       <div class="text-center mb-10">
-       <h2 class="text-3xl font-bold text-white mb-2">Send to User</h2>
-       <p class="text-gray-400 text-sm">Send SOL from your Privacy Pool to another wallet</p>
+       <h2 class="text-3xl font-bold text-white mb-2">Send</h2>
+       <p class="text-gray-400 text-sm">Send SOL from your private balance to any address</p>
       </div>
       <div class="gradient-border p-8">
        <form id="send-to-user-form" class="space-y-6">
         <div>
          <label for="send-user-amount" class="block text-sm font-medium text-gray-300 mb-2">Amount (SOL)</label>
-         <input type="number" id="send-user-amount" step="0.001" min="0.001" placeholder="0.01" class="w-full px-4 py-2.5 bg-gray-900 border border-gray-700 rounded-lg text-gray-200 focus:outline-none focus:border-purple-500 transition-colors">
-         <p class="text-xs text-gray-400 mt-2">⚠️ Minimum: 0.001 SOL</p>
+         <input type="number" id="send-user-amount" step="0.01" min="0.01" placeholder="0.01" class="w-full px-4 py-2.5 bg-gray-900 border border-gray-700 rounded-lg text-gray-200 focus:outline-none focus:border-purple-500 transition-colors">
+         <p class="text-xs text-gray-400 mt-2">⚠️ Minimum: 0.01 SOL</p>
         </div>
         <div>
          <label for="send-user-recipient" class="block text-sm font-medium text-gray-300 mb-2">Recipient Wallet Address</label>
          <input type="text" id="send-user-recipient" placeholder="Enter Solana wallet address..." class="w-full px-4 py-2.5 bg-gray-900 border border-gray-700 rounded-lg text-gray-200 focus:outline-none focus:border-purple-500 transition-colors font-mono text-xs">
         </div>
         <button type="submit" class="w-full px-6 py-3 rounded-lg bg-gradient-to-r from-purple-600 to-purple-700 hover:from-purple-700 hover:to-purple-800 text-white font-medium transition-all">
-         📤 Send to User
+         📤 Send
         </button>
        </form>
       </div>
@@ -418,6 +418,21 @@
           <p class="text-gray-400 text-sm">Recipient uses their private key to decrypt and claim funds. Only they can access their payment.</p>
          </div>
         </div>
+       </div>
+      </div>
+
+      <!-- AI Assistant Section -->
+      <div class="mt-16">
+       <h3 class="text-2xl font-bold text-white mb-8 text-center">🤖 AI Assistant</h3>
+       <div class="glass-card p-6 rounded-xl border border-gray-700/50">
+        <p class="text-gray-300 mb-4">ShadowPay includes a natural language AI assistant for easy deposits and transfers:</p>
+        <ul class="space-y-3 text-gray-400 text-sm">
+         <li class="flex gap-2"><span class="text-purple-400">•</span> <span><strong>Deposit:</strong> Say "deposit 0.01 SOL" to add funds to your private balance</span></li>
+         <li class="flex gap-2"><span class="text-purple-400">•</span> <span><strong>Send:</strong> Say "send 0.01 SOL to &lt;address&gt;" to transfer privately</span></li>
+         <li class="flex gap-2"><span class="text-purple-400">•</span> <span><strong>Check Balance:</strong> Say "check balance" to see your private balance instantly</span></li>
+         <li class="flex gap-2"><span class="text-purple-400">•</span> <span><strong>Real-time Feedback:</strong> Get progress updates as operations execute</span></li>
+         <li class="flex gap-2"><span class="text-purple-400">•</span> <span><strong>Address Validation:</strong> Built-in validation ensures you're sending to valid Solana addresses</span></li>
+        </ul>
        </div>
       </div>
      </div>

@@ -7,31 +7,38 @@ Non-custodial private payment API built with Node.js, Express, and Privacy Cash 
 ```
 backend/
 ├── src/
-│   ├── config.ts                 # Environment & configuration
-│   ├── server.ts                 # Express server setup
+│   ├── config.ts                       # Environment & configuration
+│   ├── server.ts                       # Express server setup
 │   ├── routes/
-│   │   ├── deposit.ts            # Private deposit endpoint
-│   │   ├── claimLink.ts          # Claim payment endpoint
-│   │   ├── createLink.ts         # Create payment link
-│   │   ├── history.ts            # Transaction history
-│   │   ├── incoming.ts           # Incoming payments
-│   │   ├── health.ts             # Health check
-│   │   ├── config.ts             # Public config endpoint
-│   │   └── ...
+│   │   ├── deposit.ts                  # Private deposit endpoint
+│   │   ├── depositSPL.ts               # SPL token deposits
+│   │   ├── withdraw.ts                 # Withdrawal endpoint
+│   │   ├── withdrawSPL.ts              # SPL token withdrawals
+│   │   ├── claimLink.ts                # Claim payment endpoint
+│   │   ├── createLink.ts               # Create payment link
+│   │   ├── history.ts                  # Transaction history
+│   │   ├── incoming.ts                 # Incoming payments
+│   │   ├── health.ts                   # Health check
+│   │   ├── operatorKeypair.ts          # Operator management
+│   │   ├── savings.ts                  # Savings operations
+│   │   ├── tokens.ts                   # Token info
+│   │   ├── config.ts                   # Public config endpoint
+│   │   └── link.ts                     # Link operations
 │   ├── services/
-│   │   ├── privacyCash.ts        # Privacy Cash wrapper
-│   │   ├── linkService.ts        # Link management
-│   │   └── keypairManager.ts     # Operator key management
+│   │   ├── privacyCash.ts              # Privacy Cash wrapper
+│   │   ├── linkService.ts              # Link management
+│   │   ├── keypairManager.ts           # Operator key management
+│   │   └── splTokenService.ts          # SPL token operations
 │   ├── utils/
-│   │   ├── privacyCashOperations.ts   # ZK proof operations
-│   │   ├── operatorBalanceGuard.ts    # Balance monitoring
-│   │   └── encryptionHelper.ts        # Message encryption
+│   │   ├── privacyCashOperations.ts    # ZK proof operations
+│   │   ├── operatorBalanceGuard.ts     # Balance monitoring
+│   │   └── encryptionHelper.ts         # Message encryption
 │   └── lib/
-│       ├── prisma.ts             # Database client
-│       └── ensureSchema.ts        # Schema initialization
+│       ├── prisma.ts                   # Database client
+│       └── ensureSchema.ts             # Schema initialization
 ├── prisma/
-│   ├── schema.prisma             # Database schema
-│   └── migrations/               # Database migrations
+│   ├── schema.prisma                   # Database schema
+│   └── migrations/                     # Database migrations
 ├── package.json
 ├── tsconfig.json
 └── .env.example

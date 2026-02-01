@@ -19,6 +19,7 @@ ShadowPay is a privacy-first payment application that enables users to send SOL 
 ## ✨ Features
 
 ✅ **Zero-Knowledge Privacy** - Transactions use ZK proofs, no on-chain sender/receiver link  
+✅ **AI Assistant** - Natural language interface for deposits and sends (say: "deposit 0.01 SOL" or "send 0.01 SOL to address")  
 ✅ **Send Privately** - Enter amount, recipient address, and send with privacy  
 ✅ **Receive Payments** - View incoming private payments with separate available/withdrawn tabs  
 ✅ **Transaction History** - Track all sent and received payments (10 items per page)  
