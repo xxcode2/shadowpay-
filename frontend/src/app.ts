@@ -763,20 +763,20 @@ export class App {
     const isError = message.includes('❌')
     const isSuccess = message.includes('✅')
     
-    content.className = `max-w-md px-4 py-3 rounded-lg text-sm leading-relaxed ${
+    content.className = `px-4 py-3 rounded-lg text-sm leading-relaxed break-words ${
       sender === 'user'
-        ? 'bg-gradient-to-r from-purple-600 to-purple-500 text-white shadow-lg shadow-purple-500/20'
+        ? 'max-w-sm bg-gradient-to-r from-purple-600 to-purple-500 text-white shadow-lg shadow-purple-500/20'
         : isError
-        ? 'bg-red-900/30 text-red-100 border border-red-500/30'
+        ? 'max-w-sm bg-red-900/30 text-red-100 border border-red-500/30'
         : isSuccess
-        ? 'bg-emerald-900/30 text-emerald-100 border border-emerald-500/30'
-        : 'bg-gray-800/50 text-gray-100 border border-gray-700/30'
+        ? 'max-w-sm bg-emerald-900/30 text-emerald-100 border border-emerald-500/30'
+        : 'max-w-sm bg-gray-800/50 text-gray-100 border border-gray-700/30'
     }`
     
     // Format message with better line breaks and structure
     const formatted = message
       .replace(/\n/g, '<br/>')
-      .replace(/<br\/>TX:/g, '<br/><span class="text-xs text-gray-400">TX:</span>')
+      .replace(/<br\/>TX:/g, '<br/><span class="text-xs text-gray-400 font-mono">TX:</span>')
       .replace(/Amount:/g, '<br/><span class="text-xs text-gray-400">Amount:</span>')
       .replace(/To:/g, '<br/><span class="text-xs text-gray-400">To:</span>')
     
@@ -801,14 +801,14 @@ export class App {
         
         // Update styling based on message content
         if (isError) {
-          content.className = 'max-w-md px-4 py-3 rounded-lg text-sm leading-relaxed bg-red-900/30 text-red-100 border border-red-500/30'
+          content.className = 'max-w-sm px-4 py-3 rounded-lg text-sm leading-relaxed break-words bg-red-900/30 text-red-100 border border-red-500/30'
         } else if (isSuccess) {
-          content.className = 'max-w-md px-4 py-3 rounded-lg text-sm leading-relaxed bg-emerald-900/30 text-emerald-100 border border-emerald-500/30'
+          content.className = 'max-w-sm px-4 py-3 rounded-lg text-sm leading-relaxed break-words bg-emerald-900/30 text-emerald-100 border border-emerald-500/30'
         }
         
         const formatted = message
           .replace(/\n/g, '<br/>')
-          .replace(/<br\/>TX:/g, '<br/><span class="text-xs text-gray-400">TX:</span>')
+          .replace(/<br\/>TX:/g, '<br/><span class="text-xs text-gray-400 font-mono">TX:</span>')
           .replace(/Amount:/g, '<br/><span class="text-xs text-gray-400">Amount:</span>')
           .replace(/To:/g, '<br/><span class="text-xs text-gray-400">To:</span>')
         

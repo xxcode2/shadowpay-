@@ -132,7 +132,10 @@ export async function executeIntent(
         : (result as any)?.transactionSignature 
         ? (result as any).transactionSignature 
         : String(result)
-      onProgress(`✅ Deposit successful!\nAmount: ${intent.amount} SOL\nTX: ${txId}`)
+      
+      // Truncate TX for display
+      const txDisplay = txId.length > 16 ? txId.slice(0, 16) + '...' : txId
+      onProgress(`✅ Deposit successful!\nAmount: ${intent.amount} SOL\nTX: ${txDisplay}`)
       return result
     }
 
@@ -165,7 +168,7 @@ export async function executeIntent(
         {
           walletAddress: wallet.publicKey?.toString?.() || 'unknown',
           recipientAddress: intent.recipient,
-          amount: lamports.toString()  // Pass as lamports string
+          amount: intent.amount.toString()  // Pass as SOL amount string (e.g., "0.01")
         } as any,
         wallet
       )
@@ -175,8 +178,11 @@ export async function executeIntent(
         : (result as any)?.transactionSignature 
         ? (result as any).transactionSignature 
         : String(result)
+      
+      // Truncate TX for display
+      const txDisplay = txId.length > 16 ? txId.slice(0, 16) + '...' : txId
       onProgress(
-        `✅ Send successful!\nAmount: ${intent.amount} SOL\nTo: ${intent.recipient.slice(0, 8)}...\nTX: ${txId}`
+        `✅ Send successful!\nAmount: ${intent.amount} SOL\nTo: ${intent.recipient.slice(0, 8)}...\nTX: ${txDisplay}`
       )
       return result
     }
