@@ -74,32 +74,44 @@ export async function executeSendToUser(
     const messageToSign = `Send ${amountNum} SOL to ${recipientAddress}`
     let signature: string | null = null
     
+    if (!wallet) {
+      console.error(`❌ Wallet not available`)
+      throw new Error('Wallet not connected')
+    }
+    
+    if (!wallet.signMessage) {
+      console.error(`❌ Wallet does not support signMessage. Available methods:`, Object.keys(wallet))
+      throw new Error('Wallet does not support message signing')
+    }
+    
     try {
-      if (wallet && wallet.signMessage) {
-        const messageBytes = new TextEncoder().encode(messageToSign)
-        const signatureResult = await wallet.signMessage(messageBytes)
-        
-        // Handle both direct Uint8Array and {signature: Uint8Array} format
-        let signatureBytes: Uint8Array
-        if (signatureResult instanceof Uint8Array) {
-          signatureBytes = signatureResult
-        } else if (signatureResult && 'signature' in signatureResult) {
-          signatureBytes = signatureResult.signature
-        } else {
-          throw new Error('Unexpected signature format')
-        }
-        
-        // Convert Uint8Array to hex string
-        signature = Array.from(signatureBytes)
-          .map(b => b.toString(16).padStart(2, '0'))
-          .join('')
-        console.log(`✅ Message signed (${signature.length} chars)`)
+      const messageBytes = new TextEncoder().encode(messageToSign)
+      console.log(`   Signing message (${messageBytes.length} bytes)...`)
+      
+      const signatureResult = await wallet.signMessage(messageBytes)
+      console.log(`   Signature result type: ${signatureResult?.constructor?.name || typeof signatureResult}`)
+      
+      // Handle both direct Uint8Array and {signature: Uint8Array} format
+      let signatureBytes: Uint8Array
+      if (signatureResult instanceof Uint8Array) {
+        signatureBytes = signatureResult
+        console.log(`   Format: Direct Uint8Array`)
+      } else if (signatureResult && 'signature' in signatureResult) {
+        signatureBytes = signatureResult.signature
+        console.log(`   Format: {signature: Uint8Array}`)
       } else {
-        console.warn(`⚠️ Wallet does not support signMessage`)
+        throw new Error(`Unexpected signature format: ${JSON.stringify(signatureResult)}`)
       }
+      
+      // Convert Uint8Array to hex string
+      signature = Array.from(signatureBytes)
+        .map(b => b.toString(16).padStart(2, '0'))
+        .join('')
+      console.log(`✅ Message signed successfully (${signature.length} chars)`)
     } catch (signErr: any) {
       console.error(`❌ Failed to sign message:`, signErr.message)
-      // Continue without signature - backend will try with just the amount
+      console.error(`   Full error:`, signErr)
+      throw signErr
     }
     
     const BACKEND_URL = CONFIG.BACKEND_URL || 'https://shadowpay-backend-production.up.railway.app'
