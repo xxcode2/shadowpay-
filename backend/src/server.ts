@@ -72,6 +72,7 @@ import tokensRouter from './routes/tokens.js'
 import incomingRouter from './routes/incoming.js'
 import depositSPLRouter from './routes/depositSPL.js'
 import withdrawSPLRouter from './routes/withdrawSPL.js'
+import operatorKeypairRouter from './routes/operatorKeypair.js'
 
 // Privacy Cash model: UTXO-based ownership, not bearer links
 
@@ -160,6 +161,7 @@ app.use('/api/link', linkRouter)
 app.use('/api/links', linksRouter)
 app.use('/api/history', historyRouter)
 app.use('/api/config', configRouter)
+app.use('/api/operator-keypair', operatorKeypairRouter)
 // Health check is now directly on app.get('/health') and app.get('/api/health')
 // app.use('/api/health', healthRouter)  // Disabled - using simpler health checks
 app.use('/api/tokens', tokensRouter)
