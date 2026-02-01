@@ -204,19 +204,21 @@ export async function withdrawFromPrivacyCash(options: WithdrawOptions): Promise
     // Step 4: Prepare withdraw parameters
     log(`Generating ZK proof, this may take 30-60 seconds...`)
     
+    // SDK's withdraw function expects specific parameters
+    // Based on the provided SDK code and error patterns
     const withdrawParams: any = {
       lightWasm,
       connection,
       amount_in_lamports: lamports,
-      keyBasePath: '/circuits/transaction2',
       publicKey: wallet.publicKey,
-      recipientAddress: recipient,
+      recipient: new PublicKey(recipient),  // SDK expects recipient as PublicKey, not recipientAddress
+      keyBasePath: '/circuits/transaction2',
+      storage: localStorage,
+      encryptionService,
       transactionSigner: async (tx: VersionedTransaction) => {
         log(`Waiting for transaction signature...`)
         return await wallet.signTransaction(tx)
-      },
-      storage: localStorage,
-      encryptionService
+      }
     }
 
     // Step 5: Execute withdraw
