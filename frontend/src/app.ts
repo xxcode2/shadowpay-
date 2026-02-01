@@ -159,7 +159,7 @@ export class App {
     if (!this.walletAddress) return
 
     try {
-      const res = await fetch(`${BACKEND_URL}/api/history?address=${this.walletAddress}`)
+      const res = await fetch(`${BACKEND_URL}/api/history/${this.walletAddress}`)
       if (!res.ok) {
         console.warn('Failed to load balance, status:', res.status)
         return

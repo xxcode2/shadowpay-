@@ -90,39 +90,51 @@ export async function executeSendToUser(
 
     // Create encryption service from signature
     const encryptionService = new EncryptionService()
+    
+    // ✅ Ensure signature is proper Uint8Array
+    if (!(signature instanceof Uint8Array)) {
+      throw new Error('Signature must be Uint8Array')
+    }
+    
+    console.log(`   Deriving encryption key from signature (${signature.length} bytes)`)
     encryptionService.deriveEncryptionKeyFromSignature(signature)
+    console.log(`   ✅ Encryption key derived`)
 
     // Initialize WASM
     console.log(`Step 3: Initializing WASM for ZK proof`)
     const { WasmFactory } = await import('@lightprotocol/hasher.rs')
     const lightWasm = await WasmFactory.getInstance()
+    console.log(`   ✅ WASM initialized`)
 
     // Parse amount
     const amountNum = parseFloat(amount)
+    if (!amountNum || amountNum <= 0) {
+      throw new Error('Invalid amount: must be greater than 0')
+    }
     const lamports = Math.round(amountNum * 1e9)
+    console.log(`   Amount: ${amountNum} SOL (${lamports} lamports)`)
 
     console.log(`Step 4: Generating ZK proof for withdrawal`)
     console.log(`   This may take 30-60 seconds...`)
 
-    // Build withdrawal parameters
-    const withdrawParams: any = {
+    // Call Privacy Cash withdraw function with correct parameters
+    console.log(`Step 5: Executing withdrawal from Privacy Cash pool`)
+    console.log(`   Recipient: ${recipientAddress}`)
+    
+    const result = await withdraw({
       lightWasm,
       connection,
       amount_in_lamports: lamports,
       keyBasePath: '/circuits/transaction2',
       publicKey: publicKeyObj,
-      recipientAddress: new PublicKey(recipientAddress),
-      transactionSigner: async (tx: VersionedTransaction) => {
-        console.log(`Please sign the withdrawal transaction in your wallet`)
+      toAddress: new PublicKey(recipientAddress),
+      signer: async (tx: VersionedTransaction) => {
+        console.log(`   📝 Please sign the withdrawal transaction in your wallet`)
         return await wallet.signTransaction(tx)
       },
       storage: localStorage,
       encryptionService
-    }
-
-    // Call Privacy Cash withdraw function
-    console.log(`Step 5: Executing withdrawal from Privacy Cash pool`)
-    const result = await withdraw(withdrawParams)
+    })
 
     console.log(`\n✅ SEND SUCCESSFUL`)
     console.log(`   Payment ID: ${paymentId}`)
