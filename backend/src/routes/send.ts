@@ -25,6 +25,14 @@ router.post('/', async (req: Request<{}, {}, any>, res: Response) => {
   try {
     const { senderAddress, recipientAddress, amount, signature } = req.body
 
+    console.log(`\n📥 RECEIVED SEND REQUEST:`)
+    console.log(`   Sender: ${senderAddress}`)
+    console.log(`   Recipient: ${recipientAddress}`)
+    console.log(`   Amount: ${amount}`)
+    console.log(`   Signature length: ${signature?.length || 0}`)
+    console.log(`   Signature type: ${typeof signature}`)
+    console.log(`   Signature value: ${signature ? signature.substring(0, 20) + '...' : 'null'}`)
+
     // ✅ Validation
     if (!senderAddress || typeof senderAddress !== 'string') {
       return res.status(400).json({ error: 'Sender address required' })
