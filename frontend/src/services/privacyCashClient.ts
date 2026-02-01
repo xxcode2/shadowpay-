@@ -274,16 +274,14 @@ export async function getPrivateBalance(
     const SIGN_MESSAGE = 'Privacy Money account sign in'
     const encodedMessage = new TextEncoder().encode(SIGN_MESSAGE)
     
-    let signature: Uint8Array
+    let signature: Uint8Array | undefined
     let lastError: any = null
     
     // Retry up to 2 times with delay (total 3 attempts)
     for (let attempt = 0; attempt < 3; attempt++) {
       try {
-        signature = await wallet.signMessage(encodedMessage)
-        if ((signature as any).signature) {
-          signature = (signature as any).signature
-        }
+        const sig = await wallet.signMessage(encodedMessage)
+        signature = (sig as any).signature instanceof Uint8Array ? (sig as any).signature : sig
         lastError = null
         break // Success, exit retry loop
       } catch (err: any) {
@@ -310,13 +308,8 @@ export async function getPrivateBalance(
       }
     }
 
-    if (lastError && !(signature instanceof Uint8Array)) {
+    if (!signature || !(signature instanceof Uint8Array)) {
       log('Failed to get valid signature after retries')
-      return 0
-    }
-
-    if (!(signature instanceof Uint8Array)) {
-      log('Invalid signature format')
       return 0
     }
 

@@ -5,7 +5,9 @@
 
 import { executeDeposit } from '../flows/depositFlowV2'
 import { executeWithdraw } from '../flows/withdrawFlowV2'
+import { getPrivateBalance } from '../services/privacyCashClient'
 import { showError, showSuccess } from '../utils/notificationUtils'
+import { Connection, PublicKey } from '@solana/web3.js'
 
 export interface AIAssistantRequest {
   input: string
@@ -18,6 +20,23 @@ export interface ParsedIntent {
   amount?: number
   recipient?: string
   raw: string
+}
+
+/**
+ * Validate Solana address is valid base58 format
+ */
+function isValidSolanaAddress(address: string): boolean {
+  try {
+    // Solana addresses are 44 chars (32 bytes) encoded in base58
+    if (address.length < 32 || address.length > 44) {
+      return false
+    }
+    // Try to create PublicKey - will throw if invalid
+    new PublicKey(address)
+    return true
+  } catch {
+    return false
+  }
 }
 
 /**
@@ -101,7 +120,11 @@ export async function executeIntent(
         wallet
       )
 
-      const txId = typeof result === 'string' ? result : (result?.transactionSignature || String(result))
+      const txId = typeof result === 'string' 
+        ? result 
+        : (result as any)?.transactionSignature 
+        ? (result as any).transactionSignature 
+        : String(result)
       onProgress(`✅ Deposit successful!\nAmount: ${intent.amount} SOL\nTX: ${txId}`)
       return result
     }
@@ -119,6 +142,13 @@ export async function executeIntent(
         )
       }
 
+      // Validate recipient address is valid Solana address
+      if (!isValidSolanaAddress(intent.recipient)) {
+        throw new Error(
+          `Invalid recipient address: "${intent.recipient}". Must be a valid Solana address (44 characters, base58 format)`
+        )
+      }
+
       onProgress(
         `📤 Sending ${intent.amount} SOL to ${intent.recipient.slice(0, 8)}...`
       )
@@ -133,7 +163,11 @@ export async function executeIntent(
         wallet
       )
 
-      const txId = typeof result === 'string' ? result : ((result as any)?.transactionSignature || String(result))
+      const txId = typeof result === 'string' 
+        ? result 
+        : (result as any)?.transactionSignature 
+        ? (result as any).transactionSignature 
+        : String(result)
       onProgress(
         `✅ Send successful!\nAmount: ${intent.amount} SOL\nTo: ${intent.recipient.slice(0, 8)}...\nTX: ${txId}`
       )
@@ -141,9 +175,30 @@ export async function executeIntent(
     }
 
     if (intent.type === 'balance') {
-      onProgress(`📊 Checking your private balance...`)
-      // Balance check is typically done in the UI
-      return { type: 'balance_check' }
+      onProgress(`📊 Fetching your private balance...`)
+      
+      try {
+        // Validate we have connection and wallet
+        if (!connection || !wallet?.publicKey) {
+          throw new Error('Wallet not connected')
+        }
+
+        // Fetch actual balance
+        const balanceLamports = await getPrivateBalance(connection, {
+          publicKey: wallet.publicKey,
+          signMessage: async (msg: Uint8Array) => {
+            return await wallet.signMessage(msg)
+          }
+        })
+
+        const balanceSOL = (balanceLamports / 1e9).toFixed(6)
+        onProgress(
+          `💰 Private balance: ${balanceSOL} SOL (${balanceLamports} lamports)`
+        )
+        return { type: 'balance_check', balance: balanceLamports, balanceSOL }
+      } catch (err: any) {
+        throw new Error(`Balance check failed: ${err.message}`)
+      }
     }
 
     throw new Error(
@@ -159,6 +214,10 @@ export async function executeIntent(
       onProgress(`❌ You rejected the signature request. Please try again and approve.`)
     } else if (errorMsg.includes('No private balance')) {
       onProgress(`❌ No private balance. Deposit funds first using "deposit X SOL"`)
+    } else if (errorMsg.includes('Non-base58 character') || errorMsg.includes('Invalid recipient address')) {
+      onProgress(`❌ Invalid recipient address format. Solana addresses must be 44 characters, base58 encoded.`)
+    } else if (errorMsg.includes('Balance check failed')) {
+      onProgress(`❌ Could not fetch balance: ${errorMsg}`)
     } else {
       onProgress(`❌ Error: ${errorMsg}`)
     }
