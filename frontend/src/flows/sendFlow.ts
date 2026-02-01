@@ -69,6 +69,26 @@ export async function executeSendToUser(
     
     console.log(`\nStep 1: Requesting backend to execute send`)
     
+    // ✅ Frontend signs a message to authorize this send
+    console.log(`Step 1.5: Signing authorization message...`)
+    const messageToSign = `Send ${amountNum} SOL to ${recipientAddress}`
+    let signature: string | null = null
+    
+    try {
+      if (wallet && wallet.signMessage) {
+        const messageBytes = new TextEncoder().encode(messageToSign)
+        const signatureBytes = await wallet.signMessage(messageBytes)
+        // Convert Uint8Array to hex string
+        signature = Array.from(signatureBytes as Uint8Array)
+          .map(b => b.toString(16).padStart(2, '0'))
+          .join('')
+        console.log(`✅ Message signed`)
+      }
+    } catch (signErr: any) {
+      console.warn(`⚠️ Failed to sign message:`, signErr.message)
+      // Continue without signature - backend will try with just the amount
+    }
+    
     const BACKEND_URL = CONFIG.BACKEND_URL || 'https://shadowpay-backend-production.up.railway.app'
     
     const res = await fetch(`${BACKEND_URL}/api/send`, {
@@ -78,6 +98,7 @@ export async function executeSendToUser(
         senderAddress: senderAddress,
         recipientAddress: recipientAddress,
         amount: amountNum,
+        signature: signature,
       })
     })
 

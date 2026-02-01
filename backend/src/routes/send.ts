@@ -2,6 +2,7 @@ import { Router, Request, Response } from 'express'
 import { PublicKey } from '@solana/web3.js'
 import prisma from '../lib/prisma.js'
 import { executeWithdrawal, getPrivacyCashClient } from '../services/privacyCash.js'
+import nacl from 'tweetnacl'
 
 const router = Router()
 
@@ -22,7 +23,7 @@ const router = Router()
 
 router.post('/', async (req: Request<{}, {}, any>, res: Response) => {
   try {
-    const { senderAddress, recipientAddress, amount } = req.body
+    const { senderAddress, recipientAddress, amount, signature } = req.body
 
     // ✅ Validation
     if (!senderAddress || typeof senderAddress !== 'string') {
@@ -38,9 +39,10 @@ router.post('/', async (req: Request<{}, {}, any>, res: Response) => {
     }
 
     // ✅ Validate Solana addresses
+    let senderPubkey: PublicKey, recipientPubkey: PublicKey
     try {
-      new PublicKey(senderAddress)
-      new PublicKey(recipientAddress)
+      senderPubkey = new PublicKey(senderAddress)
+      recipientPubkey = new PublicKey(recipientAddress)
     } catch {
       return res.status(400).json({ error: 'Invalid Solana address' })
     }
@@ -50,8 +52,38 @@ router.post('/', async (req: Request<{}, {}, any>, res: Response) => {
     console.log(`   To: ${recipientAddress}`)
     console.log(`   Amount: ${amount} SOL`)
 
+    // ✅ Verify signature (proves user authorized this send)
+    if (signature) {
+      try {
+        const messageToSign = `Send ${amount} SOL to ${recipientAddress}`
+        const messageBytes = new TextEncoder().encode(messageToSign)
+        const signatureBytes = new Uint8Array(
+          signature.match(/.{1,2}/g)!.map((byte: string) => parseInt(byte, 16))
+        )
+        
+        const isValid = nacl.sign.detached.verify(
+          messageBytes,
+          signatureBytes,
+          senderPubkey.toBuffer()
+        )
+        
+        if (!isValid) {
+          console.warn(`⚠️ Signature verification failed`)
+          return res.status(401).json({ error: 'Invalid signature - unauthorized send' })
+        }
+        console.log(`✅ Signature verified - user authorized this send`)
+      } catch (verifyErr: any) {
+        console.warn(`⚠️ Signature verification error:`, verifyErr.message)
+        return res.status(401).json({ error: 'Signature verification failed' })
+      }
+    } else {
+      console.warn(`⚠️ No signature provided - cannot verify authorization`)
+      return res.status(400).json({ error: 'Signature required for authorization' })
+    }
+
     // ✅ Get operator's Privacy Cash client
-    // (has access to all pool UTXOs through operator keypair)
+    // The operator will execute the withdrawal on behalf of the user
+    // User's signature proves they authorized it
     let pc: any
     try {
       pc = getPrivacyCashClient()
