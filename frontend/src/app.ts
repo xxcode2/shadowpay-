@@ -60,6 +60,7 @@ export class App {
 
   private bindEvents() {
     // Tab switching
+    document.getElementById('mode-deposit')?.addEventListener('click', () => this.switchMode('deposit'))
     document.getElementById('mode-send')?.addEventListener('click', () => this.switchMode('send'))
     document.getElementById('mode-receive')?.addEventListener('click', () => this.switchMode('receive'))
     document.getElementById('mode-history')?.addEventListener('click', () => this.switchMode('history'))
@@ -71,6 +72,7 @@ export class App {
 
     // Forms
     document.getElementById('send-form')?.addEventListener('submit', (e) => this.handleSend(e))
+    document.getElementById('send-to-user-form')?.addEventListener('submit', (e) => this.handleSendToUser(e))
     
     // Token selector
     document.getElementById('send-token-select')?.addEventListener('change', (e) => {
@@ -87,7 +89,7 @@ export class App {
     })
   }
 
-  private switchMode(mode: 'send' | 'receive' | 'history' | 'about') {
+  private switchMode(mode: 'deposit' | 'send' | 'receive' | 'history' | 'about') {
     // Update active button
     document.querySelectorAll('.mode-btn').forEach(btn => {
       btn.classList.remove('tab-active')
@@ -99,6 +101,7 @@ export class App {
     active?.classList.add('tab-active')
 
     // Hide all sections
+    document.getElementById('section-deposit')?.classList.add('hidden')
     document.getElementById('section-send')?.classList.add('hidden')
     document.getElementById('section-receive')?.classList.add('hidden')
     document.getElementById('section-history')?.classList.add('hidden')
@@ -274,6 +277,79 @@ export class App {
       this.hideLoading()
       console.error('Send failed:', err)
       alert(`Payment failed: ${err.message}`)
+    } finally {
+      btn.disabled = false
+    }
+  }
+
+  private async handleSendToUser(e: Event) {
+    e.preventDefault()
+
+    if (!this.walletAddress) {
+      alert('Please connect your wallet first')
+      return
+    }
+
+    const amountInput = document.getElementById('send-user-amount') as HTMLInputElement
+    const recipientInput = document.getElementById('send-user-recipient') as HTMLInputElement
+
+    const amount = parseFloat(amountInput.value)
+    const recipient = recipientInput.value.trim()
+
+    if (!amount || amount <= 0) {
+      alert('Enter a valid amount')
+      return
+    }
+
+    if (!recipient) {
+      alert('Enter recipient wallet address')
+      return
+    }
+
+    // Validate recipient address
+    try {
+      new PublicKey(recipient)
+    } catch {
+      alert('Invalid Solana wallet address')
+      return
+    }
+
+    const btn = document.querySelector('#send-to-user-form button') as HTMLButtonElement
+    btn.disabled = true
+    this.showLoading('Preparing private transfer...')
+
+    try {
+      // This will call /api/private-send endpoint to create a transfer
+      this.updateLoading('Creating transfer record...')
+
+      const res = await fetch(`${BACKEND_URL}/api/private-send`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          amount,
+          senderAddress: this.walletAddress,
+          recipientAddress: recipient,
+        }),
+      })
+
+      if (!res.ok) {
+        const err = await res.json()
+        throw new Error(err.error || 'Failed to create transfer')
+      }
+
+      const { paymentId } = await res.json()
+
+      this.hideLoading()
+      this.showSuccess(amount, recipient, 'SOL')
+
+      // Reset form
+      amountInput.value = ''
+      recipientInput.value = ''
+
+    } catch (err: any) {
+      this.hideLoading()
+      console.error('Transfer failed:', err)
+      alert(`Transfer failed: ${err.message}`)
     } finally {
       btn.disabled = false
     }

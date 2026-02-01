@@ -109,10 +109,15 @@
     <!-- Tabs -->
     <div class="flex justify-center mb-12 px-2">
      <div class="w-full sm:w-auto inline-flex flex-wrap gap-1 sm:gap-2 p-1.5 rounded-xl glass-card border border-gray-700/50">
-      <button id="mode-send" class="mode-btn flex-1 sm:flex-none px-2 sm:px-6 py-2.5 rounded-lg font-medium transition-all text-xs sm:text-sm tab-active flex items-center justify-center gap-1 sm:gap-2 whitespace-nowrap">
+      <button id="mode-deposit" class="mode-btn flex-1 sm:flex-none px-2 sm:px-6 py-2.5 rounded-lg font-medium transition-all text-xs sm:text-sm tab-active flex items-center justify-center gap-1 sm:gap-2 whitespace-nowrap">
        <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 19l9 2-9-18-9 18 9-2zm0 0v-8"/></svg>
+       <span class="hidden sm:inline">Deposit</span>
+       <span class="sm:hidden">Dep</span>
+      </button>
+      <button id="mode-send" class="mode-btn flex-1 sm:flex-none px-2 sm:px-6 py-2.5 rounded-lg font-medium transition-all text-xs sm:text-sm tab-inactive flex items-center justify-center gap-1 sm:gap-2 whitespace-nowrap">
+       <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 5l7 7-7 7M5 5l7 7-7 7"/></svg>
        <span class="hidden sm:inline">Send</span>
-       <span class="sm:hidden">Send</span>
+       <span class="sm:hidden">Snd</span>
       </button>
       <button id="mode-receive" class="mode-btn flex-1 sm:flex-none px-2 sm:px-6 py-2.5 rounded-lg font-medium transition-all text-xs sm:text-sm tab-inactive flex items-center justify-center gap-1 sm:gap-2 whitespace-nowrap">
        <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 10h10a8 8 0 018 8v2M3 10l6 6m-6-6l6-6"/></svg>
@@ -132,12 +137,12 @@
      </div>
     </div>
 
-    <!-- Send Section -->
-    <div id="section-send" class="section-content">
+    <!-- Deposit Section -->
+    <div id="section-deposit" class="section-content">
      <div class="max-w-2xl mx-auto">
       <div class="text-center mb-10">
-       <h2 class="text-3xl font-bold text-white mb-2">Send Private Payment</h2>
-       <p class="text-gray-400 text-sm">Send SOL privately to any Solana wallet</p>
+       <h2 class="text-3xl font-bold text-white mb-2">Deposit to Privacy Pool</h2>
+       <p class="text-gray-400 text-sm">Deposit SOL to Privacy Cash pool</p>
       </div>
       <div class="gradient-border p-8">
        <form id="send-form" class="space-y-6">
@@ -177,6 +182,32 @@
         </div>
         <button type="submit" id="send-submit-btn" class="w-full py-3 rounded-lg bg-purple-600 hover:bg-purple-700 text-white font-semibold transition-colors">
          Send Private Payment
+        </button>
+       </form>
+      </div>
+     </div>
+    </div>
+
+    <!-- Send to User Section -->
+    <div id="section-send" class="section-content hidden">
+     <div class="max-w-2xl mx-auto">
+      <div class="text-center mb-10">
+       <h2 class="text-3xl font-bold text-white mb-2">Send to User</h2>
+       <p class="text-gray-400 text-sm">Send SOL from your Privacy Pool to another wallet</p>
+      </div>
+      <div class="gradient-border p-8">
+       <form id="send-to-user-form" class="space-y-6">
+        <div>
+         <label for="send-user-amount" class="block text-sm font-medium text-gray-300 mb-2">Amount (SOL)</label>
+         <input type="number" id="send-user-amount" step="0.001" min="0.001" placeholder="0.01" class="w-full px-4 py-2.5 bg-gray-900 border border-gray-700 rounded-lg text-gray-200 focus:outline-none focus:border-purple-500 transition-colors">
+         <p class="text-xs text-gray-400 mt-2">⚠️ Minimum: 0.001 SOL</p>
+        </div>
+        <div>
+         <label for="send-user-recipient" class="block text-sm font-medium text-gray-300 mb-2">Recipient Wallet Address</label>
+         <input type="text" id="send-user-recipient" placeholder="Enter Solana wallet address..." class="w-full px-4 py-2.5 bg-gray-900 border border-gray-700 rounded-lg text-gray-200 focus:outline-none focus:border-purple-500 transition-colors font-mono text-xs">
+        </div>
+        <button type="submit" class="w-full px-6 py-3 rounded-lg bg-gradient-to-r from-purple-600 to-purple-700 hover:from-purple-700 hover:to-purple-800 text-white font-medium transition-all">
+         Send Privately
         </button>
        </form>
       </div>
