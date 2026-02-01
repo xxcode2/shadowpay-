@@ -2,6 +2,7 @@
 
 import { Connection, PublicKey, LAMPORTS_PER_SOL, Transaction, SystemProgram } from '@solana/web3.js'
 import type { DepositRequest } from './flows/depositFlow'
+import { executeSendToUser } from './flows/sendFlow'
 import logo from '@/assets/pay.png'
 
 const BACKEND_URL =
@@ -406,8 +407,6 @@ export class App {
 
         // Step 2: Use sendFlow to withdraw from Privacy Cash pool and send to recipient
         this.updateLoading('Sending private payment via Privacy Cash...')
-        
-        const { executeSendToUser } = await import('./flows/sendFlow.js')
         
         const sendResult = await executeSendToUser(
           {
