@@ -119,10 +119,10 @@
        <span class="hidden sm:inline">Send</span>
        <span class="sm:hidden">Snd</span>
       </button>
-      <button id="mode-history" class="mode-btn flex-1 sm:flex-none px-2 sm:px-6 py-2.5 rounded-lg font-medium transition-all text-xs sm:text-sm tab-inactive flex items-center justify-center gap-1 sm:gap-2 whitespace-nowrap">
-       <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
-       <span class="hidden sm:inline">History</span>
-       <span class="sm:hidden">Hist</span>
+      <button id="mode-ai" class="mode-btn flex-1 sm:flex-none px-2 sm:px-6 py-2.5 rounded-lg font-medium transition-all text-xs sm:text-sm tab-inactive flex items-center justify-center gap-1 sm:gap-2 whitespace-nowrap">
+       <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m2.828 9.9a5 5 0 117.072 0l-.548.547A3.374 3.374 0 0014 18.469V19a2 2 0 11-4 0v-.531c0-.895-.356-1.754-.988-2.386l-.548-.547z"/></svg>
+       <span class="hidden sm:inline">AI</span>
+       <span class="sm:hidden">AI</span>
       </button>
       <button id="mode-about" class="mode-btn flex-1 sm:flex-none px-2 sm:px-6 py-2.5 rounded-lg font-medium transition-all text-xs sm:text-sm tab-inactive flex items-center justify-center gap-1 sm:gap-2 whitespace-nowrap">
        <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
@@ -212,15 +212,78 @@
      </div>
     </div>
 
-    <!-- History Section -->
-    <div id="section-history" class="section-content hidden">
-     <div class="max-w-4xl mx-auto">
+    <!-- AI Assistant Section -->
+    <div id="section-ai" class="section-content hidden">
+     <div class="max-w-2xl mx-auto">
       <div class="text-center mb-10">
-       <h2 class="text-3xl font-bold text-white mb-2">Transaction History</h2>
-       <p class="text-gray-400 text-sm">View your sent and received private payments</p>
+       <h2 class="text-3xl font-bold text-white mb-2">🤖 AI Assistant</h2>
+       <p class="text-gray-400 text-sm">Natural language interface for deposits and sends</p>
       </div>
-      <div id="history-container" class="space-y-6">
-       <!-- History will be loaded here -->
+
+      <div class="gradient-border p-8">
+       <!-- Chat Display -->
+       <div id="ai-chat-container" class="mb-6 h-96 overflow-y-auto space-y-4 p-4 bg-gray-900/50 rounded-lg border border-gray-800">
+        <div class="text-center text-gray-500 py-8">
+         <p class="mb-2">👋 Hello! I can help you:</p>
+         <ul class="text-sm space-y-1">
+          <li>💰 Deposit SOL to your private wallet</li>
+          <li>📤 Send SOL to any address</li>
+          <li>📊 Check your balance</li>
+         </ul>
+        </div>
+       </div>
+
+       <!-- Input Form -->
+       <form id="ai-form" class="space-y-4">
+        <div class="flex gap-3">
+         <input
+          type="text"
+          id="ai-input"
+          placeholder="e.g., 'deposit 0.01 SOL' or 'send 0.005 SOL to c5DUNG7...'"
+          class="flex-1 px-4 py-3 rounded-lg bg-gray-900 border border-purple-500/30 text-white placeholder-gray-500 focus:outline-none focus:border-purple-500 focus:ring-1 focus:ring-purple-500/50"
+          autocomplete="off"
+         />
+         <button
+          type="submit"
+          class="px-6 py-3 rounded-lg bg-gradient-to-r from-purple-600 to-blue-600 hover:from-purple-500 hover:to-blue-500 text-white font-medium transition-all duration-200 flex items-center gap-2"
+         >
+          <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+           <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 19l9 2-9-18-9 18 9-2zm0 0v-8"/>
+          </svg>
+          <span class="hidden sm:inline">Send</span>
+         </button>
+        </div>
+       </form>
+
+       <!-- Suggestions -->
+       <div id="ai-suggestions" class="mt-6 space-y-2">
+        <p class="text-xs text-gray-500">💡 Try:</p>
+        <div class="flex flex-wrap gap-2">
+         <button class="ai-suggestion px-3 py-1 rounded-full text-xs bg-purple-900/30 hover:bg-purple-900/50 border border-purple-500/30 text-gray-300 transition-colors" data-command="deposit 0.01 SOL">
+          Deposit 0.01 SOL
+         </button>
+         <button class="ai-suggestion px-3 py-1 rounded-full text-xs bg-purple-900/30 hover:bg-purple-900/50 border border-purple-500/30 text-gray-300 transition-colors" data-command="deposit 0.05 SOL">
+          Deposit 0.05 SOL
+         </button>
+         <button class="ai-suggestion px-3 py-1 rounded-full text-xs bg-purple-900/30 hover:bg-purple-900/50 border border-purple-500/30 text-gray-300 transition-colors" data-command="check balance">
+          Check Balance
+         </button>
+        </div>
+       </div>
+      </div>
+
+      <!-- Info Cards -->
+      <div class="mt-8 grid grid-cols-1 md:grid-cols-2 gap-4">
+       <div class="glass-card p-4 rounded-lg border border-gray-700/50">
+        <div class="text-2xl mb-2">💾</div>
+        <h4 class="font-semibold text-white mb-1">Deposit</h4>
+        <p class="text-sm text-gray-400">Say: "deposit 0.01 SOL"</p>
+       </div>
+       <div class="glass-card p-4 rounded-lg border border-gray-700/50">
+        <div class="text-2xl mb-2">📤</div>
+        <h4 class="font-semibold text-white mb-1">Send</h4>
+        <p class="text-sm text-gray-400">Say: "send 0.01 SOL to &lt;address&gt;"</p>
+       </div>
       </div>
      </div>
     </div>

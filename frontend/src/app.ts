@@ -58,7 +58,7 @@ export class App {
     // Tab switching
     document.getElementById('mode-deposit')?.addEventListener('click', () => this.switchMode('deposit'))
     document.getElementById('mode-send')?.addEventListener('click', () => this.switchMode('send'))
-    document.getElementById('mode-history')?.addEventListener('click', () => this.switchMode('history'))
+    document.getElementById('mode-ai')?.addEventListener('click', () => this.switchMode('ai'))
     document.getElementById('mode-about')?.addEventListener('click', () => this.switchMode('about'))
 
     // Wallet
@@ -68,6 +68,24 @@ export class App {
     // Forms
     document.getElementById('send-form')?.addEventListener('submit', (e) => this.handleSend(e))
     document.getElementById('send-to-user-form')?.addEventListener('submit', (e) => this.handleSendToUser(e))
+    
+    // AI Assistant
+    document.getElementById('ai-form')?.addEventListener('submit', (e) => this.handleAISubmit(e))
+    
+    // AI Suggestions
+    document.querySelectorAll('.ai-suggestion').forEach(btn => {
+      btn.addEventListener('click', (e) => {
+        const button = e.target as HTMLElement
+        const command = button.getAttribute('data-command')
+        if (command) {
+          const input = document.getElementById('ai-input') as HTMLInputElement
+          if (input) {
+            input.value = command
+            input.focus()
+          }
+        }
+      })
+    })
     
     // Token selector
     document.getElementById('send-token-select')?.addEventListener('change', (e) => {
@@ -84,7 +102,7 @@ export class App {
     })
   }
 
-  private switchMode(mode: 'deposit' | 'send' | 'history' | 'about') {
+  private switchMode(mode: 'deposit' | 'send' | 'ai' | 'about') {
     // Update active button
     document.querySelectorAll('.mode-btn').forEach(btn => {
       btn.classList.remove('tab-active')
@@ -98,7 +116,7 @@ export class App {
     // Hide all sections
     document.getElementById('section-deposit')?.classList.add('hidden')
     document.getElementById('section-send')?.classList.add('hidden')
-    document.getElementById('section-history')?.classList.add('hidden')
+    document.getElementById('section-ai')?.classList.add('hidden')
     document.getElementById('section-about')?.classList.add('hidden')
 
     // Show selected section
@@ -107,8 +125,6 @@ export class App {
     // Load data for specific modes
     if (mode === 'deposit') {
       this.updateDepositBalance()
-    } else if (mode === 'history') {
-      this.loadHistory()
     }
   }
 
@@ -663,6 +679,127 @@ export class App {
 
   private hideLoading() {
     document.getElementById('loading-modal')?.classList.add('hidden')
+  }
+
+  private async handleAISubmit(e: Event) {
+    e.preventDefault()
+
+    if (!this.walletAddress) {
+      this.addAIChatMessage('❌ Please connect your wallet first', 'bot')
+      return
+    }
+
+    const input = document.getElementById('ai-input') as HTMLInputElement
+    const command = input.value.trim()
+    
+    if (!command) return
+
+    // Add user message
+    this.addAIChatMessage(command, 'user')
+    input.value = ''
+
+    try {
+      // Import AI assistant
+      const { parseIntent, executeIntent } = await import('./components/aiAssistant')
+
+      // Parse intent
+      const intent = parseIntent(command)
+
+      if (intent.type === 'unknown') {
+        this.addAIChatMessage(
+          '❓ I don\'t understand. Try:\n• "deposit 0.01 SOL"\n• "send 0.01 SOL to <address>"',
+          'bot'
+        )
+        return
+      }
+
+      // Prepare wallet object
+      const wallet = window.solana
+
+      // Show progress
+      const progressMessageId = this.addAIChatMessage('⏳ Processing...', 'bot')
+
+      // Execute intent
+      const result = await executeIntent(
+        intent,
+        {
+          input: command,
+          wallet,
+          connection: this.connection
+        },
+        (progress: string) => {
+          this.updateAIChatMessage(progressMessageId, progress)
+        }
+      )
+
+      // Show success
+      if (intent.type === 'deposit') {
+        this.updateAIChatMessage(
+          progressMessageId,
+          `✅ Deposit successful!\nAmount: ${intent.amount} SOL\nTX: ${result.tx}`
+        )
+      } else if (intent.type === 'send') {
+        this.updateAIChatMessage(
+          progressMessageId,
+          `✅ Send successful!\nAmount: ${intent.amount} SOL\nRecipient: ${intent.recipient?.slice(0, 8)}...\nTX: ${result.tx}`
+        )
+      } else if (intent.type === 'balance') {
+        this.updateAIChatMessage(progressMessageId, '📊 Balance check completed')
+      }
+    } catch (error: any) {
+      const errorMsg = error.message || String(error)
+      this.addAIChatMessage(`❌ Error: ${errorMsg}`, 'bot')
+    }
+  }
+
+  private addAIChatMessage(
+    message: string,
+    sender: 'user' | 'bot'
+  ): string {
+    const container = document.getElementById('ai-chat-container')
+    if (!container) return ''
+
+    // Clear initial message if first real message
+    if (container.querySelector('.py-8')) {
+      const initMsg = container.querySelector('.py-8')
+      if (initMsg) initMsg.remove()
+    }
+
+    const msgId = `msg-${Date.now()}`
+    const messageEl = document.createElement('div')
+    messageEl.id = msgId
+    messageEl.className = `flex gap-3 ${sender === 'user' ? 'justify-end' : 'justify-start'}`
+
+    const content = document.createElement('div')
+    content.className = `max-w-xs px-4 py-2 rounded-lg ${
+      sender === 'user'
+        ? 'bg-purple-600 text-white'
+        : 'bg-gray-800 text-gray-100'
+    }`
+    content.innerHTML = message.replace(/\n/g, '<br/>')
+
+    messageEl.appendChild(content)
+    container.appendChild(messageEl)
+
+    // Scroll to bottom
+    container.scrollTop = container.scrollHeight
+
+    return msgId
+  }
+
+  private updateAIChatMessage(messageId: string, message: string) {
+    const messageEl = document.getElementById(messageId)
+    if (messageEl) {
+      const content = messageEl.querySelector('div')
+      if (content) {
+        content.innerHTML = message.replace(/\n/g, '<br/>')
+      }
+      // Scroll to bottom
+      const container = document.getElementById('ai-chat-container')
+      if (container) {
+        container.scrollTop = container.scrollHeight
+      }
+    }
   }
 
   private showNotification(text: string) {
