@@ -102,7 +102,12 @@ class WalletManager {
         }
 
         try {
-          const signed = await adapter.signTransaction(transaction)
+          // signTransaction may not be on base interface but is available on most adapters
+          const signTx = (adapter as any).signTransaction
+          if (typeof signTx !== 'function') {
+            throw new Error('Wallet does not support transaction signing')
+          }
+          const signed = await signTx.call(adapter, transaction)
           return signed
         } catch (err: any) {
           console.error('Failed to sign transaction:', err)
@@ -117,11 +122,12 @@ class WalletManager {
         }
 
         try {
-          // signMessage might not exist on all adapters
-          if (!adapter.signMessage) {
+          // signMessage may not be on base interface but is available on most adapters
+          const signMsg = (adapter as any).signMessage
+          if (typeof signMsg !== 'function') {
             throw new Error('Wallet does not support message signing')
           }
-          const signature = await adapter.signMessage(message)
+          const signature = await signMsg.call(adapter, message)
           return signature
         } catch (err: any) {
           console.error('Failed to sign message:', err)
