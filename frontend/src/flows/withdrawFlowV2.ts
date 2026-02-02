@@ -12,7 +12,7 @@
 
 import { CONFIG } from '../config'
 import { showError, showSuccess } from '../utils/notificationUtils'
-import { Connection, PublicKey, SystemProgram, Transaction } from '@solana/web3.js'
+import { Connection, PublicKey, SystemProgram, Transaction, VersionedTransaction } from '@solana/web3.js'
 import { withdrawFromPrivacyCash, getPrivateBalance } from '../services/privacyCashClient'
 import { getFeeMessage, calculateFee, getNetAmount, FEE_CONFIG } from '../utils/feeCalculator'
 
@@ -59,7 +59,7 @@ export async function executeWithdraw(
     const balance = await getPrivateBalance(connection, {
       publicKey: publicKeyObj,
       signMessage: async (msg: Uint8Array) => {
-        return await wallet.signMessage(msg)
+        return await walletAdapter.signMessage(msg)
       }
     })
 
