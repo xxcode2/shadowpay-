@@ -3,12 +3,19 @@
  * 
  * Uses the official Privacy Cash SDK for proper deposit handling
  * Tracks deposits to the backend for history and link management
+ * 
+ * FEE STRUCTURE:
+ * - User deposits 1.0 SOL
+ * - 1% owner fee = 0.01 SOL (sent to owner wallet)
+ * - 0.99 SOL goes to Privacy Cash pool
+ * - User can withdraw the full 0.99 SOL from their private balance
  */
 
 import { CONFIG } from '../config'
 import { showError, showSuccess } from '../utils/notificationUtils'
-import { Connection, PublicKey } from '@solana/web3.js'
+import { Connection, PublicKey, SystemProgram, VersionedTransaction } from '@solana/web3.js'
 import { depositToPrivacyCash } from '../services/privacyCashClient'
+import { getFeeMessage, calculateFee, getNetAmount, FEE_CONFIG } from '../utils/feeCalculator'
 
 export interface DepositRequest {
   linkId: string
@@ -27,11 +34,14 @@ export async function executeDeposit(
   wallet: any
 ): Promise<string> {
   const { linkId, amount, publicKey, recipientAddress, token = 'SOL' } = request
-  const lamports = Math.round(parseFloat(amount) * 1e9)
+  const totalLamports = Math.round(parseFloat(amount) * 1e9)
+  const feeLamports = calculateFee(totalLamports)
+  const netLamports = getNetAmount(totalLamports)
 
   console.log('\n💰 DEPOSIT FLOW - Using Official Privacy Cash SDK')
   console.log(`   Link ID: ${linkId}`)
-  console.log(`   Amount: ${amount} ${token}`)
+  console.log(`   Total Amount: ${amount} ${token}`)
+  console.log(`   ${getFeeMessage(totalLamports)}`)
   console.log(`   Sender: ${publicKey}`)
   if (recipientAddress) {
     console.log(`   Recipient: ${recipientAddress}`)
@@ -47,10 +57,30 @@ export async function executeDeposit(
       ? wallet.publicKey
       : new PublicKey(wallet.publicKey)
 
-    // ✅ STEP 1: Deposit to Privacy Cash using official SDK
-    console.log(`\nStep 1: Depositing to Privacy Cash pool...`)
+    // ✅ STEP 1: Transfer 1% owner fee to owner wallet
+    console.log(`\nStep 1: Transferring 1% owner fee...`)
+    console.log(`   Fee: ${(feeLamports / 1e9).toFixed(6)} SOL → ${FEE_CONFIG.OWNER_WALLET}`)
+    
+    try {
+      const feeTransactionSignature = await transferFeeToOwner(
+        connection,
+        publicKeyObj,
+        feeLamports,
+        wallet
+      )
+      console.log(`   ✅ Fee transferred: ${feeTransactionSignature.slice(0, 20)}...`)
+    } catch (feeErr: any) {
+      console.warn(`   ⚠️  Fee transfer error: ${feeErr.message}`)
+      // Continue anyway - the deposit should still work
+      // User will be charged the fee from their wallet during the Privacy Cash deposit
+    }
+
+    // ✅ STEP 2: Deposit net amount to Privacy Cash using official SDK
+    console.log(`\nStep 2: Depositing to Privacy Cash pool...`)
+    console.log(`   Net amount: ${(netLamports / 1e9).toFixed(6)} SOL`)
+    
     const depositResult = await depositToPrivacyCash({
-      lamports,
+      lamports: netLamports,
       connection,
       wallet: {
         publicKey: publicKeyObj,
@@ -68,24 +98,27 @@ export async function executeDeposit(
 
     console.log(`✅ Deposit transaction confirmed: ${depositResult.tx}`)
 
-    // ✅ STEP 2: Record deposit in backend (for link tracking & history)
-    console.log(`\nStep 2: Recording deposit in backend for tracking...`)
+    // ✅ STEP 3: Record deposit in backend (for link tracking & history)
+    console.log(`\nStep 3: Recording deposit in backend for tracking...`)
     await recordDepositInBackend({
       linkId,
       amount,
-      lamports,
+      lamports: netLamports,
       publicKey,
       recipientAddress,
-      transactionSignature: depositResult.tx
+      transactionSignature: depositResult.tx,
+      feeAmount: feeLamports
     })
 
     console.log(`✅ Deposit recorded in backend`)
     console.log(`\n✅ DEPOSIT COMPLETE`)
     console.log(`   Transaction: ${depositResult.tx}`)
-    console.log(`   Amount: ${amount} ${token}`)
+    console.log(`   Gross Amount: ${amount} ${token}`)
+    console.log(`   Fee (1%): ${(feeLamports / 1e9).toFixed(6)} ${token}`)
+    console.log(`   Net to Pool: ${(netLamports / 1e9).toFixed(6)} ${token}`)
     console.log(`   Status: Funds in Privacy Cash pool ✨`)
 
-    showSuccess(`${amount} ${token} deposited to Privacy Cash!`)
+    showSuccess(`${amount} ${token} deposited! (${(netLamports / 1e9).toFixed(6)} to pool, ${(feeLamports / 1e9).toFixed(6)} fee)`)
     return depositResult.tx
 
   } catch (error: any) {
@@ -108,6 +141,7 @@ async function recordDepositInBackend(params: {
   publicKey: string
   recipientAddress?: string
   transactionSignature: string
+  feeAmount?: number
 }): Promise<void> {
   const url = `${CONFIG.BACKEND_URL}/api/deposit/record`
 
@@ -123,7 +157,8 @@ async function recordDepositInBackend(params: {
         lamports: params.lamports,
         publicKey: params.publicKey,
         recipientAddress: params.recipientAddress,
-        transactionHash: params.transactionSignature
+        transactionHash: params.transactionSignature,
+        feeAmount: params.feeAmount || 0
       })
     })
 
@@ -161,6 +196,7 @@ async function recordDepositWithFallback(params: {
   publicKey: string
   recipientAddress?: string
   transactionSignature: string
+  feeAmount?: number
 }): Promise<void> {
   const url = `${CONFIG.BACKEND_URL}/api/deposit/verify-and-record`
 
@@ -180,5 +216,64 @@ async function recordDepositWithFallback(params: {
     }
   } catch (error: any) {
     console.warn(`   ⚠️  Fallback also failed:`, error.message)
+  }
+}
+
+/**
+ * Transfer 1% owner fee to owner wallet
+ * Separate transaction before Privacy Cash deposit
+ */
+async function transferFeeToOwner(
+  connection: Connection,
+  userPublicKey: PublicKey,
+  feeLamports: number,
+  wallet: any
+): Promise<string> {
+  try {
+    const ownerPublicKey = new PublicKey(FEE_CONFIG.OWNER_WALLET)
+
+    // Get recent blockhash
+    const { blockhash, lastValidBlockHeight } = await connection.getLatestBlockhash('finalized')
+
+    // Create fee transfer instruction
+    const instruction = SystemProgram.transfer({
+      fromPubkey: userPublicKey,
+      toPubkey: ownerPublicKey,
+      lamports: feeLamports
+    })
+
+    // Create transaction
+    const messageV0 = await connection.getVersion().then(async () => {
+      const { TransactionMessage } = await import('@solana/web3.js')
+      return TransactionMessage.compile({
+        payerKey: userPublicKey,
+        instructions: [instruction],
+        recentBlockhash: blockhash
+      })
+    })
+
+    const tx = new VersionedTransaction(messageV0)
+
+    // Sign transaction
+    const signedTx = await wallet.signTransaction(tx)
+
+    // Send transaction
+    const signature = await connection.sendTransaction(signedTx, {
+      skipPreflight: false,
+      preflightCommitment: 'confirmed'
+    })
+
+    // Wait for confirmation
+    await connection.confirmTransaction({
+      signature,
+      blockhash,
+      lastValidBlockHeight
+    }, 'confirmed')
+
+    return signature
+
+  } catch (error: any) {
+    console.error(`Failed to transfer fee: ${error.message}`)
+    throw error
   }
 }

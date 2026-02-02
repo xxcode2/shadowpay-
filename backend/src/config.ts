@@ -41,6 +41,14 @@ export const PRIVACY_CASH_CONFIG = {
     maxAmount: 100, // SOL
   },
 
+  // Owner fee configuration
+  ownerFee: {
+    // Owner wallet address that receives fees
+    recipientWallet: 'Endz5whgDQ8L92Ji8vPfrA3yAVYpS2gx5U7KSS4KLgv6',
+    // Owner fee percentage per transaction
+    percentage: 0.01, // 1%
+  },
+
   // Transaction monitoring configuration
   monitoring: {
     // Maximum retries for transaction confirmation

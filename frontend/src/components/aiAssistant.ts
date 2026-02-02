@@ -1,6 +1,10 @@
 /**
  * AI Assistant for ShadowPay
  * Natural language interface for deposit and send operations
+ * 
+ * FEE DISCLOSURE:
+ * - Every deposit and send transaction includes a 1% owner fee
+ * - Fee is shown transparently to user before confirmation
  */
 
 import { executeDeposit } from '../flows/depositFlowV2'
@@ -8,6 +12,7 @@ import { executeWithdraw } from '../flows/withdrawFlowV2'
 import { getPrivateBalance } from '../services/privacyCashClient'
 import { showError, showSuccess } from '../utils/notificationUtils'
 import { Connection, PublicKey } from '@solana/web3.js'
+import { getFeeMessage } from '../utils/feeCalculator'
 
 export interface AIAssistantRequest {
   input: string
@@ -116,7 +121,9 @@ export async function executeIntent(
         throw new Error('Please specify a valid amount (e.g., "deposit 0.01 SOL")')
       }
 
-      onProgress(`💰 Depositing ${intent.amount} SOL to your private balance...`)
+      const lamports = Math.round(intent.amount * 1e9)
+      const feeMessage = getFeeMessage(lamports)
+      onProgress(`💰 Depositing ${intent.amount} SOL to your private balance...\n${feeMessage}`)
 
       const result = await executeDeposit(
         {
@@ -135,7 +142,7 @@ export async function executeIntent(
       
       // Truncate TX for display
       const txDisplay = txId.length > 16 ? txId.slice(0, 16) + '...' : txId
-      onProgress(`✅ Deposit successful!\nAmount: ${intent.amount} SOL\nTX: ${txDisplay}`)
+      onProgress(`✅ Deposit successful!\n${feeMessage}\nTX: ${txDisplay}`)
       return result
     }
 
@@ -159,11 +166,12 @@ export async function executeIntent(
         )
       }
 
+      const lamports = Math.round(intent.amount * 1e9)
+      const feeMessage = getFeeMessage(lamports)
       onProgress(
-        `📤 Sending ${intent.amount} SOL to ${intent.recipient.slice(0, 8)}...`
+        `📤 Sending ${intent.amount} SOL to ${intent.recipient.slice(0, 8)}...\n${feeMessage}`
       )
 
-      const lamports = Math.round(intent.amount * 1e9)
       const result = await executeWithdraw(
         {
           walletAddress: wallet.publicKey?.toString?.() || 'unknown',
@@ -182,7 +190,7 @@ export async function executeIntent(
       // Truncate TX for display
       const txDisplay = txId.length > 16 ? txId.slice(0, 16) + '...' : txId
       onProgress(
-        `✅ Send successful!\nAmount: ${intent.amount} SOL\nTo: ${intent.recipient.slice(0, 8)}...\nTX: ${txDisplay}`
+        `✅ Send successful!\n${feeMessage}\nTo: ${intent.recipient.slice(0, 8)}...\nTX: ${txDisplay}`
       )
       return result
     }

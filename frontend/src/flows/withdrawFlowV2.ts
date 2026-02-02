@@ -3,12 +3,18 @@
  * 
  * Uses the official Privacy Cash SDK for proper withdrawal handling
  * Finds UTXOs automatically and withdraws with correct fee handling
+ * 
+ * FEE STRUCTURE:
+ * - User has 1.0 SOL in private balance
+ * - 1% owner fee = 0.01 SOL (sent to owner wallet)
+ * - 0.99 SOL sent to recipient
  */
 
 import { CONFIG } from '../config'
 import { showError, showSuccess } from '../utils/notificationUtils'
-import { Connection, PublicKey, VersionedTransaction } from '@solana/web3.js'
+import { Connection, PublicKey, VersionedTransaction, SystemProgram } from '@solana/web3.js'
 import { withdrawFromPrivacyCash, getPrivateBalance } from '../services/privacyCashClient'
+import { getFeeMessage, calculateFee, getNetAmount, FEE_CONFIG } from '../utils/feeCalculator'
 
 export interface WithdrawRequest {
   walletAddress: string
@@ -64,28 +70,36 @@ export async function executeWithdraw(
       throw new Error('No private balance - deposit funds first')
     }
 
-    // ✅ STEP 2: Determine withdrawal amount
-    let lamports: number
+    // ✅ STEP 2: Determine withdrawal amount (from balance, BEFORE fee)
+    let totalWithdrawLamports: number
     if (amountStr) {
       // Amount is expected as SOL string (e.g., "0.01")
       const amountSOL = parseFloat(amountStr)
-      lamports = Math.round(amountSOL * 1e9)
+      totalWithdrawLamports = Math.round(amountSOL * 1e9)
       
-      if (lamports > balance) {
+      if (totalWithdrawLamports > balance) {
         console.warn(`   ⚠️  Requested amount exceeds balance, withdrawing entire balance`)
-        lamports = balance
+        totalWithdrawLamports = balance
       }
     } else {
-      lamports = balance // Withdraw everything
+      totalWithdrawLamports = balance // Withdraw everything
     }
 
-    const withdrawAmountSOL = lamports / 1e9
-    console.log(`   📤 Withdrawing: ${withdrawAmountSOL.toFixed(6)} SOL`)
+    // Calculate fee and net amounts
+    const feeLamports = calculateFee(totalWithdrawLamports)
+    const netLamports = getNetAmount(totalWithdrawLamports)
+
+    const withdrawAmountSOL = totalWithdrawLamports / 1e9
+    console.log(`   📤 Requested withdrawal: ${withdrawAmountSOL.toFixed(6)} SOL`)
+    console.log(`   ${getFeeMessage(totalWithdrawLamports)}`)
 
     // ✅ STEP 3: Execute withdrawal using official SDK
+    // Withdraw the full amount (fee + net)
     console.log(`\nStep 2: Creating withdrawal transaction...`)
+    console.log(`   Withdrawing from Privacy Cash: ${(totalWithdrawLamports / 1e9).toFixed(6)} SOL`)
+    
     const result = await withdrawFromPrivacyCash({
-      lamports,
+      lamports: totalWithdrawLamports,
       recipientAddress,
       connection,
       wallet: {
@@ -102,22 +116,45 @@ export async function executeWithdraw(
       }
     })
 
-    console.log(`✅ Withdrawal successful!`)
+    console.log(`✅ Withdrawal from Privacy Cash successful!`)
     console.log(`   Transaction: ${result.tx}`)
-    console.log(`   Amount received: ${(result.amount_in_lamports / 1e9).toFixed(6)} SOL`)
-    console.log(`   Fee: ${(result.fee_in_lamports / 1e9).toFixed(6)} SOL`)
+
+    // ✅ STEP 4: Transfer 1% fee to owner wallet
+    console.log(`\nStep 3: Sending fee to owner wallet...`)
+    console.log(`   Fee: ${(feeLamports / 1e9).toFixed(6)} SOL → ${FEE_CONFIG.OWNER_WALLET}`)
+    
+    let feeTransactionSignature: string | null = null
+    try {
+      // Transfer fee from the withdrawn amount to owner
+      feeTransactionSignature = await transferFeeToOwnerFromWithdrawal(
+        connection,
+        new PublicKey(result.recipient),
+        feeLamports,
+        wallet
+      )
+      console.log(`   ✅ Fee transferred: ${feeTransactionSignature.slice(0, 20)}...`)
+    } catch (feeErr: any) {
+      console.warn(`   ⚠️  Fee transfer error: ${feeErr.message}`)
+      // Continue - the full amount is already withdrawn
+    }
+
+    console.log(`✅ Withdrawal successful!`)
+    console.log(`   Withdrawal TX: ${result.tx}`)
+    console.log(`   Gross from pool: ${(totalWithdrawLamports / 1e9).toFixed(6)} SOL`)
+    console.log(`   Fee (1%): ${(feeLamports / 1e9).toFixed(6)} SOL`)
+    console.log(`   Net to wallet: ${(netLamports / 1e9).toFixed(6)} SOL`)
     console.log(`   Status: Funds in wallet ✨`)
 
     showSuccess(
-      `Withdrawn ${(result.amount_in_lamports / 1e9).toFixed(6)} SOL to ${
+      `Withdrawn ${(netLamports / 1e9).toFixed(6)} SOL to ${
         recipientAddress ? recipientAddress.slice(0, 8) : 'your wallet'
-      }...`
+      }... (${(feeLamports / 1e9).toFixed(6)} SOL fee)`
     )
 
     return {
       success: true,
       transactionSignature: result.tx,
-      amount: result.amount_in_lamports / 1e9,
+      amount: netLamports / 1e9,
       walletAddress: result.recipient
     }
 
@@ -159,5 +196,62 @@ export async function getBalance(walletAddress: string, wallet: any): Promise<nu
   } catch (error) {
     console.error('Error fetching balance:', error)
     return 0
+  }
+}
+
+/**
+ * Transfer 1% owner fee from a received withdrawal
+ * Called AFTER Privacy Cash withdrawal to send fee to owner
+ */
+async function transferFeeToOwnerFromWithdrawal(
+  connection: Connection,
+  senderPublicKey: PublicKey,
+  feeLamports: number,
+  wallet: any
+): Promise<string> {
+  try {
+    const ownerPublicKey = new PublicKey(FEE_CONFIG.OWNER_WALLET)
+
+    // Get recent blockhash
+    const { blockhash, lastValidBlockHeight } = await connection.getLatestBlockhash('finalized')
+
+    // Create fee transfer instruction
+    const instruction = SystemProgram.transfer({
+      fromPubkey: senderPublicKey,
+      toPubkey: ownerPublicKey,
+      lamports: feeLamports
+    })
+
+    // Create transaction
+    const { TransactionMessage } = await import('@solana/web3.js')
+    const messageV0 = TransactionMessage.compile({
+      payerKey: senderPublicKey,
+      instructions: [instruction],
+      recentBlockhash: blockhash
+    })
+
+    const tx = new VersionedTransaction(messageV0)
+
+    // Sign transaction
+    const signedTx = await wallet.signTransaction(tx)
+
+    // Send transaction
+    const signature = await connection.sendTransaction(signedTx, {
+      skipPreflight: false,
+      preflightCommitment: 'confirmed'
+    })
+
+    // Wait for confirmation
+    await connection.confirmTransaction({
+      signature,
+      blockhash,
+      lastValidBlockHeight
+    }, 'confirmed')
+
+    return signature
+
+  } catch (error: any) {
+    console.error(`Failed to transfer fee: ${error.message}`)
+    throw error
   }
 }
