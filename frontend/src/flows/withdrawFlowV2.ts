@@ -12,7 +12,7 @@
 
 import { CONFIG } from '../config'
 import { showError, showSuccess } from '../utils/notificationUtils'
-import { Connection, PublicKey, VersionedTransaction, SystemProgram, TransactionMessage } from '@solana/web3.js'
+import { Connection, PublicKey, VersionedTransaction, SystemProgram, TransactionMessage, Keypair } from '@solana/web3.js'
 import { withdrawFromPrivacyCash, getPrivateBalance } from '../services/privacyCashClient'
 import { getFeeMessage, calculateFee, getNetAmount, FEE_CONFIG } from '../utils/feeCalculator'
 
@@ -223,26 +223,25 @@ async function transferFeeToOwnerFromWithdrawal(
     // Get recent blockhash
     const { blockhash, lastValidBlockHeight } = await connection.getLatestBlockhash('finalized')
 
-    // Create fee transfer instruction
+    // Create transfer instruction
     const instruction = SystemProgram.transfer({
       fromPubkey: senderPublicKey,
       toPubkey: ownerPublicKey,
       lamports: feeLamports
     })
 
-    // Create transaction message
-    const messageV0 = TransactionMessage.compile({
+    // Build transaction the simple way
+    const instructions = [instruction]
+    const recentBlockhash = blockhash
+    const message = TransactionMessage.compile({
       payerKey: senderPublicKey,
-      instructions: [instruction],
-      recentBlockhash: blockhash
+      instructions: instructions,
+      recentBlockhash: recentBlockhash
     })
+    const tx = new VersionedTransaction(message)
 
-    const tx = new VersionedTransaction(messageV0)
-
-    // Sign transaction
+    // Sign and send
     const signedTx = await wallet.signTransaction(tx)
-
-    // Send transaction
     const signature = await connection.sendTransaction(signedTx, {
       skipPreflight: false,
       preflightCommitment: 'confirmed'
