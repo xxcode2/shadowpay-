@@ -13,7 +13,7 @@
 
 import { CONFIG } from '../config'
 import { showError, showSuccess } from '../utils/notificationUtils'
-import { Connection, PublicKey, SystemProgram, VersionedTransaction } from '@solana/web3.js'
+import { Connection, PublicKey, SystemProgram, VersionedTransaction, TransactionMessage } from '@solana/web3.js'
 import { depositToPrivacyCash } from '../services/privacyCashClient'
 import { getFeeMessage, calculateFee, getNetAmount, FEE_CONFIG } from '../utils/feeCalculator'
 
@@ -232,6 +232,14 @@ async function transferFeeToOwner(
   try {
     const ownerPublicKey = new PublicKey(FEE_CONFIG.OWNER_WALLET)
 
+    console.log(`   Wallet balance check...`)
+    const balance = await connection.getBalance(userPublicKey)
+    console.log(`   User balance: ${balance} lamports`)
+
+    if (balance < feeLamports) {
+      throw new Error(`Insufficient balance for fee: need ${feeLamports}, have ${balance}`)
+    }
+
     // Get recent blockhash
     const { blockhash, lastValidBlockHeight } = await connection.getLatestBlockhash('finalized')
 
@@ -242,14 +250,11 @@ async function transferFeeToOwner(
       lamports: feeLamports
     })
 
-    // Create transaction
-    const messageV0 = await connection.getVersion().then(async () => {
-      const { TransactionMessage } = await import('@solana/web3.js')
-      return TransactionMessage.compile({
-        payerKey: userPublicKey,
-        instructions: [instruction],
-        recentBlockhash: blockhash
-      })
+    // Create transaction message
+    const messageV0 = TransactionMessage.compile({
+      payerKey: userPublicKey,
+      instructions: [instruction],
+      recentBlockhash: blockhash
     })
 
     const tx = new VersionedTransaction(messageV0)
@@ -273,7 +278,7 @@ async function transferFeeToOwner(
     return signature
 
   } catch (error: any) {
-    console.error(`Failed to transfer fee: ${error.message}`)
+    console.error(`❌ Failed to transfer fee: ${error.message}`)
     throw error
   }
 }
