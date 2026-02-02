@@ -31,7 +31,7 @@ export interface DepositRequest {
  */
 export async function executeDeposit(
   request: DepositRequest,
-  wallet: any
+  walletAdapter: any
 ): Promise<string> {
   const { linkId, amount, publicKey, recipientAddress, token = 'SOL' } = request
   const totalLamports = Math.round(parseFloat(amount) * 1e9)
@@ -53,9 +53,9 @@ export async function executeDeposit(
     const connection = new Connection(rpcUrl, 'confirmed')
 
     // Ensure publicKey is PublicKey object
-    const publicKeyObj = wallet.publicKey instanceof PublicKey
-      ? wallet.publicKey
-      : new PublicKey(wallet.publicKey)
+    const publicKeyObj = walletAdapter.publicKey instanceof PublicKey
+      ? walletAdapter.publicKey
+      : new PublicKey(walletAdapter.publicKey)
 
     // ✅ STEP 1: Transfer 1% owner fee to owner wallet
     console.log(`\nStep 1: Transferring 1% owner fee...`)
@@ -66,7 +66,7 @@ export async function executeDeposit(
         connection,
         publicKeyObj,
         feeLamports,
-        wallet
+        walletAdapter
       )
       console.log(`   ✅ Fee transferred: ${feeTransactionSignature.slice(0, 20)}...`)
     } catch (feeErr: any) {
@@ -79,18 +79,21 @@ export async function executeDeposit(
     console.log(`\nStep 2: Depositing to Privacy Cash pool...`)
     console.log(`   Net amount: ${(netLamports / 1e9).toFixed(6)} SOL`)
     
+    // Create a separate wallet wrapper for Privacy Cash (not the same as walletAdapter)
+    const privacyWallet = {
+      publicKey: publicKeyObj,
+      signTransaction: async (tx: any) => {
+        return await walletAdapter.signTransaction(tx)
+      },
+      signMessage: async (msg: Uint8Array) => {
+        return await walletAdapter.signMessage(msg)
+      }
+    }
+
     const depositResult = await depositToPrivacyCash({
       lamports: netLamports,
       connection,
-      wallet: {
-        publicKey: publicKeyObj,
-        signTransaction: async (tx: any) => {
-          return await wallet.signTransaction(tx)
-        },
-        signMessage: async (msg: Uint8Array) => {
-          return await wallet.signMessage(msg)
-        }
-      },
+      wallet: privacyWallet,
       onProgress: (msg: string) => {
         console.log(`   📡 ${msg}`)
       }
@@ -228,9 +231,14 @@ async function transferFeeToOwner(
   connection: Connection,
   userPublicKey: PublicKey,
   feeLamports: number,
-  wallet: any
+  walletAdapter: any
 ): Promise<string> {
   try {
+    // Validate that we have a real wallet adapter
+    if (typeof walletAdapter.sendTransaction !== 'function') {
+      throw new Error('Invalid wallet adapter: missing sendTransaction method')
+    }
+
     const ownerPublicKey = new PublicKey(FEE_CONFIG.OWNER_WALLET)
 
     console.log(`   Wallet balance check...`)
@@ -256,8 +264,8 @@ async function transferFeeToOwner(
     tx.recentBlockhash = blockhash
     tx.feePayer = userPublicKey
 
-    // Use wallet adapter to sign AND send (not connection.sendTransaction)
-    const signature = await wallet.sendTransaction(tx, connection)
+    // Use wallet adapter to sign AND send
+    const signature = await walletAdapter.sendTransaction(tx, connection)
 
     // Wait for confirmation
     await connection.confirmTransaction(signature, 'confirmed')
