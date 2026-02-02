@@ -53,14 +53,17 @@ class WalletManager {
       throw new Error('Wallet adapter not initialized')
     }
 
+    // Capture adapter in closure so methods can access it
+    const adapter = this.adapter
+
     return {
-      publicKey: this.adapter.publicKey,
-      connected: this.adapter.connected,
+      publicKey: adapter.publicKey,
+      connected: adapter.connected,
 
       async connect() {
-        if (!this.adapter) throw new Error('Wallet not initialized')
+        if (!adapter) throw new Error('Wallet not initialized')
         try {
-          await this.adapter.connect()
+          await adapter.connect()
         } catch (err: any) {
           console.error('Failed to connect wallet:', err)
           throw err
@@ -68,9 +71,9 @@ class WalletManager {
       },
 
       async disconnect() {
-        if (!this.adapter) throw new Error('Wallet not initialized')
+        if (!adapter) throw new Error('Wallet not initialized')
         try {
-          await this.adapter.disconnect()
+          await adapter.disconnect()
         } catch (err: any) {
           console.error('Failed to disconnect wallet:', err)
           throw err
@@ -78,13 +81,13 @@ class WalletManager {
       },
 
       async sendTransaction(transaction: any, connection: Connection): Promise<string> {
-        if (!this.adapter) throw new Error('Wallet not initialized')
-        if (!this.adapter.connected) {
+        if (!adapter) throw new Error('Wallet not initialized')
+        if (!adapter.connected) {
           throw new WalletNotConnectedError()
         }
 
         try {
-          const signature = await this.adapter.sendTransaction(transaction, connection)
+          const signature = await adapter.sendTransaction(transaction, connection)
           return signature
         } catch (err: any) {
           console.error('Failed to send transaction:', err)
@@ -93,13 +96,13 @@ class WalletManager {
       },
 
       async signTransaction(transaction: any): Promise<any> {
-        if (!this.adapter) throw new Error('Wallet not initialized')
-        if (!this.adapter.connected) {
+        if (!adapter) throw new Error('Wallet not initialized')
+        if (!adapter.connected) {
           throw new WalletNotConnectedError()
         }
 
         try {
-          const signed = await this.adapter.signTransaction(transaction)
+          const signed = await adapter.signTransaction(transaction)
           return signed
         } catch (err: any) {
           console.error('Failed to sign transaction:', err)
@@ -108,17 +111,17 @@ class WalletManager {
       },
 
       async signMessage(message: Uint8Array): Promise<Uint8Array> {
-        if (!this.adapter) throw new Error('Wallet not initialized')
-        if (!this.adapter.connected) {
+        if (!adapter) throw new Error('Wallet not initialized')
+        if (!adapter.connected) {
           throw new WalletNotConnectedError()
         }
 
         try {
           // signMessage might not exist on all adapters
-          if (!this.adapter.signMessage) {
+          if (!adapter.signMessage) {
             throw new Error('Wallet does not support message signing')
           }
-          const signature = await this.adapter.signMessage(message)
+          const signature = await adapter.signMessage(message)
           return signature
         } catch (err: any) {
           console.error('Failed to sign message:', err)
