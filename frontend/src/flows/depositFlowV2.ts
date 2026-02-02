@@ -13,7 +13,7 @@
 
 import { CONFIG } from '../config'
 import { showError, showSuccess } from '../utils/notificationUtils'
-import { Connection, PublicKey, SystemProgram, Transaction, sendAndConfirmTransaction } from '@solana/web3.js'
+import { Connection, PublicKey, SystemProgram, Transaction } from '@solana/web3.js'
 import { depositToPrivacyCash } from '../services/privacyCashClient'
 import { getFeeMessage, calculateFee, getNetAmount, FEE_CONFIG } from '../utils/feeCalculator'
 
@@ -222,7 +222,7 @@ async function recordDepositWithFallback(params: {
 /**
  * Transfer 1% owner fee to owner wallet
  * Separate transaction before Privacy Cash deposit
- * Uses simple legacy transaction (no versioning needed for basic SOL transfer)
+ * Uses simple legacy transaction with wallet adapter pattern
  */
 async function transferFeeToOwner(
   connection: Connection,
@@ -248,31 +248,19 @@ async function transferFeeToOwner(
       lamports: feeLamports
     })
 
-    // Use simple legacy transaction (no versioning needed for SOL transfer)
+    // Use simple legacy transaction
     const tx = new Transaction().add(instruction)
     
-    // Get recent blockhash for the transaction
+    // Get recent blockhash
     const { blockhash } = await connection.getLatestBlockhash('finalized')
     tx.recentBlockhash = blockhash
     tx.feePayer = userPublicKey
 
-    // Sign and send using the standard API
-    const signedTx = await wallet.signTransaction(tx)
-    const signature = await connection.sendTransaction(signedTx, {
-      skipPreflight: false,
-      preflightCommitment: 'confirmed'
-    })
+    // Use wallet adapter to sign AND send (not connection.sendTransaction)
+    const signature = await wallet.sendTransaction(tx, connection)
 
     // Wait for confirmation
-    const confirmation = await connection.confirmTransaction({
-      signature,
-      blockhash,
-      lastValidBlockHeight: 0
-    }, 'confirmed')
-
-    if (confirmation.value.err) {
-      throw new Error(`Transaction failed confirmation: ${JSON.stringify(confirmation.value.err)}`)
-    }
+    await connection.confirmTransaction(signature, 'confirmed')
 
     return signature
 
