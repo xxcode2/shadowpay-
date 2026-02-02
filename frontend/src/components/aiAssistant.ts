@@ -234,6 +234,8 @@ export async function executeIntent(
     // Handle specific error types
     if (errorMsg.includes('disconnected port')) {
       displayMsg = 'Wallet connection issue. Please reconnect your wallet.'
+    } else if (errorMsg.includes('missing transaction signing methods') || errorMsg.includes('sendTransaction')) {
+      displayMsg = 'Wallet not ready. Try reconnecting and approving the request again.'
     } else if (errorMsg.includes('User rejected')) {
       displayMsg = 'You rejected the request. Please try again and approve.'
     } else if (errorMsg.includes('No private balance')) {
@@ -248,6 +250,8 @@ export async function executeIntent(
       displayMsg = 'Invalid address format. Solana addresses must be base58 encoded.'
     } else if (errorMsg.includes('Balance check failed')) {
       displayMsg = `Could not fetch balance. ${errorMsg}`
+    } else if (errorMsg.includes('Insufficient balance')) {
+      displayMsg = 'Not enough SOL in wallet. Please add more funds and try again.'
     }
     
     onProgress(`❌ ${displayMsg}`)
