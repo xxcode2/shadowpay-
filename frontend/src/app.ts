@@ -715,7 +715,16 @@ export class App {
       }
 
       // Prepare wallet object
+      // ⚠️ CRITICAL: Must be the real wallet adapter from window.solana with sendTransaction method
       const wallet = window.solana
+
+      if (!wallet || typeof wallet.sendTransaction !== 'function') {
+        this.addAIChatMessage(
+          '❌ Wallet connection issue: Missing sendTransaction. Please reconnect your wallet.',
+          'bot'
+        )
+        return
+      }
 
       // Show progress
       const progressMessageId = this.addAIChatMessage('⏳ Processing...', 'bot')
