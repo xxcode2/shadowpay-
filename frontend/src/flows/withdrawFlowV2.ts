@@ -205,7 +205,7 @@ export async function getBalance(walletAddress: string, wallet: any): Promise<nu
 /**
  * Transfer 1% owner fee from a received withdrawal
  * Called AFTER Privacy Cash withdrawal to send fee to owner
- * Uses simple legacy transaction with wallet adapter pattern
+ * Uses simple legacy transaction with wallet adapter
  */
 async function transferFeeToOwnerFromWithdrawal(
   connection: Connection,
@@ -214,9 +214,13 @@ async function transferFeeToOwnerFromWithdrawal(
   walletAdapter: any
 ): Promise<string> {
   try {
-    // Validate that we have a real wallet with signing capability
+    // Validate that we have a real wallet adapter
     if (!walletAdapter) {
       throw new Error('No wallet adapter provided')
+    }
+
+    if (typeof walletAdapter.sendTransaction !== 'function') {
+      throw new Error('Wallet does not support sendTransaction')
     }
 
     const ownerPublicKey = new PublicKey(FEE_CONFIG.OWNER_WALLET)
@@ -244,35 +248,8 @@ async function transferFeeToOwnerFromWithdrawal(
     tx.recentBlockhash = blockhash
     tx.feePayer = senderPublicKey
 
-    // Try different wallet API patterns (Phantom, Solflare, etc.)
-    let signature: string | undefined
-
-    // Pattern 1: Try sendTransaction first (Phantom's preferred method)
-    if (typeof walletAdapter.sendTransaction === 'function') {
-      try {
-        signature = await walletAdapter.sendTransaction(tx, connection)
-      } catch (err: any) {
-        console.warn(`   sendTransaction failed: ${err.message}, trying sign+send...`)
-      }
-    }
-
-    // Pattern 2: Fallback to signTransaction + connection.sendTransaction
-    if (!signature && typeof walletAdapter.signTransaction === 'function') {
-      try {
-        const signedTx = await walletAdapter.signTransaction(tx)
-        signature = await connection.sendTransaction(signedTx, {
-          skipPreflight: false,
-          preflightCommitment: 'confirmed'
-        })
-      } catch (err: any) {
-        console.warn(`   signTransaction fallback failed: ${err.message}`)
-      }
-    }
-
-    // If neither method worked, throw error
-    if (!signature) {
-      throw new Error('Wallet adapter does not support required signing methods')
-    }
+    // Use wallet adapter's sendTransaction - guaranteed to exist
+    const signature = await walletAdapter.sendTransaction(tx, connection)
 
     // Wait for confirmation
     await connection.confirmTransaction(signature, 'confirmed')

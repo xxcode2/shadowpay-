@@ -13,11 +13,12 @@ import { getPrivateBalance } from '../services/privacyCashClient'
 import { showError, showSuccess } from '../utils/notificationUtils'
 import { Connection, PublicKey } from '@solana/web3.js'
 import { getFeeMessage } from '../utils/feeCalculator'
+import type { UnifiedWallet } from '../services/walletManager'
 
 export interface AIAssistantRequest {
   input: string
-  wallet: any
-  connection: any
+  wallet: UnifiedWallet
+  connection: Connection
 }
 
 export interface ParsedIntent {

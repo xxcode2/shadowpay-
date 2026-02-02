@@ -4,6 +4,7 @@ import { Connection, PublicKey, LAMPORTS_PER_SOL, Transaction, SystemProgram } f
 import type { DepositRequest } from './flows/depositFlow'
 import { executeDeposit } from './flows/depositFlowV2'
 import { CONFIG } from './config'
+import { getWallet, isWalletConnected, walletManager } from './services/walletManager'
 import logo from '@/assets/pay.png'
 
 const BACKEND_URL =
@@ -11,12 +12,6 @@ const BACKEND_URL =
   'https://shadowpay-backend-production.up.railway.app'
 
 const SOLANA_RPC_URL = CONFIG.SOLANA_RPC_URL
-
-declare global {
-  interface Window {
-    solana?: any
-  }
-}
 
 /**
  * ShadowPay App - Privacy Cash Integration
@@ -130,16 +125,22 @@ export class App {
   }
 
   private async connectWallet() {
-    if (!window.solana || !window.solana.isPhantom) {
-      alert('Phantom wallet not found. Install from phantom.app')
-      return
-    }
-
     try {
-      const res = await window.solana.connect({ onlyIfTrusted: false })
-      if (!res || !res.publicKey) throw new Error('No public key')
+      const wallet = getWallet()
+      
+      if (!wallet) {
+        alert('Wallet adapter not available. Install Phantom from phantom.app')
+        return
+      }
 
-      this.walletAddress = res.publicKey.toString()
+      // Connect to wallet
+      await wallet.connect()
+
+      if (!wallet.publicKey) {
+        throw new Error('Failed to get wallet public key')
+      }
+
+      this.walletAddress = wallet.publicKey.toString()
 
       // Update UI
       document.getElementById('connect-wallet-btn')?.classList.add('hidden')
@@ -150,18 +151,24 @@ export class App {
         walletEl.textContent = `${this.walletAddress.slice(0, 4)}...${this.walletAddress.slice(-4)}`
       }
 
-      console.log('Wallet connected:', this.walletAddress)
+      console.log('✅ Wallet connected:', this.walletAddress)
     } catch (err: any) {
-      console.error('Connection failed:', err.message)
-      alert(`Connection failed: ${err.message}`)
+      console.error('Wallet connection error:', err)
+      alert(`Failed to connect wallet: ${err.message}`)
     }
   }
 
-  private disconnectWallet() {
-    this.walletAddress = null
-    document.getElementById('wallet-connected')?.classList.add('hidden')
-    document.getElementById('connect-wallet-btn')?.classList.remove('hidden')
-    console.log('Wallet disconnected')
+  private async disconnectWallet() {
+    try {
+      const wallet = getWallet()
+      await wallet.disconnect()
+      this.walletAddress = null
+      document.getElementById('wallet-connected')?.classList.add('hidden')
+      document.getElementById('connect-wallet-btn')?.classList.remove('hidden')
+      console.log('✅ Wallet disconnected')
+    } catch (err: any) {
+      console.error('Disconnect error:', err)
+    }
   }
 
   private async updateDepositBalance() {
@@ -714,20 +721,19 @@ export class App {
         return
       }
 
-      // Prepare wallet object
-      const wallet = window.solana
+      // Prepare wallet using wallet manager
+      const wallet = getWallet()
 
       // Debug: Log wallet capabilities
-      console.log('🔍 Wallet validation debug:')
-      console.log('  Has wallet:', !!wallet)
-      console.log('  Has publicKey:', !!wallet?.publicKey)
-      console.log('  Has signTransaction:', typeof wallet?.signTransaction)
-      console.log('  Has sendTransaction:', typeof wallet?.sendTransaction)
-      console.log('  Has signMessage:', typeof wallet?.signMessage)
-      console.log('  Wallet methods:', Object.getOwnPropertyNames(wallet || {}).slice(0, 10))
+      console.log('🔍 Wallet adapter validation:')
+      console.log('  Connected:', wallet.connected)
+      console.log('  Has publicKey:', !!wallet.publicKey)
+      console.log('  Has sendTransaction:', typeof wallet.sendTransaction)
+      console.log('  Has signTransaction:', typeof wallet.signTransaction)
+      console.log('  Has signMessage:', typeof wallet.signMessage)
 
-      // Validate essential methods (don't require sendTransaction, it might be called differently)
-      if (!wallet || !wallet.publicKey) {
+      // Validate wallet is connected and ready
+      if (!wallet.connected || !wallet.publicKey) {
         this.addAIChatMessage(
           '❌ Wallet not connected. Please connect your Phantom wallet first.',
           'bot'
@@ -735,9 +741,10 @@ export class App {
         return
       }
 
-      if (typeof wallet.signTransaction !== 'function' && typeof wallet.signMessage !== 'function') {
+      // Wallet adapter always has these methods when connected
+      if (typeof wallet.sendTransaction !== 'function') {
         this.addAIChatMessage(
-          '❌ Wallet not fully initialized. Please try reconnecting your wallet.',
+          '❌ Wallet adapter not ready. Please try reconnecting your wallet.',
           'bot'
         )
         return
@@ -746,7 +753,7 @@ export class App {
       // Show progress
       const progressMessageId = this.addAIChatMessage('⏳ Processing...', 'bot')
 
-      // Execute intent
+      // Execute intent with proper adapter
       const result = await executeIntent(
         intent,
         {
