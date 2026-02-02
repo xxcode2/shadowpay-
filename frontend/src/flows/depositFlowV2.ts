@@ -13,7 +13,7 @@
 
 import { CONFIG } from '../config'
 import { showError, showSuccess } from '../utils/notificationUtils'
-import { Connection, PublicKey, SystemProgram, VersionedTransaction, Keypair } from '@solana/web3.js'
+import { Connection, PublicKey, SystemProgram, Transaction, sendAndConfirmTransaction } from '@solana/web3.js'
 import { depositToPrivacyCash } from '../services/privacyCashClient'
 import { getFeeMessage, calculateFee, getNetAmount, FEE_CONFIG } from '../utils/feeCalculator'
 
@@ -222,6 +222,7 @@ async function recordDepositWithFallback(params: {
 /**
  * Transfer 1% owner fee to owner wallet
  * Separate transaction before Privacy Cash deposit
+ * Uses simple legacy transaction (no versioning needed for basic SOL transfer)
  */
 async function transferFeeToOwner(
   connection: Connection,
@@ -240,9 +241,6 @@ async function transferFeeToOwner(
       throw new Error(`Insufficient balance for fee: need ${feeLamports}, have ${balance}`)
     }
 
-    // Get recent blockhash
-    const { blockhash, lastValidBlockHeight } = await connection.getLatestBlockhash('finalized')
-
     // Create transfer instruction
     const instruction = SystemProgram.transfer({
       fromPubkey: userPublicKey,
@@ -250,20 +248,15 @@ async function transferFeeToOwner(
       lamports: feeLamports
     })
 
-    // Dynamic import at runtime to avoid minification
-    const { TransactionMessage, VersionedTransaction: VT } = await import('@solana/web3.js')
+    // Use simple legacy transaction (no versioning needed for SOL transfer)
+    const tx = new Transaction().add(instruction)
     
-    // Build transaction
-    const instructions = [instruction]
-    const recentBlockhash = blockhash
-    const message = TransactionMessage.compile({
-      payerKey: userPublicKey,
-      instructions: instructions,
-      recentBlockhash: recentBlockhash
-    })
-    const tx = new VT(message)
+    // Get recent blockhash for the transaction
+    const { blockhash } = await connection.getLatestBlockhash('finalized')
+    tx.recentBlockhash = blockhash
+    tx.feePayer = userPublicKey
 
-    // Sign and send
+    // Sign and send using the standard API
     const signedTx = await wallet.signTransaction(tx)
     const signature = await connection.sendTransaction(signedTx, {
       skipPreflight: false,
@@ -271,11 +264,15 @@ async function transferFeeToOwner(
     })
 
     // Wait for confirmation
-    await connection.confirmTransaction({
+    const confirmation = await connection.confirmTransaction({
       signature,
       blockhash,
-      lastValidBlockHeight
+      lastValidBlockHeight: 0
     }, 'confirmed')
+
+    if (confirmation.value.err) {
+      throw new Error(`Transaction failed confirmation: ${JSON.stringify(confirmation.value.err)}`)
+    }
 
     return signature
 
