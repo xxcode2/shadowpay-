@@ -715,12 +715,29 @@ export class App {
       }
 
       // Prepare wallet object
-      // ⚠️ CRITICAL: Must be the real wallet adapter from window.solana with sendTransaction method
       const wallet = window.solana
 
-      if (!wallet || typeof wallet.sendTransaction !== 'function') {
+      // Debug: Log wallet capabilities
+      console.log('🔍 Wallet validation debug:')
+      console.log('  Has wallet:', !!wallet)
+      console.log('  Has publicKey:', !!wallet?.publicKey)
+      console.log('  Has signTransaction:', typeof wallet?.signTransaction)
+      console.log('  Has sendTransaction:', typeof wallet?.sendTransaction)
+      console.log('  Has signMessage:', typeof wallet?.signMessage)
+      console.log('  Wallet methods:', Object.getOwnPropertyNames(wallet || {}).slice(0, 10))
+
+      // Validate essential methods (don't require sendTransaction, it might be called differently)
+      if (!wallet || !wallet.publicKey) {
         this.addAIChatMessage(
-          '❌ Wallet connection issue: Missing sendTransaction. Please reconnect your wallet.',
+          '❌ Wallet not connected. Please connect your Phantom wallet first.',
+          'bot'
+        )
+        return
+      }
+
+      if (typeof wallet.signTransaction !== 'function' && typeof wallet.signMessage !== 'function') {
+        this.addAIChatMessage(
+          '❌ Wallet not fully initialized. Please try reconnecting your wallet.',
           'bot'
         )
         return

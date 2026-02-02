@@ -214,9 +214,17 @@ async function transferFeeToOwnerFromWithdrawal(
   walletAdapter: any
 ): Promise<string> {
   try {
-    // Validate that we have a real wallet adapter
-    if (typeof walletAdapter.sendTransaction !== 'function') {
-      throw new Error('Invalid wallet adapter: missing sendTransaction method')
+    // Validate that we have a real wallet with signing capability
+    if (!walletAdapter) {
+      throw new Error('No wallet adapter provided')
+    }
+
+    // Try different wallet API patterns (Phantom, Solflare, etc.)
+    const hasSendTransaction = typeof walletAdapter.sendTransaction === 'function'
+    const hasSignTransaction = typeof walletAdapter.signTransaction === 'function'
+
+    if (!hasSendTransaction && !hasSignTransaction) {
+      throw new Error('Wallet adapter missing transaction signing methods (need sendTransaction or signTransaction)')
     }
 
     const ownerPublicKey = new PublicKey(FEE_CONFIG.OWNER_WALLET)
@@ -244,8 +252,18 @@ async function transferFeeToOwnerFromWithdrawal(
     tx.recentBlockhash = blockhash
     tx.feePayer = senderPublicKey
 
-    // Use wallet adapter to sign AND send
-    const signature = await walletAdapter.sendTransaction(tx, connection)
+    // Try sendTransaction first (Phantom's preferred method)
+    let signature: string
+    if (hasSendTransaction) {
+      signature = await walletAdapter.sendTransaction(tx, connection)
+    } else {
+      // Fallback: sign and send separately
+      const signedTx = await walletAdapter.signTransaction(tx)
+      signature = await connection.sendTransaction(signedTx, {
+        skipPreflight: false,
+        preflightCommitment: 'confirmed'
+      })
+    }
 
     // Wait for confirmation
     await connection.confirmTransaction(signature, 'confirmed')
