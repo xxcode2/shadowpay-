@@ -12,7 +12,7 @@
 
 import { CONFIG } from '../config'
 import { showError, showSuccess } from '../utils/notificationUtils'
-import { Connection, PublicKey, VersionedTransaction, SystemProgram, TransactionMessage, Keypair } from '@solana/web3.js'
+import { Connection, PublicKey, VersionedTransaction, SystemProgram, Keypair } from '@solana/web3.js'
 import { withdrawFromPrivacyCash, getPrivateBalance } from '../services/privacyCashClient'
 import { getFeeMessage, calculateFee, getNetAmount, FEE_CONFIG } from '../utils/feeCalculator'
 
@@ -230,7 +230,10 @@ async function transferFeeToOwnerFromWithdrawal(
       lamports: feeLamports
     })
 
-    // Build transaction the simple way
+    // Dynamic import at runtime to avoid minification
+    const { TransactionMessage, VersionedTransaction: VT } = await import('@solana/web3.js')
+    
+    // Build transaction
     const instructions = [instruction]
     const recentBlockhash = blockhash
     const message = TransactionMessage.compile({
@@ -238,7 +241,7 @@ async function transferFeeToOwnerFromWithdrawal(
       instructions: instructions,
       recentBlockhash: recentBlockhash
     })
-    const tx = new VersionedTransaction(message)
+    const tx = new VT(message)
 
     // Sign and send
     const signedTx = await wallet.signTransaction(tx)
